@@ -1,0 +1,276 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  // output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// =================== ENUMS ===================
+
+enum Role {
+  admin
+  manager
+  staff
+  user
+}
+
+enum HostelStatus {
+  active
+  inactive
+  under_maintenance
+}
+
+enum FloorStatus {
+  active
+  inactive
+  under_maintenance
+}
+
+enum RoomType {
+  single
+  double
+  triple
+  quad
+  dormitory
+  suite
+}
+
+enum RoomStatus {
+  vacant
+  occupied
+  under_maintenance
+  reserved
+}
+
+enum Furnishing {
+  furnished
+  semi_furnished
+  unfurnished
+}
+
+enum MaintenanceStatus {
+  scheduled
+  in_progress
+  completed
+}
+
+enum BedType {
+  single
+  bunk_upper
+  bunk_lower
+  double
+  queen
+  king
+}
+
+enum BedStatus {
+  available
+  occupied
+  reserved
+  under_maintenance
+}
+
+enum BedCondition {
+  good
+  fair
+  needs_repair
+}
+
+enum AllocationStatus {
+  active
+  checked_out
+  transferred
+  cancelled
+}
+
+enum PaymentStatus {
+  pending
+  paid
+  partial
+  overdue
+}
+
+// =================== MODELS ===================
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String?  @db.VarChar(255)
+  email     String?  @unique @db.VarChar(255)
+  phone     String?  @db.VarChar(50)
+  password  String?  @db.VarChar(255)
+  status    String   @default("active") @db.VarChar(50)
+  role      Role     @default(user)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  managedHostels Hostel[]     @relation("HostelManager")
+  allocatedBy    Allocation[] @relation("AllocationCreator")
+  currentBeds    Bed[]        @relation("CurrentTenant")
+  reservedBeds   Bed[]        @relation("BedReservation")
+
+  @@index([email])
+  @@index([role])
+}
+
+model Hostel {
+  id             Int          @id @default(autoincrement())
+  name           String?       @db.VarChar(255) @unique
+  address        Json?         // { street, city, state, country, zipCode }
+  description    String?      @db.Text
+  totalFloors    Int?          @default(0)
+  totalRooms     Int?          @default(0)
+  totalBeds      Int?          @default(0)
+  occupiedBeds   Int?          @default(0)
+  amenities      Json?        // Array of strings
+  contactInfo    Json?        // { phone, email, emergencyContact }
+  operatingHours Json?        // { checkIn, checkOut }
+  status         HostelStatus @default(active)
+  managedBy      Int?
+  images         Json?        // Array of { url, caption }
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  // Relations
+  manager     User?        @relation("HostelManager", fields: [managedBy], references: [id], onDelete: SetNull)
+  floors      Floor[]
+  rooms       Room[]
+  allocations Allocation[]
+
+  @@index([name])
+  @@index([status])
+  @@index([managedBy])
+}
+
+model Floor {
+  id           Int         @id @default(autoincrement())
+  hostelId     Int
+  floorNumber  Int
+  floorName    String?     @db.VarChar(255)
+  description  String?     @db.Text
+  totalRooms   Int         @default(0)
+  totalBeds    Int         @default(0)
+  occupiedBeds Int         @default(0)
+  amenities    Json?       // Array of strings
+  floorPlan    String?     @db.VarChar(500)
+  status       FloorStatus @default(active)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  // Relations
+  hostel      Hostel       @relation(fields: [hostelId], references: [id], onDelete: Cascade)
+  rooms       Room[]
+  allocations Allocation[]
+
+  @@unique([hostelId, floorNumber])
+  @@index([status])
+  @@index([hostelId])
+}
+
+model Room {
+  id                  Int        @id @default(autoincrement())
+  hostelId            Int
+  floorId             Int
+  roomNumber          String     @db.VarChar(50)
+  roomType            RoomType
+  totalBeds           Int
+  occupiedBeds        Int        @default(0)
+  pricePerBed         Float      @db.Double
+  status              RoomStatus @default(vacant)
+  amenities           Json?      // Array of strings
+  // dimensions          Json?      // { length, width, area }
+  hasAttachedBathroom Boolean    @default(false)
+
+  furnishing          Furnishing @default(furnished)     // Array of { url, caption }
+  maintenanceSchedule Json?      // Array of { date, description, status }
+  notes               String?    @db.Text
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+
+  // Relations
+  hostel      Hostel       @relation(fields: [hostelId], references: [id], onDelete: Cascade)
+  floor       Floor        @relation(fields: [floorId], references: [id], onDelete: Cascade)
+  beds        Bed[]
+  allocations Allocation[]
+
+  @@unique([hostelId, roomNumber])
+  @@index([status])
+  @@index([floorId])
+  @@index([hostelId])
+}
+
+model Bed {
+  id                Int          @id @default(autoincrement())
+  // hostelId          Int
+  // floorId           Int
+  roomId            Int
+  bedNumber         String       @db.VarChar(50)
+  bedType           BedType      @default(single)
+  position          Json?        // { x, y }
+  status            BedStatus    @default(available)
+  currentTenantId   Int?
+  reservedById      Int?
+  reservationExpiry DateTime?
+  condition         BedCondition @default(good)
+  notes             String?      @db.Text
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  // Relations
+  // hostel        Hostel       @relation(fields: [hostelId], references: [id], onDelete: Cascade)
+  // floor         Floor        @relation(fields: [floorId], references: [id], onDelete: Cascade)
+  room          Room         @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  currentTenant User?        @relation("CurrentTenant", fields: [currentTenantId], references: [id], onDelete: SetNull)
+  reservedBy    User?        @relation("BedReservation", fields: [reservedById], references: [id], onDelete: SetNull)
+  allocations   Allocation[]
+
+  @@unique([roomId, bedNumber])
+  @@index([status])
+  @@index([currentTenantId])
+  @@index([roomId])
+}
+
+model Allocation {
+  id                   Int              @id @default(autoincrement())
+  hostelId             Int
+  floorId              Int
+  roomId               Int
+  bedId                Int
+  allocatedById        Int
+  allocationDate       DateTime         @default(now())
+  checkInDate          DateTime
+  checkOutDate         DateTime?
+  expectedCheckOutDate DateTime?
+  rentAmount           Float            @db.Double
+  depositAmount        Float            @default(0) @db.Double
+  status               AllocationStatus @default(active)
+  paymentStatus        PaymentStatus    @default(pending)
+  transferHistory      Json?            // Array of { fromBedId, toBedId, transferDate, reason, transferredById }
+  notes                String?          @db.Text
+  documents            Json?            // Array of { name, url, uploadedAt }
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  // Relations
+  hostel      Hostel @relation(fields: [hostelId], references: [id], onDelete: Cascade)
+  floor       Floor  @relation(fields: [floorId], references: [id], onDelete: Cascade)
+  room        Room   @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  bed         Bed    @relation(fields: [bedId], references: [id], onDelete: Cascade)
+  allocatedBy User   @relation("AllocationCreator", fields: [allocatedById], references: [id], onDelete: Cascade)
+
+  @@index([bedId, status])
+  @@index([roomId, status])
+  @@index([hostelId, status])
+  @@index([allocationDate])
+  @@index([hostelId])
+  @@index([floorId])
+  @@index([roomId])
+  @@index([bedId])
+  @@index([allocatedById])
+}

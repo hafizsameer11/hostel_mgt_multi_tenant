@@ -1,0 +1,374 @@
+{
+	"info": {
+		"_postman_id": "hotel-management-api-2024",
+		"name": "Hotel Management API",
+		"description": "Complete API collection for Hotel Management System - User endpoints",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "Register User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"John Doe\",\n    \"email\": \"john@example.com\",\n    \"phone\": \"1234567890\",\n    \"password\": \"password123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/register",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"register"
+							]
+						},
+						"description": "Register a new user with name, email, phone, and password"
+					},
+					"response": []
+				},
+				{
+					"name": "Login User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"john@example.com\",\n    \"password\": \"password123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"login"
+							]
+						},
+						"description": "Login with email and password"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "User Management",
+			"item": [
+				{
+					"name": "Get All Users",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/users",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users"
+							]
+						},
+						"description": "Retrieve all users from the database"
+					},
+					"response": []
+				},
+				{
+					"name": "Get User By ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/user/507f1f77bcf86cd799439011",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"user",
+								"507f1f77bcf86cd799439011"
+							]
+						},
+						"description": "Get a specific user by their MongoDB ObjectId (24 characters)"
+					},
+					"response": []
+				},
+				{
+					"name": "Update User",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"John Updated\",\n    \"phone\": \"9999999999\",\n    \"email\": \"johnupdated@example.com\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/507f1f77bcf86cd799439011",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"user",
+								"507f1f77bcf86cd799439011"
+							]
+						},
+						"description": "Update user information. All fields are optional."
+					},
+					"response": []
+				},
+				{
+					"name": "Update User Password",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"password\": \"newpassword123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/507f1f77bcf86cd799439011",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"user",
+								"507f1f77bcf86cd799439011"
+							]
+						},
+						"description": "Update only the user's password"
+					},
+					"response": []
+				},
+				{
+					"name": "Update User Role",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"role\": \"admin\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/507f1f77bcf86cd799439011",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"user",
+								"507f1f77bcf86cd799439011"
+							]
+						},
+						"description": "Update user role. Allowed values: admin, manager, staff, user"
+					},
+					"response": []
+				},
+				{
+					"name": "Soft Delete (Deactivate) User",
+					"request": {
+						"method": "PATCH",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/user/507f1f77bcf86cd799439011/deactivate",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"user",
+								"507f1f77bcf86cd799439011",
+								"deactivate"
+							]
+						},
+						"description": "Deactivate a user without deleting their data"
+					},
+					"response": []
+				},
+				{
+					"name": "Hard Delete User",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/user/507f1f77bcf86cd799439011",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"user",
+								"507f1f77bcf86cd799439011"
+							]
+						},
+						"description": "Permanently delete a user from the database"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Test Scenarios",
+			"item": [
+				{
+					"name": "Register - Missing Fields",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Test User\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/register",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"register"
+							]
+						},
+						"description": "Test validation - should fail with 'All fields are required'"
+					},
+					"response": []
+				},
+				{
+					"name": "Register - Invalid Email",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Test User\",\n    \"email\": \"invalid-email\",\n    \"phone\": \"1234567890\",\n    \"password\": \"password123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/register",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"register"
+							]
+						},
+						"description": "Test email validation - should fail with 'Invalid email format'"
+					},
+					"response": []
+				},
+				{
+					"name": "Register - Short Password",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Test User\",\n    \"email\": \"test@example.com\",\n    \"phone\": \"1234567890\",\n    \"password\": \"123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/register",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"register"
+							]
+						},
+						"description": "Test password validation - should fail with 'Password must be at least 6 characters'"
+					},
+					"response": []
+				},
+				{
+					"name": "Login - Wrong Password",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"john@example.com\",\n    \"password\": \"wrongpassword\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"login"
+							]
+						},
+						"description": "Test login with wrong password - should fail with 'Invalid email or password'"
+					},
+					"response": []
+				},
+				{
+					"name": "Get User - Invalid ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/user/invalidid123",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"user",
+								"invalidid123"
+							]
+						},
+						"description": "Test with invalid MongoDB ObjectId - should fail with 'Invalid user ID'"
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3000/api",
+			"type": "string"
+		}
+	]
+}
+
