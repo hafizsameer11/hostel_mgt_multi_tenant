@@ -37,6 +37,8 @@ export interface Vendor {
   rating: number;
   lastInvoice: string; // ISO date string
   status: VendorStatus;
+  hostelId?: Id; // Optional hostel ID to associate vendor with specific hostel
+  hostelName?: string; // Hostel name for display
 }
 
 /** Alert severity levels */

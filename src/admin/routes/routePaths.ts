@@ -6,11 +6,13 @@
 export const ROUTES = {
   ROOT: '/admin',
   OVERVIEW: '/admin/overview',
+  PEOPLE: '/admin/people',
   TENANTS: '/admin/people/tenants',
   EMPLOYEES: '/admin/people/employees',
   ACCOUNTS: '/admin/accounts',
   HOSTEL: '/admin/hostel',
   HOSTEL_CREATE: '/admin/hostel/create',
+  HOSTEL_VIEW: (id: string | number) => `/admin/hostel/${id}`,
   HOSTEL_EDIT: (id: string | number) => `/admin/hostel/${id}/edit`,
   ALERTS: '/admin/alerts',
   VENDOR: '/admin/vendor',

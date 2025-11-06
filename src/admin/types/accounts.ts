@@ -24,6 +24,8 @@ export interface Transaction {
   description?: string;
   tenantId?: Id;
   tenantName?: string;
+  hostelId?: Id; // Hostel ID for filtering
+  hostelName?: string; // Hostel name for display
 }
 
 /**

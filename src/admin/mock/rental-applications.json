@@ -1,0 +1,23 @@
+[
+  {
+    "status": "Not Started",
+    "count": 162,
+    "percentage": 71.05
+  },
+  {
+    "status": "Undecided",
+    "count": 22,
+    "percentage": 9.655
+  },
+  {
+    "status": "Approved",
+    "count": 28,
+    "percentage": 12.28
+  },
+  {
+    "status": "Rejected",
+    "count": 16,
+    "percentage": 7.015
+  }
+]
+

@@ -1,0 +1,43 @@
+[
+  {
+    "id": 1,
+    "description": "Fix the lights in elevator #1",
+    "property": "15 Main Street",
+    "unit": "2F",
+    "status": "Overdue",
+    "createdAt": "2025-09-22T10:00:00Z"
+  },
+  {
+    "id": 2,
+    "description": "Fix broken door handle",
+    "property": "15 Main Street",
+    "unit": "2F",
+    "status": "Not Started",
+    "createdAt": "2025-10-07T14:30:00Z"
+  },
+  {
+    "id": 3,
+    "description": "Fix toilet leak",
+    "property": "15 Main Street",
+    "unit": "2F",
+    "status": "In Progress",
+    "createdAt": "2025-10-05T09:15:00Z"
+  },
+  {
+    "id": 4,
+    "description": "Replace broken window",
+    "property": "15 Main Street",
+    "unit": "1A",
+    "status": "Not Started",
+    "createdAt": "2025-10-10T11:20:00Z"
+  },
+  {
+    "id": 5,
+    "description": "Heating not working",
+    "property": "15 Main Street",
+    "unit": "3B",
+    "status": "In Progress",
+    "createdAt": "2025-10-08T16:45:00Z"
+  }
+]
+

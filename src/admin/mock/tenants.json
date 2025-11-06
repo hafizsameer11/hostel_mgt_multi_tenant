@@ -8,7 +8,9 @@
     "bed": "A",
     "leaseStart": "2025-01-15",
     "leaseEnd": "2025-07-15",
-    "status": "Active"
+    "status": "Active",
+    "hostelId": 1,
+    "hostelName": "Downtown Hub Hostel"
   },
   {
     "id": 2,
@@ -19,7 +21,9 @@
     "bed": "B",
     "leaseStart": "2024-12-01",
     "leaseEnd": "2025-06-01",
-    "status": "Active"
+    "status": "Active",
+    "hostelId": 1,
+    "hostelName": "Downtown Hub Hostel"
   },
   {
     "id": 3,
@@ -30,7 +34,9 @@
     "bed": "A",
     "leaseStart": "2025-02-01",
     "leaseEnd": "2025-08-01",
-    "status": "Active"
+    "status": "Active",
+    "hostelId": 2,
+    "hostelName": "Sunset Beach Hostel"
   },
   {
     "id": 4,
@@ -41,7 +47,9 @@
     "bed": "C",
     "leaseStart": "2025-01-10",
     "leaseEnd": "2025-07-10",
-    "status": "Active"
+    "status": "Active",
+    "hostelId": 3,
+    "hostelName": "Tech District Inn"
   },
   {
     "id": 5,
@@ -52,7 +60,9 @@
     "bed": "B",
     "leaseStart": "2024-11-15",
     "leaseEnd": "2025-05-15",
-    "status": "Active"
+    "status": "Active",
+    "hostelId": 2,
+    "hostelName": "Sunset Beach Hostel"
   },
   {
     "id": 6,
@@ -63,7 +73,9 @@
     "bed": "A",
     "leaseStart": "2025-03-01",
     "leaseEnd": "2025-09-01",
-    "status": "Pending"
+    "status": "Pending",
+    "hostelId": 4,
+    "hostelName": "Historic Quarter Hostel"
   },
   {
     "id": 7,
@@ -74,7 +86,9 @@
     "bed": "D",
     "leaseStart": "2024-10-01",
     "leaseEnd": "2025-04-01",
-    "status": "Active"
+    "status": "Active",
+    "hostelId": 4,
+    "hostelName": "Historic Quarter Hostel"
   },
   {
     "id": 8,
@@ -85,7 +99,9 @@
     "bed": "B",
     "leaseStart": "2024-09-15",
     "leaseEnd": "2025-03-15",
-    "status": "Inactive"
+    "status": "Inactive",
+    "hostelId": 5,
+    "hostelName": "University Campus Hostel"
   },
   {
     "id": 9,
@@ -96,7 +112,9 @@
     "bed": "A",
     "leaseStart": "2025-01-20",
     "leaseEnd": "2025-07-20",
-    "status": "Active"
+    "status": "Active",
+    "hostelId": 5,
+    "hostelName": "University Campus Hostel"
   },
   {
     "id": 10,
@@ -107,7 +125,9 @@
     "bed": "C",
     "leaseStart": "2025-02-10",
     "leaseEnd": "2025-08-10",
-    "status": "Active"
+    "status": "Active",
+    "hostelId": 3,
+    "hostelName": "Tech District Inn"
   },
   {
     "id": 11,
@@ -118,7 +138,9 @@
     "bed": "B",
     "leaseStart": "2024-12-15",
     "leaseEnd": "2025-06-15",
-    "status": "Active"
+    "status": "Active",
+    "hostelId": 1,
+    "hostelName": "Downtown Hub Hostel"
   },
   {
     "id": 12,
@@ -129,7 +151,9 @@
     "bed": "D",
     "leaseStart": "2025-01-05",
     "leaseEnd": "2025-07-05",
-    "status": "Active"
+    "status": "Active",
+    "hostelId": 6,
+    "hostelName": "Mountain View Lodge"
   },
   {
     "id": 13,
@@ -140,7 +164,9 @@
     "bed": "A",
     "leaseStart": "2025-03-15",
     "leaseEnd": "2025-09-15",
-    "status": "Pending"
+    "status": "Pending",
+    "hostelId": 7,
+    "hostelName": "Riverside Retreat"
   },
   {
     "id": 14,
@@ -151,7 +177,9 @@
     "bed": "C",
     "leaseStart": "2024-11-01",
     "leaseEnd": "2025-05-01",
-    "status": "Active"
+    "status": "Active",
+    "hostelId": 3,
+    "hostelName": "Tech District Inn"
   },
   {
     "id": 15,
@@ -162,7 +190,9 @@
     "bed": "B",
     "leaseStart": "2025-02-20",
     "leaseEnd": "2025-08-20",
-    "status": "Active"
+    "status": "Active",
+    "hostelId": 7,
+    "hostelName": "Riverside Retreat"
   }
 ]
 

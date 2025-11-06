@@ -10,11 +10,13 @@ import ROUTES from './routePaths';
 
 // Lazy load pages for better performance
 const Overview = React.lazy(() => import('../pages/Overview'));
+const PeopleHub = React.lazy(() => import('../pages/People/PeopleHub'));
 const TenantsList = React.lazy(() => import('../pages/People/TenantsList'));
 const EmployeesList = React.lazy(() => import('../pages/People/EmployeesList'));
 const AccountsList = React.lazy(() => import('../pages/Accounts/AccountsList'));
 const HostelList = React.lazy(() => import('../pages/Hostel/HostelList'));
 const HostelCreate = React.lazy(() => import('../pages/Hostel/HostelCreate'));
+const HostelView = React.lazy(() => import('../pages/Hostel/HostelView'));
 const HostelEdit = React.lazy(() => import('../pages/Hostel/HostelEdit'));
 const AlertsList = React.lazy(() => import('../pages/Alerts/AlertsList'));
 const VendorList = React.lazy(() => import('../pages/Vendor/VendorList'));
@@ -42,12 +44,13 @@ export const AdminRoutes: React.FC = () => {
       <Routes>
         <Route element={<AdminLayout />}>
           {/* Redirect /admin to /admin/overview */}
-          <Route index element={<Navigate to={ROUTES.OVERVIEW} replace />} />
+          <Route index element={<Navigate to="/admin/overview" replace />} />
 
           {/* Main pages */}
           <Route path="overview" element={<Overview />} />
 
           {/* People */}
+        <Route path="people" element={<PeopleHub />} />
           <Route path="people/tenants" element={<TenantsList />} />
           <Route path="people/employees" element={<EmployeesList />} />
 
@@ -57,6 +60,7 @@ export const AdminRoutes: React.FC = () => {
           {/* Hostel Management */}
           <Route path="hostel" element={<HostelList />} />
           <Route path="hostel/create" element={<HostelCreate />} />
+          <Route path="hostel/:id" element={<HostelView />} />
           <Route path="hostel/:id/edit" element={<HostelEdit />} />
 
           {/* Alerts */}

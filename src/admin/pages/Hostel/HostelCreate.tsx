@@ -9,6 +9,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Toast } from '../../components/Toast';
+import { Modal } from '../../components/Modal';
+import { Button } from '../../components/Button';
 import type { HostelFormData } from '../../types/hostel';
 import type { ToastType } from '../../types/common';
 import ROUTES from '../../routes/routePaths';
@@ -35,6 +37,8 @@ const HostelCreate: React.FC = () => {
     type: ToastType;
     message: string;
   }>({ open: false, type: 'success', message: '' });
+  const [showAddRoomsPrompt, setShowAddRoomsPrompt] = useState(false);
+  const [createdHostelId, setCreatedHostelId] = useState<number | null>(null);
 
   const {
     register,
@@ -46,14 +50,15 @@ const HostelCreate: React.FC = () => {
 
   const onSubmit = async (data: HostelFormData) => {
     try {
-      hostelService.createHostel(data);
+      const createdHostel = hostelService.createHostel(data);
+      setCreatedHostelId(createdHostel.id);
       setToast({
         open: true,
         type: 'success',
         message: 'Hostel created successfully!',
       });
-      // Navigate after a short delay
-      setTimeout(() => navigate(ROUTES.HOSTEL), 1500);
+      // Show prompt to add rooms
+      setShowAddRoomsPrompt(true);
     } catch (error) {
       setToast({
         open: true,
@@ -61,6 +66,20 @@ const HostelCreate: React.FC = () => {
         message: 'Failed to create hostel. Please try again.',
       });
     }
+  };
+
+  const handleAddRooms = () => {
+    if (createdHostelId) {
+      navigate(`/admin/hostel/${createdHostelId}`, {
+        state: { showAddRoom: true },
+      });
+    }
+    setShowAddRoomsPrompt(false);
+  };
+
+  const handleSkipRooms = () => {
+    setShowAddRoomsPrompt(false);
+    setTimeout(() => navigate(ROUTES.HOSTEL), 300);
   };
 
   return (
@@ -230,6 +249,36 @@ const HostelCreate: React.FC = () => {
         message={toast.message}
         onClose={() => setToast({ ...toast, open: false })}
       />
+
+      {/* Add Rooms Prompt Modal */}
+      <Modal
+        isOpen={showAddRoomsPrompt}
+        onClose={handleSkipRooms}
+        title="Hostel Created Successfully!"
+        size="md"
+      >
+        <div className="space-y-4">
+          <p className="text-slate-700">
+            Do you want to add rooms for this hostel now?
+          </p>
+          <div className="flex gap-3 pt-4">
+            <Button
+              variant="primary"
+              onClick={handleAddRooms}
+              className="flex-1"
+            >
+              Yes, Add Rooms
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleSkipRooms}
+              className="flex-1"
+            >
+              Skip for Now
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

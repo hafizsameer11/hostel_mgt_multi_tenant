@@ -5,12 +5,15 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Button } from '../../components/Button';
+import { PlusIcon } from '@heroicons/react/24/outline';
 import { DataTable } from '../../components/DataTable';
 import type { Column } from '../../components/DataTable';
 import { SearchInput } from '../../components/SearchInput';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Toast } from '../../components/Toast';
-import type { Hostel } from '../../types/hostel';
+import { AddHostelForm } from '../../components/AddHostelForm';
+import type { Hostel, HostelFormData } from '../../types/hostel';
 import type { ToastType } from '../../types/common';
 import ROUTES from '../../routes/routePaths';
 import * as hostelService from '../../services/hostel.service';
@@ -22,6 +25,7 @@ const HostelList: React.FC = () => {
   const navigate = useNavigate();
   const [hostels, setHostels] = useState<Hostel[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isAddHostelOpen, setIsAddHostelOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{
     open: boolean;
     hostel: Hostel | null;
@@ -46,6 +50,27 @@ const HostelList: React.FC = () => {
   const filteredData = searchQuery
     ? hostelService.searchHostels(searchQuery)
     : hostels;
+
+  // Handle add hostel
+  const handleAddHostel = (data: HostelFormData) => {
+    try {
+      const newHostel = hostelService.createHostel(data);
+      setToast({
+        open: true,
+        type: 'success',
+        message: `Hostel "${newHostel.name}" created successfully!`,
+      });
+      loadHostels();
+      // Optionally navigate to view the new hostel
+      // navigate(`/admin/hostel/${newHostel.id}`);
+    } catch (error) {
+      setToast({
+        open: true,
+        type: 'error',
+        message: 'Failed to create hostel. Please try again.',
+      });
+    }
+  };
 
   // Handle delete
   const handleDelete = () => {
@@ -103,14 +128,20 @@ const HostelList: React.FC = () => {
   const actionsRender = (hostel: Hostel) => (
     <div className="flex gap-2">
       <button
+        onClick={() => navigate(`/admin/hostel/${hostel.id}`)}
+        className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors font-medium"
+      >
+        View
+      </button>
+      <button
         onClick={() => navigate(ROUTES.HOSTEL_EDIT(hostel.id))}
-        className="px-3 py-1 text-sm bg-brand-100 text-brand-700 rounded-lg hover:bg-brand-200 transition-colors"
+        className="px-3 py-1 text-sm bg-brand-100 text-brand-700 rounded-lg hover:bg-brand-200 transition-colors font-medium"
       >
         Edit
       </button>
       <button
         onClick={() => setDeleteConfirm({ open: true, hostel })}
-        className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors"
+        className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors font-medium"
       >
         Delete
       </button>
@@ -136,12 +167,13 @@ const HostelList: React.FC = () => {
           </h1>
           <p className="text-slate-600 mt-1">Manage hostel properties</p>
         </div>
-        <button
-          onClick={() => navigate(ROUTES.HOSTEL_CREATE)}
-          className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors"
+        <Button
+          variant="primary"
+          onClick={() => setIsAddHostelOpen(true)}
+          icon={PlusIcon}
         >
           Add Hostel
-        </button>
+        </Button>
       </div>
 
       {/* Data table */}
@@ -157,7 +189,7 @@ const HostelList: React.FC = () => {
       <ConfirmDialog
         open={deleteConfirm.open}
         title="Delete Hostel"
-        message={`Are you sure you want to delete "${deleteConfirm.hostel?.name}"? This action cannot be undone.`}
+        message={`Are you sure you want to delete "${deleteConfirm.hostel?.name}"? This will remove all its rooms and related data.`}
         confirmText="Delete"
         destructive
         onConfirm={handleDelete}
@@ -170,6 +202,13 @@ const HostelList: React.FC = () => {
         type={toast.type}
         message={toast.message}
         onClose={() => setToast({ ...toast, open: false })}
+      />
+
+      {/* Add Hostel Modal Form */}
+      <AddHostelForm
+        isOpen={isAddHostelOpen}
+        onClose={() => setIsAddHostelOpen(false)}
+        onSubmit={handleAddHostel}
       />
     </div>
   );

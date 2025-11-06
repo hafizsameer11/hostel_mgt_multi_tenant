@@ -21,6 +21,8 @@ export interface Tenant {
   leaseStart: string; // ISO date string
   leaseEnd: string; // ISO date string
   status: TenantStatus;
+  hostelId?: Id; // Hostel ID for filtering
+  hostelName?: string; // Hostel name for display
 }
 
 /** Employee status types */
@@ -38,6 +40,8 @@ export interface Employee {
   role: string;
   joinedAt: string; // ISO date string
   status: EmployeeStatus;
+  hostelId?: Id; // Hostel ID for filtering
+  hostelName?: string; // Hostel name for display
 }
 
 /** Form data for creating/editing tenants */

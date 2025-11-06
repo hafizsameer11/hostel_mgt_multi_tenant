@@ -114,3 +114,99 @@ export function getTotalCapacity(): number {
   );
 }
 
+/**
+ * Get architecture data for a hostel
+ * This generates dummy data based on hostel structure and tenant assignments
+ * In production, this would fetch from the API
+ */
+export function getArchitectureData(hostelId: number): import('../types/hostel').ArchitectureData {
+  const hostel = getHostelById(hostelId);
+  if (!hostel) {
+    throw new Error('Hostel not found');
+  }
+
+  // Import tenant data to match room assignments
+  const tenantsData = require('../mock/tenants.json');
+  
+  // Generate architecture structure
+  const floors: import('../types/hostel').Floor[] = [];
+  let totalRooms = 0;
+  let totalSeats = 0;
+  let occupiedSeats = 0;
+
+  // Create floors
+  for (let floorNum = 1; floorNum <= hostel.totalFloors; floorNum++) {
+    const rooms: import('../types/hostel').Room[] = [];
+
+    // Create rooms for this floor
+    for (let roomIndex = 1; roomIndex <= hostel.roomsPerFloor; roomIndex++) {
+      const roomNumber = `${floorNum}${String(roomIndex).padStart(2, '0')}`;
+      const totalSeatsPerRoom = 4; // Default 4 seats per room
+      const seats: import('../types/hostel').Seat[] = [];
+
+      // Create seats (A, B, C, D)
+      const seatLetters = ['A', 'B', 'C', 'D'];
+      for (let i = 0; i < totalSeatsPerRoom; i++) {
+        const seatId = `${floorNum}-${String(roomIndex).padStart(2, '0')}-${seatLetters[i]}`;
+        
+        // Find tenant assigned to this room and seat
+        const tenant = tenantsData.find(
+          (t: any) => t.room === roomNumber && t.bed === seatLetters[i]
+        );
+
+        seats.push({
+          id: seatId,
+          seatNumber: seatLetters[i],
+          isOccupied: !!tenant && tenant.status === 'Active',
+          tenantName: tenant?.name,
+          tenantId: tenant?.id,
+        });
+
+        if (tenant && tenant.status === 'Active') {
+          occupiedSeats++;
+        }
+        totalSeats++;
+      }
+
+      rooms.push({
+        id: `${floorNum}-${String(roomIndex).padStart(2, '0')}`,
+        floorNumber: floorNum,
+        roomNumber: String(roomIndex).padStart(2, '0'),
+        totalSeats: totalSeatsPerRoom,
+        seats,
+      });
+      totalRooms++;
+    }
+
+    floors.push({
+      floorNumber: floorNum,
+      rooms,
+    });
+  }
+
+  return {
+    hostelId,
+    floors,
+    totalRooms,
+    totalSeats,
+    occupiedSeats,
+    availableSeats: totalSeats - occupiedSeats,
+  };
+}
+
+/**
+ * Add a room to a hostel
+ * In production, this would make an API call
+ */
+export function addRoom(
+  hostelId: number,
+  roomData: import('../types/hostel').RoomFormData
+): boolean {
+  // In production, this would call: POST /api/rooms
+  // For now, we just return success
+  // The architecture data is generated dynamically, so adding a room
+  // would require updating the backend database
+  console.log('Adding room:', { hostelId, ...roomData });
+  return true;
+}
+

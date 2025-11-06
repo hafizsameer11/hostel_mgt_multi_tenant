@@ -6,7 +6,9 @@
     "phone": "+1-555-1001",
     "role": "General Manager",
     "joinedAt": "2023-01-15",
-    "status": "Active"
+    "status": "Active",
+    "hostelId": 1,
+    "hostelName": "Downtown Hub Hostel"
   },
   {
     "id": 2,
@@ -15,7 +17,9 @@
     "phone": "+1-555-1002",
     "role": "Front Desk Manager",
     "joinedAt": "2023-03-20",
-    "status": "Active"
+    "status": "Active",
+    "hostelId": 2,
+    "hostelName": "Sunset Beach Hostel"
   },
   {
     "id": 3,
@@ -24,7 +28,9 @@
     "phone": "+1-555-1003",
     "role": "Maintenance Supervisor",
     "joinedAt": "2023-02-10",
-    "status": "Active"
+    "status": "Active",
+    "hostelId": 3,
+    "hostelName": "Tech District Inn"
   },
   {
     "id": 4,
@@ -33,7 +39,9 @@
     "phone": "+1-555-1004",
     "role": "Housekeeping Lead",
     "joinedAt": "2023-05-01",
-    "status": "Active"
+    "status": "Active",
+    "hostelId": 4,
+    "hostelName": "Historic Quarter Hostel"
   },
   {
     "id": 5,
@@ -42,7 +50,9 @@
     "phone": "+1-555-1005",
     "role": "Night Auditor",
     "joinedAt": "2023-06-15",
-    "status": "Active"
+    "status": "Active",
+    "hostelId": 5,
+    "hostelName": "University Campus Hostel"
   },
   {
     "id": 6,
@@ -51,7 +61,9 @@
     "phone": "+1-555-1006",
     "role": "Front Desk Associate",
     "joinedAt": "2024-01-10",
-    "status": "Active"
+    "status": "Active",
+    "hostelId": 1,
+    "hostelName": "Downtown Hub Hostel"
   },
   {
     "id": 7,
@@ -60,7 +72,9 @@
     "phone": "+1-555-1007",
     "role": "Security Officer",
     "joinedAt": "2023-08-20",
-    "status": "Active"
+    "status": "Active",
+    "hostelId": 6,
+    "hostelName": "Mountain View Lodge"
   },
   {
     "id": 8,
@@ -69,7 +83,9 @@
     "phone": "+1-555-1008",
     "role": "Accountant",
     "joinedAt": "2023-04-15",
-    "status": "Active"
+    "status": "Active",
+    "hostelId": 2,
+    "hostelName": "Sunset Beach Hostel"
   },
   {
     "id": 9,
@@ -78,7 +94,9 @@
     "phone": "+1-555-1009",
     "role": "Maintenance Technician",
     "joinedAt": "2024-02-01",
-    "status": "Active"
+    "status": "Active",
+    "hostelId": 3,
+    "hostelName": "Tech District Inn"
   },
   {
     "id": 10,
@@ -87,7 +105,9 @@
     "phone": "+1-555-1010",
     "role": "Housekeeping Staff",
     "joinedAt": "2024-03-15",
-    "status": "Active"
+    "status": "Active",
+    "hostelId": 7,
+    "hostelName": "Riverside Retreat"
   },
   {
     "id": 11,
@@ -96,7 +116,9 @@
     "phone": "+1-555-1011",
     "role": "IT Support Specialist",
     "joinedAt": "2023-07-01",
-    "status": "Active"
+    "status": "Active",
+    "hostelId": 8,
+    "hostelName": "Urban Oasis Hostel"
   },
   {
     "id": 12,
@@ -105,7 +127,9 @@
     "phone": "+1-555-1012",
     "role": "HR Coordinator",
     "joinedAt": "2023-09-10",
-    "status": "Inactive"
+    "status": "Inactive",
+    "hostelId": 9,
+    "hostelName": "Lakefront Hostel"
   }
 ]
 
