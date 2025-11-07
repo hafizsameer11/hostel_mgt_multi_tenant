@@ -51,7 +51,7 @@ const PeopleHub: React.FC = () => {
     type: 'success',
     message: '',
   });
-  // Multi-step form state
+  // Multi-step form state for Tenant
   const [currentStep, setCurrentStep] = useState(1);
   const [tenantFormData, setTenantFormData] = useState({
     // Step 1: Personal Information
@@ -73,21 +73,25 @@ const PeopleHub: React.FC = () => {
     deposit: '',
   });
 
+  // Multi-step form state for Employee
+  const [employeeCurrentStep, setEmployeeCurrentStep] = useState(1);
+  const [employeeFormData, setEmployeeFormData] = useState({
+    // Step 1: Personal Information
+    name: '',
+    email: '',
+    phone: '',
+    // Step 2: Employment Details
+    role: '',
+    joinDate: '',
+    salary: '',
+  });
+
   // Architecture data for selected hostel
   const [architectureData, setArchitectureData] = useState<ArchitectureData | null>(null);
   const [availableFloors, setAvailableFloors] = useState<{ value: string; label: string }[]>([]);
   const [availableRooms, setAvailableRooms] = useState<{ value: string; label: string }[]>([]);
   const [availableSeats, setAvailableSeats] = useState<{ value: string; label: string }[]>([]);
 
-  const [addFormData, setAddFormData] = useState<any>({
-    // Employee form fields (kept for employee form)
-    name: '',
-    email: '',
-    phone: '',
-    role: '',
-    salary: '',
-    joinDate: '',
-  });
 
   const hostelOptions = useMemo(
     () => [
@@ -298,15 +302,16 @@ const PeopleHub: React.FC = () => {
       setAvailableFloors([]);
       setAvailableRooms([]);
       setAvailableSeats([]);
-    } else {
-      // Reset employee form
-      setAddFormData({
+    } else if (activeTab === 'Employees') {
+      // Reset employee form for multi-step wizard
+      setEmployeeCurrentStep(1);
+      setEmployeeFormData({
         name: '',
         email: '',
         phone: '',
         role: '',
-        salary: '',
         joinDate: '',
+        salary: '',
       });
     }
     setIsAddModalOpen(true);
@@ -412,32 +417,76 @@ const PeopleHub: React.FC = () => {
     });
   };
 
+  const handleEmployeeNextStep = () => {
+    // Validate step 1 fields before moving to step 2
+    if (employeeCurrentStep === 1) {
+      if (!employeeFormData.name || !employeeFormData.email || !employeeFormData.phone) {
+        setToast({
+          open: true,
+          type: 'warning',
+          message: 'Please fill in all required fields (Name, Email, Phone) before proceeding.',
+        });
+        return;
+      }
+    }
+    
+    if (employeeCurrentStep < 2) {
+      setEmployeeCurrentStep(employeeCurrentStep + 1);
+    }
+  };
+
+  const handleEmployeePreviousStep = () => {
+    if (employeeCurrentStep > 1) {
+      setEmployeeCurrentStep(employeeCurrentStep - 1);
+    }
+  };
+
   const handleEmployeeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
+    
+    console.log('Form submitted, current step:', employeeCurrentStep);
+    
+    // Only submit if we're on the final step (step 2)
+    if (employeeCurrentStep !== 2) {
+      console.log('Not on final step, moving to next step');
+      // If not on final step, just move to next step and prevent any submission
+      handleEmployeeNextStep();
+      return;
+    }
+    
+    // Final step - submit the form
+    console.log('Submitting employee form on step 2');
     console.log('New Employee:', {
-      name: addFormData.name,
-      email: addFormData.email,
-      phone: addFormData.phone,
-      role: addFormData.role,
-      salary: addFormData.salary,
-      joinedAt: addFormData.joinDate,
+      name: employeeFormData.name,
+      email: employeeFormData.email,
+      phone: employeeFormData.phone,
+      role: employeeFormData.role,
+      salary: employeeFormData.salary,
+      joinedAt: employeeFormData.joinDate,
       status: 'Active',
     });
-    alert(`Employee "${addFormData.name}" added successfully!`);
+    setToast({
+      open: true,
+      type: 'success',
+      message: `Employee "${employeeFormData.name}" added successfully!`,
+    });
     setIsAddModalOpen(false);
-    setAddFormData({
+    setEmployeeCurrentStep(1);
+    setEmployeeFormData({
       name: '',
       email: '',
       phone: '',
       role: '',
-      salary: '',
       joinDate: '',
+      salary: '',
     });
   };
 
   const handleAddClose = () => {
     setIsAddModalOpen(false);
     setCurrentStep(1);
+    setEmployeeCurrentStep(1);
     setTenantFormData({
       firstName: '',
       lastName: '',
@@ -454,13 +503,13 @@ const PeopleHub: React.FC = () => {
       rent: '',
       deposit: '',
     });
-    setAddFormData({
+    setEmployeeFormData({
       name: '',
       email: '',
       phone: '',
       role: '',
-      salary: '',
       joinDate: '',
+      salary: '',
     });
     setArchitectureData(null);
     setAvailableFloors([]);
@@ -1135,117 +1184,221 @@ const PeopleHub: React.FC = () => {
             </div>
           </form>
         ) : (
-          <form onSubmit={handleEmployeeSubmit} className="space-y-6">
-          {/* Personal Information */}
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Personal Information</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Full Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={addFormData.name}
-                  onChange={(e) => setAddFormData({ ...addFormData, name: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
-                  placeholder="John Doe"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={addFormData.email}
-                  onChange={(e) => setAddFormData({ ...addFormData, email: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
-                  placeholder="john@example.com"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Phone <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="tel"
-                  required
-                  value={addFormData.phone}
-                  onChange={(e) => setAddFormData({ ...addFormData, phone: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
-                  placeholder="+1 234 567 8900"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Employee Specific Fields */}
-          {activeTab === 'Employees' && (
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Employment Details</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Role/Position <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={addFormData.role}
-                    onChange={(e) => setAddFormData({ ...addFormData, role: e.target.value })}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
-                    placeholder="Manager, Staff, etc."
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Join Date <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={addFormData.joinDate}
-                    onChange={(e) => setAddFormData({ ...addFormData, joinDate: e.target.value })}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Salary
-                  </label>
-                  <input
-                    type="number"
-                    value={addFormData.salary}
-                    onChange={(e) => setAddFormData({ ...addFormData, salary: e.target.value })}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
-                    placeholder="3000"
-                  />
-                </div>
+          <form 
+            onSubmit={handleEmployeeSubmit} 
+            onKeyDown={(e) => {
+              // Prevent form submission on Enter key if not on final step
+              if (e.key === 'Enter') {
+                if (employeeCurrentStep < 2) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  console.log('Enter key pressed on step 1, preventing submission');
+                  handleEmployeeNextStep();
+                }
+                // On step 2, allow Enter to submit (default behavior)
+              }
+            }}
+            className="space-y-6"
+          >
+            {/* Step Progress Indicator */}
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-2">
+                {[1, 2].map((step) => (
+                  <div key={step} className="flex items-center flex-1">
+                    <div className="flex items-center">
+                      <div
+                        className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm ${
+                          employeeCurrentStep >= step
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-gray-200 text-gray-600'
+                        }`}
+                      >
+                        {employeeCurrentStep > step ? '✓' : step}
+                      </div>
+                      <div className="ml-2 hidden sm:block">
+                        <p className={`text-xs font-medium ${
+                          employeeCurrentStep >= step ? 'text-blue-600' : 'text-gray-500'
+                        }`}>
+                          {step === 1 ? 'Personal' : 'Employment'}
+                        </p>
+                      </div>
+                    </div>
+                    {step < 2 && (
+                      <div
+                        className={`flex-1 h-1 mx-2 ${
+                          employeeCurrentStep > step ? 'bg-blue-600' : 'bg-gray-200'
+                        }`}
+                      />
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
-          )}
 
-          {/* Form Actions */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleAddClose}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              icon={UserPlusIcon}
-            >
-              Add Employee
-            </Button>
-          </div>
-        </form>
+            {/* Step 1: Personal Information */}
+            <AnimatePresence mode="wait">
+              {employeeCurrentStep === 1 && (
+                <motion.div
+                  key="employee-step1"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  className="space-y-4"
+                >
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Personal Information</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Full Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={employeeFormData.name}
+                        onChange={(e) => setEmployeeFormData({ ...employeeFormData, name: e.target.value })}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (employeeCurrentStep < 2) {
+                              handleEmployeeNextStep();
+                            }
+                          }
+                        }}
+                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
+                        placeholder="John Doe"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Email <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="email"
+                        value={employeeFormData.email}
+                        onChange={(e) => setEmployeeFormData({ ...employeeFormData, email: e.target.value })}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (employeeCurrentStep < 2) {
+                              handleEmployeeNextStep();
+                            }
+                          }
+                        }}
+                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
+                        placeholder="john@example.com"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Phone <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="tel"
+                        value={employeeFormData.phone}
+                        onChange={(e) => setEmployeeFormData({ ...employeeFormData, phone: e.target.value })}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (employeeCurrentStep < 2) {
+                              handleEmployeeNextStep();
+                            }
+                          }
+                        }}
+                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
+                        placeholder="+1 234 567 8900"
+                      />
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Step 2: Employment Details */}
+              {employeeCurrentStep === 2 && (
+                <motion.div
+                  key="employee-step2"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  className="space-y-4"
+                >
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Employment Details</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Role/Position <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={employeeFormData.role}
+                        onChange={(e) => setEmployeeFormData({ ...employeeFormData, role: e.target.value })}
+                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
+                        placeholder="Manager, Staff, etc."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Join Date <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={employeeFormData.joinDate}
+                        onChange={(e) => setEmployeeFormData({ ...employeeFormData, joinDate: e.target.value })}
+                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Salary
+                      </label>
+                      <input
+                        type="number"
+                        value={employeeFormData.salary}
+                        onChange={(e) => setEmployeeFormData({ ...employeeFormData, salary: e.target.value })}
+                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
+                        placeholder="3000"
+                      />
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Navigation Buttons */}
+            <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={employeeCurrentStep === 1 ? handleAddClose : handleEmployeePreviousStep}
+              >
+                {employeeCurrentStep === 1 ? 'Cancel' : 'Previous'}
+              </Button>
+              <div className="flex gap-2">
+                {employeeCurrentStep < 2 ? (
+                  <Button
+                    type="button"
+                    variant="primary"
+                    onClick={() => {
+                      handleEmployeeNextStep();
+                    }}
+                  >
+                    Next
+                  </Button>
+                ) : (
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    icon={UserPlusIcon}
+                  >
+                    Add Employee
+                  </Button>
+                )}
+              </div>
+            </div>
+          </form>
         )}
       </Modal>
 

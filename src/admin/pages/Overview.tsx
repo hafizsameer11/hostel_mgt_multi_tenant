@@ -6,7 +6,7 @@
 import React, { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { StatCard } from '../components/StatCard';
-import { formatCurrency, formatDate } from '../types/common';
+import { formatCurrency } from '../types/common';
 import { 
   ComposedChart, 
   Bar, 
@@ -27,20 +27,16 @@ import {
   ClipboardDocumentListIcon,
   HomeIcon,
   UsersIcon,
-  BellAlertIcon,
   CurrencyDollarIcon,
   UserGroupIcon,
-  ClockIcon,
   CheckCircleIcon,
-  ArrowRightIcon,
   UserIcon,
+  BellAlertIcon,
 } from '@heroicons/react/24/outline';
 import tenantsData from '../mock/tenants.json';
 import accountsData from '../mock/accounts.json';
-import alertsData from '../mock/alerts.json';
 import vendorsData from '../mock/vendors.json';
 import tenantRequestsData from '../mock/tenant-requests.json';
-import rentalApplicationsData from '../mock/rental-applications.json';
 import activityLogData from '../mock/activity-log.json';
 
 /**
@@ -49,11 +45,13 @@ import activityLogData from '../mock/activity-log.json';
 const Overview: React.FC = () => {
   // Tab state for Paid Transactions & Recent Payments
   const [activePaymentTab, setActivePaymentTab] = useState<'transactions' | 'payments'>('transactions');
+  
+  // Tab state for Bills & Maintenance
+  const [activeRequestTab, setActiveRequestTab] = useState<'bills' | 'maintenance'>('bills');
 
   // Calculate stats for stat cards
   const stats = useMemo(() => {
     const activeTenants = tenantsData.filter((t) => t.status === 'Active').length;
-    const openAlerts = alertsData.filter((a) => a.status === 'open').length;
     const activeVendors = vendorsData.filter((v) => v.status === 'Active').length;
     
     // Calculate current month revenue
@@ -67,11 +65,9 @@ const Overview: React.FC = () => {
 
     return {
       activeTenants,
-      openAlerts,
       monthlyRevenue: currentMonthIncome,
       activeVendors,
       occupancyRate,
-      pendingPayments: accountsData.filter((a) => a.status === 'Pending').length,
     };
   }, []);
 
@@ -145,15 +141,64 @@ const Overview: React.FC = () => {
       });
   }, []);
 
-  // Recent tenant requests
-  const recentRequests = useMemo(() => {
-    return tenantRequestsData.slice(0, 3).map(req => {
-      const daysAgo = Math.floor((Date.now() - new Date(req.createdAt).getTime()) / (1000 * 60 * 60 * 24));
-      return {
-        ...req,
-        daysAgo,
-      };
-    });
+  // Format activity time
+  const formatActivityTime = (hoursAgo: number, daysAgo: number) => {
+    if (hoursAgo < 1) return 'Just now';
+    if (hoursAgo < 24) return `${hoursAgo} ${hoursAgo === 1 ? 'hour' : 'hours'} ago`;
+    if (daysAgo === 1) return '1 day ago';
+    return `${daysAgo} days ago`;
+  };
+
+  // Get action icon
+  const getActionIcon = (action: string) => {
+    if (action.includes('Payment')) return CurrencyDollarIcon;
+    if (action.includes('Tenant')) return UsersIcon;
+    if (action.includes('Alert')) return BellAlertIcon;
+    if (action.includes('Request')) return ClipboardDocumentListIcon;
+    if (action.includes('Vendor')) return UserGroupIcon;
+    if (action.includes('Hostel')) return HomeIcon;
+    return UserIcon;
+  };
+
+  // Get action color
+  const getActionColor = (action: string) => {
+    if (action.includes('Payment')) return 'bg-green-100 text-green-700';
+    if (action.includes('Created')) return 'bg-blue-100 text-blue-700';
+    if (action.includes('Updated')) return 'bg-yellow-100 text-yellow-700';
+    if (action.includes('Resolved') || action.includes('Completed')) return 'bg-purple-100 text-purple-700';
+    return 'bg-gray-100 text-gray-700';
+  };
+
+  // Recent tenant requests - Bills (from accounts data)
+  const recentBills = useMemo(() => {
+    return accountsData
+      .filter(a => (a.type === 'Expense' || a.type === 'Refund') && (a.status === 'Pending' || a.status === 'Overdue'))
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 5)
+      .map(bill => {
+        const daysAgo = Math.floor((Date.now() - new Date(bill.date).getTime()) / (1000 * 60 * 60 * 24));
+        return {
+          ...bill,
+          daysAgo,
+          description: bill.description || `${bill.type} - ${bill.ref}`,
+          property: bill.hostelName || 'N/A',
+          unit: bill.tenantName || 'N/A',
+        };
+      });
+  }, []);
+
+  // Recent tenant requests - Maintenance (from tenant requests data)
+  const recentMaintenance = useMemo(() => {
+    return tenantRequestsData
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 5)
+      .map(req => {
+        const daysAgo = Math.floor((Date.now() - new Date(req.createdAt).getTime()) / (1000 * 60 * 60 * 24));
+        return {
+          ...req,
+          daysAgo,
+        };
+      });
   }, []);
 
   // Unpaid rent by aging
@@ -184,10 +229,34 @@ const Overview: React.FC = () => {
     return unpaidRentData.reduce((sum, item) => sum + item.amount, 0);
   }, [unpaidRentData]);
 
-  // Rental applications data
-  const rentalApplicationsTotal = useMemo(() => {
-    return rentalApplicationsData.reduce((sum, app) => sum + app.count, 0);
-  }, [rentalApplicationsData]);
+  // Check in and Check out data (dummy data for display)
+  const checkInCheckOutData = useMemo(() => {
+    // Dummy data: Check-ins and Check-outs for the last 30 days / next 30 days
+    // These are realistic numbers based on typical hostel operations
+    const checkIns = 28; // Tenants who checked in during the last 30 days
+    const checkOuts = 15; // Tenants who will check out in the next 30 days
+    
+    const total = checkIns + checkOuts;
+    const checkInPercentage = total > 0 ? (checkIns / total) * 100 : 0;
+    const checkOutPercentage = total > 0 ? (checkOuts / total) * 100 : 0;
+
+    return [
+      {
+        type: 'Check In',
+        count: checkIns,
+        percentage: checkInPercentage,
+      },
+      {
+        type: 'Check Out',
+        count: checkOuts,
+        percentage: checkOutPercentage,
+      },
+    ];
+  }, []);
+
+  const checkInCheckOutTotal = useMemo(() => {
+    return checkInCheckOutData.reduce((sum, item) => sum + item.count, 0);
+  }, [checkInCheckOutData]);
 
   // Occupancy rate data
   const occupancyData = useMemo(() => {
@@ -212,33 +281,6 @@ const Overview: React.FC = () => {
     return `${days} days ago`;
   };
 
-  // Format activity time
-  const formatActivityTime = (hoursAgo: number, daysAgo: number) => {
-    if (hoursAgo < 1) return 'Just now';
-    if (hoursAgo < 24) return `${hoursAgo} ${hoursAgo === 1 ? 'hour' : 'hours'} ago`;
-    if (daysAgo === 1) return '1 day ago';
-    return `${daysAgo} days ago`;
-  };
-
-  // Get action icon
-  const getActionIcon = (action: string) => {
-    if (action.includes('Payment')) return CurrencyDollarIcon;
-    if (action.includes('Tenant')) return UsersIcon;
-    if (action.includes('Alert')) return BellAlertIcon;
-    if (action.includes('Request')) return ClipboardDocumentListIcon;
-    if (action.includes('Vendor')) return UserGroupIcon;
-    if (action.includes('Hostel')) return HomeIcon;
-    return UserIcon;
-  };
-
-  // Get action color
-  const getActionColor = (action: string) => {
-    if (action.includes('Payment')) return 'bg-green-100 text-green-700';
-    if (action.includes('Created')) return 'bg-blue-100 text-blue-700';
-    if (action.includes('Updated')) return 'bg-yellow-100 text-yellow-700';
-    if (action.includes('Resolved') || action.includes('Completed')) return 'bg-purple-100 text-purple-700';
-    return 'bg-gray-100 text-gray-700';
-  };
 
   // Get status badge color
   const getStatusColor = (status: string) => {
@@ -262,8 +304,9 @@ const Overview: React.FC = () => {
         <p className="text-slate-600 mt-1">Dashboard summary and key metrics</p>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+      {/* Stats Cards and Activity Log in Same Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {/* Row 1 - Card 1 */}
         <StatCard
           title="Occupancy Rate"
           value={`${stats.occupancyRate}%`}
@@ -272,6 +315,8 @@ const Overview: React.FC = () => {
           trend={{ value: '+5% from last month', isPositive: true }}
           delay={0}
         />
+        
+        {/* Row 1 - Card 2 */}
         <StatCard
           title="Active Tenants"
           value={stats.activeTenants}
@@ -279,34 +324,67 @@ const Overview: React.FC = () => {
           variant="success"
           delay={0.1}
         />
-        <StatCard
-          title="Open Alerts"
-          value={stats.openAlerts}
-          icon={<BellAlertIcon className="w-6 h-6 text-white" />}
-          variant={stats.openAlerts > 5 ? 'warning' : 'default'}
-          delay={0.2}
-        />
+        
+        {/* Row 1 & 2 - Activity Log (spans 2 rows) */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 lg:row-span-2">
+          <div className="mb-3">
+            <h2 className="text-lg font-bold text-slate-900 mb-1">Employee Activity Log</h2>
+            <p className="text-xs text-slate-600">Track all employee activities</p>
+          </div>
+          <div className="space-y-2 max-h-[280px] overflow-y-auto">
+            {activityLog.map((activity, idx) => {
+              const ActionIcon = getActionIcon(activity.action);
+              return (
+                <motion.div
+                  key={activity.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.05 }}
+                  className="flex items-start gap-2 p-2 rounded-lg hover:bg-gray-50 transition-colors border border-gray-100"
+                >
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${getActionColor(activity.action)}`}>
+                    <ActionIcon className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                      <p className="font-semibold text-slate-900 text-xs">{activity.employeeName}</p>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-medium">
+                        {activity.employeeRole}
+                      </span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${getActionColor(activity.action)}`}>
+                        {activity.action}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 mb-0.5 line-clamp-1">{activity.description}</p>
+                    <div className="flex items-center gap-1.5 text-[10px] text-slate-500 flex-wrap">
+                      <span>{activity.hostelName}</span>
+                      <span>•</span>
+                      <span>{formatActivityTime(activity.hoursAgo, activity.daysAgo)}</span>
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Row 2 - Card 3 */}
         <StatCard
           title="Monthly Revenue"
           value={formatCurrency(stats.monthlyRevenue)}
           icon={<CurrencyDollarIcon className="w-6 h-6 text-white" />}
           variant="success"
           trend={{ value: '+12% from last month', isPositive: true }}
-          delay={0.3}
+          delay={0.2}
         />
+        
+        {/* Row 2 - Card 4 */}
         <StatCard
           title="Active Vendors"
           value={stats.activeVendors}
           icon={<UserGroupIcon className="w-6 h-6 text-white" />}
           variant="default"
-          delay={0.4}
-        />
-        <StatCard
-          title="Pending Payments"
-          value={stats.pendingPayments}
-          icon={<ClockIcon className="w-6 h-6 text-white" />}
-          variant="warning"
-          delay={0.5}
+          delay={0.3}
         />
       </div>
 
@@ -358,8 +436,8 @@ const Overview: React.FC = () => {
         {/* Paid Transactions & Recent Payments Received - Combined Card */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
           <div className="mb-4">
-            <h2 className="text-xl font-bold text-slate-900 mb-2">Paid Transactions & Recent Payments</h2>
-            <p className="text-sm text-slate-600">All paid transactions and recent payments received</p>
+            <h2 className="text-xl font-bold text-slate-900 mb-2">Payable Transactions & Receivable Payments</h2>
+            <p className="text-sm text-slate-600">All payable transactions and receivable payments</p>
           </div>
           
           {/* Tabs for Paid Transactions and Recent Payments */}
@@ -373,7 +451,7 @@ const Overview: React.FC = () => {
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                Paid Transactions ({paidTransactions.length})
+                Payable Transactions ({paidTransactions.length})
               </button>
               <button 
                 onClick={() => setActivePaymentTab('payments')}
@@ -383,7 +461,7 @@ const Overview: React.FC = () => {
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                Recent Payments ({recentPaymentsReceived.length})
+                Receivable Payments ({recentPaymentsReceived.length})
               </button>
             </div>
           </div>
@@ -487,29 +565,115 @@ const Overview: React.FC = () => {
           )}
         </div>
 
-        {/* Recent Tenant Requests */}
+        {/* Recent Tenant Requests - Bills & Maintenance */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
           <div className="mb-4">
             <h2 className="text-xl font-bold text-slate-900 mb-2">Recent tenant requests</h2>
+            <p className="text-sm text-slate-600">Bills and maintenance requests</p>
           </div>
-          <div className="space-y-4">
-            {recentRequests.map((request) => (
-              <div key={request.id} className="flex items-start gap-4 p-3 rounded-lg hover:bg-gray-50 transition-colors">
-                <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                  <ClipboardDocumentListIcon className="w-5 h-5 text-blue-600" />
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium text-slate-900">{request.description}</p>
-                  <p className="text-sm text-slate-600">
-                    {formatTimeAgo(request.daysAgo)} • {request.property} - {request.unit}
-                  </p>
-                </div>
-                <span className={`px-2 py-1 rounded-md text-xs font-medium border ${getStatusColor(request.status)}`}>
-                  {request.status}
-                </span>
-              </div>
-            ))}
+          
+          {/* Tabs for Bills and Maintenance */}
+          <div className="mb-4">
+            <div className="flex gap-2 border-b border-gray-200">
+              <button 
+                onClick={() => setActiveRequestTab('bills')}
+                className={`px-4 py-2 text-sm font-medium transition-colors ${
+                  activeRequestTab === 'bills'
+                    ? 'text-blue-600 border-b-2 border-blue-600'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Bills ({recentBills.length})
+              </button>
+              <button 
+                onClick={() => setActiveRequestTab('maintenance')}
+                className={`px-4 py-2 text-sm font-medium transition-colors ${
+                  activeRequestTab === 'maintenance'
+                    ? 'text-blue-600 border-b-2 border-blue-600'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Maintenance ({recentMaintenance.length})
+              </button>
+            </div>
           </div>
+
+          {/* Bills Tab Content */}
+          {activeRequestTab === 'bills' && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="space-y-3"
+            >
+              {recentBills.map((bill) => (
+                <motion.div
+                  key={bill.id}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="flex items-start gap-4 p-3 rounded-lg hover:bg-gray-50 transition-colors border border-gray-100"
+                >
+                  <div className="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center">
+                    <CurrencyDollarIcon className="w-5 h-5 text-orange-600" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-medium text-slate-900">{bill.description}</p>
+                    <p className="text-sm text-slate-600">
+                      {formatTimeAgo(bill.daysAgo)} • {bill.property} • {bill.unit}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold text-slate-900">{formatCurrency(bill.amount)}</p>
+                    <span className={`px-2 py-1 rounded-md text-xs font-medium border ${getStatusColor(bill.status)}`}>
+                      {bill.status}
+                    </span>
+                  </div>
+                </motion.div>
+              ))}
+              {recentBills.length === 0 && (
+                <div className="text-center py-8 text-slate-500">
+                  No bills found.
+                </div>
+              )}
+            </motion.div>
+          )}
+
+          {/* Maintenance Tab Content */}
+          {activeRequestTab === 'maintenance' && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="space-y-3"
+            >
+              {recentMaintenance.map((request) => (
+                <motion.div
+                  key={request.id}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="flex items-start gap-4 p-3 rounded-lg hover:bg-gray-50 transition-colors border border-gray-100"
+                >
+                  <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                    <ClipboardDocumentListIcon className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-medium text-slate-900">{request.description}</p>
+                    <p className="text-sm text-slate-600">
+                      {formatTimeAgo(request.daysAgo)} • {request.property} - {request.unit}
+                    </p>
+                  </div>
+                  <span className={`px-2 py-1 rounded-md text-xs font-medium border ${getStatusColor(request.status)}`}>
+                    {request.status}
+                  </span>
+                </motion.div>
+              ))}
+              {recentMaintenance.length === 0 && (
+                <div className="text-center py-8 text-slate-500">
+                  No maintenance requests found.
+                </div>
+              )}
+            </motion.div>
+          )}
         </div>
 
         {/* Unpaid Rent */}
@@ -521,10 +685,10 @@ const Overview: React.FC = () => {
             </p>
           </div>
           <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={unpaidRentData} layout="vertical">
+            <BarChart data={unpaidRentData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis type="number" stroke="#64748b" style={{ fontSize: '12px' }} />
-              <YAxis dataKey="category" type="category" stroke="#64748b" style={{ fontSize: '12px' }} width={60} />
+              <XAxis dataKey="category" stroke="#64748b" style={{ fontSize: '12px' }} />
+              <YAxis stroke="#64748b" style={{ fontSize: '12px' }} />
               <Tooltip
                 formatter={(value: number) => formatCurrency(value)}
                 contentStyle={{
@@ -533,7 +697,7 @@ const Overview: React.FC = () => {
                   borderRadius: '8px',
                 }}
               />
-              <Bar dataKey="amount" fill="#3b82f6" radius={[0, 8, 8, 0]} />
+              <Bar dataKey="amount" fill="#3b82f6" radius={[8, 8, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
           <div className="mt-4 space-y-2">
@@ -546,19 +710,19 @@ const Overview: React.FC = () => {
           </div>
         </div>
 
-        {/* Rental Applications */}
+        {/* Check In & Check Out */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
           <div className="mb-4">
-            <h2 className="text-xl font-bold text-slate-900 mb-2">Rental applications</h2>
+            <h2 className="text-xl font-bold text-slate-900 mb-2">Check In & Check Out</h2>
             <p className="text-sm text-slate-600">
-              Total: <span className="font-semibold text-slate-900">{rentalApplicationsTotal.toLocaleString()}</span> (Last 30 days)
+              Total: <span className="font-semibold text-slate-900">{checkInCheckOutTotal.toLocaleString()}</span> (Last 30 days / Next 30 days)
             </p>
           </div>
           <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={rentalApplicationsData} layout="vertical">
+            <BarChart data={checkInCheckOutData} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
               <XAxis type="number" stroke="#64748b" style={{ fontSize: '12px' }} />
-              <YAxis dataKey="status" type="category" stroke="#64748b" style={{ fontSize: '12px' }} width={100} />
+              <YAxis dataKey="type" type="category" stroke="#64748b" style={{ fontSize: '12px' }} width={100} />
               <Tooltip
                 formatter={(value: number) => [value, 'Count']}
                 contentStyle={{
@@ -568,16 +732,16 @@ const Overview: React.FC = () => {
                 }}
               />
               <Bar dataKey="count" radius={[0, 8, 8, 0]}>
-                {rentalApplicationsData.map((_, index) => (
-                  <Cell key={`cell-${index}`} fill={index === 0 ? '#ec4899' : index === 1 ? '#a855f7' : '#8b5cf6'} />
+                {checkInCheckOutData.map((_, index) => (
+                  <Cell key={`cell-${index}`} fill={index === 0 ? '#10b981' : '#3b82f6'} />
                 ))}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
           <div className="mt-4 space-y-2">
-            {rentalApplicationsData.map((item) => (
-              <div key={item.status} className="flex items-center justify-between text-sm">
-                <span className="text-slate-600">{item.status}</span>
+            {checkInCheckOutData.map((item) => (
+              <div key={item.type} className="flex items-center justify-between text-sm">
+                <span className="text-slate-600">{item.type}</span>
                 <span className="font-medium text-slate-900">
                   {item.count} ({item.percentage.toFixed(2)}%)
                 </span>
@@ -645,51 +809,6 @@ const Overview: React.FC = () => {
           </div>
         </div>
 
-        {/* Employee Activity Log */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 lg:col-span-2">
-          <div className="mb-4">
-            <h2 className="text-xl font-bold text-slate-900 mb-2">Employee Activity Log</h2>
-            <p className="text-sm text-slate-600">Track all employee activities and actions</p>
-          </div>
-          <div className="space-y-3 max-h-96 overflow-y-auto">
-            {activityLog.map((activity, idx) => {
-              const ActionIcon = getActionIcon(activity.action);
-              return (
-                <motion.div
-                  key={activity.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: idx * 0.05 }}
-                  className="flex items-start gap-4 p-4 rounded-lg hover:bg-gray-50 transition-colors border border-gray-100"
-                >
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${getActionColor(activity.action)}`}>
-                    <ActionIcon className="w-5 h-5" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <p className="font-semibold text-slate-900">{activity.employeeName}</p>
-                      <span className="text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-700 font-medium">
-                        {activity.employeeRole}
-                      </span>
-                      <span className={`text-xs px-2 py-0.5 rounded font-medium ${getActionColor(activity.action)}`}>
-                        {activity.action}
-                      </span>
-                    </div>
-                    <p className="text-sm text-slate-600 mb-1">{activity.description}</p>
-                    <div className="flex items-center gap-3 text-xs text-slate-500">
-                      <span>{activity.hostelName}</span>
-                      <span>•</span>
-                      <span>{formatActivityTime(activity.hoursAgo, activity.daysAgo)}</span>
-                      <span>•</span>
-                      <span>{formatDate(activity.timestamp)}</span>
-                    </div>
-                  </div>
-                  <ArrowRightIcon className="w-5 h-5 text-gray-400 flex-shrink-0" />
-                </motion.div>
-              );
-            })}
-          </div>
-        </div>
       </div>
     </div>
   );
