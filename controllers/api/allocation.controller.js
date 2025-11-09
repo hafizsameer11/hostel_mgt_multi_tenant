@@ -534,9 +534,6 @@ const getAllAllocations = async (req, res) => {
             where.hostel = hostelAccessFilter;
         }
 
-        // Pagination
-        const skip = (page - 1) * limit;
-
         const pageNumber = parseInt(page, 10) || 1;
         const limitNumber = parseInt(limit, 10) || 20;
 
