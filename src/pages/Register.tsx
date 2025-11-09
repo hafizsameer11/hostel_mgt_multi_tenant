@@ -40,7 +40,7 @@ const Register = () => {
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) newErrors.email = 'Invalid email format';
     if (!password.trim()) newErrors.password = 'Password is required';
     else if (password.length < 6) newErrors.password = 'Password must be at least 6 characters';
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -52,7 +52,7 @@ const Register = () => {
     if (!gender) newErrors.gender = 'Gender is required';
     if (!dateOfBirth) newErrors.dateOfBirth = 'Date of birth is required';
     if (!document) newErrors.document = 'Document upload is required';
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -62,14 +62,14 @@ const Register = () => {
     if (!hostelName.trim()) newErrors.hostelName = 'Hostel name or city is required';
     if (!addressLine.trim()) newErrors.addressLine = 'Address is required';
     if (!postalCode.trim()) newErrors.postalCode = 'Postal code is required';
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleNext = () => {
     let isValid = false;
-    
+
     if (currentStep === 1) {
       isValid = validateStep1();
     } else if (currentStep === 2) {
@@ -150,7 +150,7 @@ const Register = () => {
             {currentStep === 1 && (
               <div className="space-y-6">
                 <h2 className="text-3xl font-bold text-primary-600 mb-6">Account Information</h2>
-                
+
                 {/* Username */}
                 <div>
                   <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
@@ -170,9 +170,8 @@ const Register = () => {
                         setUsername(e.target.value);
                         setErrors({ ...errors, username: '' });
                       }}
-                      className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 transition-colors ${
-                        errors.username ? 'border-red-500' : 'border-gray-300 focus:border-primary-500'
-                      }`}
+                      className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 transition-colors ${errors.username ? 'border-red-500' : 'border-gray-300 focus:border-primary-500'
+                        }`}
                       placeholder="Username"
                     />
                   </div>
@@ -198,9 +197,8 @@ const Register = () => {
                         setEmail(e.target.value);
                         setErrors({ ...errors, email: '' });
                       }}
-                      className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 transition-colors ${
-                        errors.email ? 'border-red-500' : 'border-gray-300 focus:border-primary-500'
-                      }`}
+                      className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 transition-colors ${errors.email ? 'border-red-500' : 'border-gray-300 focus:border-primary-500'
+                        }`}
                       placeholder="Email"
                     />
                   </div>
@@ -226,9 +224,8 @@ const Register = () => {
                         setPassword(e.target.value);
                         setErrors({ ...errors, password: '' });
                       }}
-                      className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 transition-colors ${
-                        errors.password ? 'border-red-500' : 'border-gray-300 focus:border-primary-500'
-                      }`}
+                      className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 transition-colors ${errors.password ? 'border-red-500' : 'border-gray-300 focus:border-primary-500'
+                        }`}
                       placeholder="Password"
                     />
                   </div>
@@ -248,7 +245,7 @@ const Register = () => {
             {currentStep === 2 && (
               <div className="space-y-6">
                 <h2 className="text-3xl font-bold text-primary-600 mb-6">Personal Information</h2>
-                
+
                 {/* Full Name */}
                 <div>
                   <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-2">
@@ -262,9 +259,8 @@ const Register = () => {
                       setFullName(e.target.value);
                       setErrors({ ...errors, fullName: '' });
                     }}
-                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 transition-colors ${
-                      errors.fullName ? 'border-red-500' : 'border-gray-300 focus:border-primary-500'
-                    }`}
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 transition-colors ${errors.fullName ? 'border-red-500' : 'border-gray-300 focus:border-primary-500'
+                      }`}
                     placeholder="Enter your full name"
                   />
                   {errors.fullName && <p className="mt-1 text-sm text-red-600">{errors.fullName}</p>}
@@ -283,9 +279,8 @@ const Register = () => {
                       setPhoneNumber(e.target.value);
                       setErrors({ ...errors, phoneNumber: '' });
                     }}
-                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 transition-colors ${
-                      errors.phoneNumber ? 'border-red-500' : 'border-gray-300 focus:border-primary-500'
-                    }`}
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 transition-colors ${errors.phoneNumber ? 'border-red-500' : 'border-gray-300 focus:border-primary-500'
+                      }`}
                     placeholder="Enter your phone number"
                   />
                   {errors.phoneNumber && <p className="mt-1 text-sm text-red-600">{errors.phoneNumber}</p>}
@@ -303,9 +298,8 @@ const Register = () => {
                       setGender(e.target.value);
                       setErrors({ ...errors, gender: '' });
                     }}
-                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 transition-colors ${
-                      errors.gender ? 'border-red-500' : 'border-gray-300 focus:border-primary-500'
-                    }`}
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 transition-colors ${errors.gender ? 'border-red-500' : 'border-gray-300 focus:border-primary-500'
+                      }`}
                   >
                     <option value="">Select gender</option>
                     <option value="male">Male</option>
@@ -328,9 +322,8 @@ const Register = () => {
                       setDateOfBirth(e.target.value);
                       setErrors({ ...errors, dateOfBirth: '' });
                     }}
-                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 transition-colors ${
-                      errors.dateOfBirth ? 'border-red-500' : 'border-gray-300 focus:border-primary-500'
-                    }`}
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 transition-colors ${errors.dateOfBirth ? 'border-red-500' : 'border-gray-300 focus:border-primary-500'
+                      }`}
                   />
                   {errors.dateOfBirth && <p className="mt-1 text-sm text-red-600">{errors.dateOfBirth}</p>}
                 </div>
@@ -344,9 +337,8 @@ const Register = () => {
                     id="document"
                     type="file"
                     onChange={handleFileChange}
-                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 transition-colors ${
-                      errors.document ? 'border-red-500' : 'border-gray-300 focus:border-primary-500'
-                    }`}
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 transition-colors ${errors.document ? 'border-red-500' : 'border-gray-300 focus:border-primary-500'
+                      }`}
                   />
                   {document && (
                     <p className="mt-2 text-sm text-green-600">Selected: {document.name}</p>
@@ -375,7 +367,7 @@ const Register = () => {
             {currentStep === 3 && (
               <div className="space-y-6">
                 <h2 className="text-3xl font-bold text-primary-600 mb-6">Address Information</h2>
-                
+
                 {/* Hostel Name / City */}
                 <div>
                   <label htmlFor="hostelName" className="block text-sm font-medium text-gray-700 mb-2">
@@ -389,9 +381,8 @@ const Register = () => {
                       setHostelName(e.target.value);
                       setErrors({ ...errors, hostelName: '' });
                     }}
-                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 transition-colors ${
-                      errors.hostelName ? 'border-red-500' : 'border-gray-300 focus:border-primary-500'
-                    }`}
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 transition-colors ${errors.hostelName ? 'border-red-500' : 'border-gray-300 focus:border-primary-500'
+                      }`}
                     placeholder="Enter hostel name or city"
                   />
                   {errors.hostelName && <p className="mt-1 text-sm text-red-600">{errors.hostelName}</p>}
@@ -425,9 +416,8 @@ const Register = () => {
                       setAddressLine(e.target.value);
                       setErrors({ ...errors, addressLine: '' });
                     }}
-                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 transition-colors ${
-                      errors.addressLine ? 'border-red-500' : 'border-gray-300 focus:border-primary-500'
-                    }`}
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 transition-colors ${errors.addressLine ? 'border-red-500' : 'border-gray-300 focus:border-primary-500'
+                      }`}
                     placeholder="Enter your address"
                   />
                   {errors.addressLine && <p className="mt-1 text-sm text-red-600">{errors.addressLine}</p>}
@@ -446,9 +436,8 @@ const Register = () => {
                       setPostalCode(e.target.value);
                       setErrors({ ...errors, postalCode: '' });
                     }}
-                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 transition-colors ${
-                      errors.postalCode ? 'border-red-500' : 'border-gray-300 focus:border-primary-500'
-                    }`}
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 transition-colors ${errors.postalCode ? 'border-red-500' : 'border-gray-300 focus:border-primary-500'
+                      }`}
                     placeholder="Enter postal code"
                   />
                   {errors.postalCode && <p className="mt-1 text-sm text-red-600">{errors.postalCode}</p>}

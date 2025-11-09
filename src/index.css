@@ -5,7 +5,7 @@
   * {
     box-sizing: border-box;
   }
-  
+
   :root {
     --color-primary: #0ea5e9;
     --color-primary-dark: #0284c7;
@@ -40,6 +40,7 @@
 }
 
 @layer utilities {
+
   /* Utility classes for light blue theme */
   .bg-primary {
     background-color: var(--color-primary);
@@ -68,6 +69,7 @@
     transform: translateX(100%);
     opacity: 0;
   }
+
   to {
     transform: translateX(0);
     opacity: 1;
