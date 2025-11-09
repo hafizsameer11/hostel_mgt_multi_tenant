@@ -20,10 +20,10 @@
 }
 
 @layer base {
-  /* Scale down base font size to 75% for compact UI at 100% browser zoom */
-  /* This makes the UI appear as it does at 75% browser zoom, but natively at 100% */
+  /* Scale base font size to 80% for proper UI display at 100% browser zoom */
+  /* This makes the UI appear as it does at 80% browser zoom, but natively at 100% */
   html {
-    font-size: 75%; /* 12px base (75% of default 16px) - scales all rem-based Tailwind utilities */
+    font-size: 80%; /* 12.8px base (80% of default 16px) - scales all rem-based Tailwind utilities */
   }
 
   body {

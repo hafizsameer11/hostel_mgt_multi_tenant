@@ -12,20 +12,28 @@ import type { Column } from '../../components/DataTable';
 import { SearchInput } from '../../components/SearchInput';
 import { Select } from '../../components/Select';
 import { Badge } from '../../components/Badge';
+import { Button } from '../../components/Button';
+import { Modal } from '../../components/Modal';
+import { Toast } from '../../components/Toast';
 import type { Transaction } from '../../types/accounts';
 import type { Hostel } from '../../types/hostel';
 import { formatDate, formatCurrency } from '../../types/common';
 import accountsData from '../../mock/accounts.json';
+import vendorsData from '../../mock/vendors.json';
 import * as hostelService from '../../services/hostel.service';
 import {
   CurrencyDollarIcon,
   ArrowTrendingDownIcon,
   ArrowTrendingUpIcon,
   ExclamationTriangleIcon,
+  PlusIcon,
+  PencilIcon,
 } from '@heroicons/react/24/outline';
 
 type MainTab = 'Payable' | 'Receivable';
 type PayableSubTab = 'Bills' | 'Vendor' | 'Laundry';
+type ReceivableSubTab = 'All' | 'Received';
+type ReceivableCategory = 'Rent' | 'Deposit';
 
 /**
  * Accounts list page with Payable/Receivable tabs
@@ -33,10 +41,35 @@ type PayableSubTab = 'Bills' | 'Vendor' | 'Laundry';
 const AccountsList: React.FC = () => {
   const [activeMainTab, setActiveMainTab] = useState<MainTab>('Payable');
   const [activePayableTab, setActivePayableTab] = useState<PayableSubTab>('Bills');
+  const [activeReceivableTab, setActiveReceivableTab] = useState<ReceivableSubTab>('All');
+  const [activeReceivableCategory, setActiveReceivableCategory] = useState<ReceivableCategory | ''>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [hostelFilter, setHostelFilter] = useState('');
+  const [vendorFilter, setVendorFilter] = useState('');
   const [hostels, setHostels] = useState<Hostel[]>([]);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isEditStatusModalOpen, setIsEditStatusModalOpen] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [editStatusForm, setEditStatusForm] = useState<{ status: Transaction['status'] }>({
+    status: 'Pending',
+  });
+  // Store manually added payable entries with their category
+  const [manuallyAddedPayables, setManuallyAddedPayables] = useState<(Transaction & { payableCategory?: PayableSubTab })[]>([]);
+  const [payableForm, setPayableForm] = useState({
+    category: '' as PayableSubTab | '',
+    vendorId: '',
+    hostelId: '',
+    amount: '',
+    description: '',
+    date: new Date().toISOString().split('T')[0],
+    status: 'Pending' as Transaction['status'],
+  });
+  const [toast, setToast] = useState<{ open: boolean; type: 'success' | 'error' | 'warning' | 'info'; message: string }>({
+    open: false,
+    type: 'success',
+    message: '',
+  });
 
   // Load hostels on component mount
   useEffect(() => {
@@ -44,9 +77,20 @@ const AccountsList: React.FC = () => {
     setHostels(allHostels);
   }, []);
 
+  // Reset vendor filter when switching away from Vendor tab
+  useEffect(() => {
+    if (activeMainTab !== 'Payable' || activePayableTab !== 'Vendor') {
+      setVendorFilter('');
+    }
+  }, [activeMainTab, activePayableTab]);
+
   // Base filtered data by hostel (applies to ALL calculations)
+  // Includes both original accounts data and manually added payables
   const baseFilteredData = useMemo(() => {
-    let data = accountsData as Transaction[];
+    let data = [...(accountsData as Transaction[])];
+    
+    // Add manually added payables to the data
+    data = [...data, ...manuallyAddedPayables];
     
     // Apply hostel filter first - this affects ALL data on the page
     if (hostelFilter) {
@@ -54,7 +98,7 @@ const AccountsList: React.FC = () => {
     }
     
     return data;
-  }, [hostelFilter]);
+  }, [hostelFilter, manuallyAddedPayables]);
 
   // Calculate summary - Income, Expense, Profit, Bad Debt (based on hostel filter)
   const summary = useMemo(() => {
@@ -92,28 +136,82 @@ const AccountsList: React.FC = () => {
       
       // Further filter by payable sub-tab
       if (activePayableTab === 'Bills') {
-        data = data.filter((t) => 
-          t.description?.toLowerCase().includes('bill') ||
-          t.description?.toLowerCase().includes('utility') ||
-          t.description?.toLowerCase().includes('internet')
-        );
+        data = data.filter((t) => {
+          // Check if transaction has a stored category (manually added)
+          const transactionWithCategory = t as Transaction & { payableCategory?: PayableSubTab };
+          if (transactionWithCategory.payableCategory) {
+            return transactionWithCategory.payableCategory === 'Bills';
+          }
+          // Otherwise, filter by description keywords (existing data)
+          return (
+            t.description?.toLowerCase().includes('bill') ||
+            t.description?.toLowerCase().includes('utility') ||
+            t.description?.toLowerCase().includes('internet')
+          );
+        });
       } else if (activePayableTab === 'Vendor') {
-        data = data.filter((t) => 
-          t.description?.toLowerCase().includes('vendor') ||
-          t.description?.toLowerCase().includes('supplier')
-        );
+        data = data.filter((t) => {
+          // Check if transaction has a stored category (manually added)
+          const transactionWithCategory = t as Transaction & { payableCategory?: PayableSubTab };
+          if (transactionWithCategory.payableCategory) {
+            return transactionWithCategory.payableCategory === 'Vendor';
+          }
+          // Otherwise, filter by description keywords (existing data)
+          return (
+            t.description?.toLowerCase().includes('vendor') ||
+            t.description?.toLowerCase().includes('supplier')
+          );
+        });
+        
+        // Apply vendor filter if selected
+        if (vendorFilter) {
+          const selectedVendor = (vendorsData as any[]).find((v) => String(v.id) === vendorFilter);
+          if (selectedVendor) {
+            // Filter by vendor name in description
+            const vendorNameLower = selectedVendor.name.toLowerCase();
+            data = data.filter((t) => 
+              t.description?.toLowerCase().includes(vendorNameLower) ||
+              t.description?.toLowerCase().includes(selectedVendor.specialty.toLowerCase())
+            );
+          }
+        }
       } else if (activePayableTab === 'Laundry') {
-        data = data.filter((t) => 
-          t.description?.toLowerCase().includes('laundry') ||
-          t.description?.toLowerCase().includes('cleaning')
-        );
+        data = data.filter((t) => {
+          // Check if transaction has a stored category (manually added)
+          const transactionWithCategory = t as Transaction & { payableCategory?: PayableSubTab };
+          if (transactionWithCategory.payableCategory) {
+            return transactionWithCategory.payableCategory === 'Laundry';
+          }
+          // Otherwise, filter by description keywords (existing data)
+          return (
+            t.description?.toLowerCase().includes('laundry') ||
+            t.description?.toLowerCase().includes('cleaning')
+          );
+        });
       }
     } else {
-      // Receivable = Rent, Deposits that are pending/overdue
+      // Receivable = Rent, Deposits
       data = data.filter((t) => 
-        (t.type === 'Rent' || t.type === 'Deposit') && 
-        (t.status === 'Pending' || t.status === 'Overdue')
+        t.type === 'Rent' || t.type === 'Deposit'
       );
+      
+      // Filter by receivable sub-tab
+      if (activeReceivableTab === 'Received') {
+        // Show only paid/received entries
+        data = data.filter((t) => t.status === 'Paid');
+      } else if (activeReceivableTab === 'All') {
+        // "All" tab: Show Pending and Overdue only (EXCLUDE Paid status)
+        data = data.filter((t) => t.status === 'Pending' || t.status === 'Overdue');
+      }
+      
+      // Filter by category if selected
+      if (activeReceivableCategory) {
+        if (activeReceivableCategory === 'Rent') {
+          data = data.filter((t) => t.type === 'Rent');
+        } else if (activeReceivableCategory === 'Deposit') {
+          data = data.filter((t) => t.type === 'Deposit');
+        }
+      }
     }
 
     // Search filter
@@ -127,7 +225,8 @@ const AccountsList: React.FC = () => {
       );
     }
 
-    // Status filter
+    // Status filter - Apply normally for all tabs
+    // Note: "All" tab already filters to show only Pending and Overdue (excludes Paid)
     if (statusFilter) {
       data = data.filter((t) => t.status === statusFilter);
     }
@@ -135,7 +234,7 @@ const AccountsList: React.FC = () => {
     // Note: Hostel filter is already applied in baseFilteredData
 
     return data;
-  }, [activeMainTab, activePayableTab, searchQuery, statusFilter, baseFilteredData]);
+  }, [activeMainTab, activePayableTab, activeReceivableTab, activeReceivableCategory, searchQuery, statusFilter, vendorFilter, baseFilteredData]);
 
   // Define columns
   const columns: Column<Transaction>[] = [
@@ -217,6 +316,28 @@ const AccountsList: React.FC = () => {
     },
   ];
 
+  // Add actions column for Receivable
+  const receivableColumns: Column<Transaction>[] = [
+    ...columns,
+    {
+      key: 'actions',
+      label: 'Actions',
+      render: (row) => (
+        <button
+          onClick={() => {
+            setEditingTransaction(row);
+            setEditStatusForm({ status: row.status });
+            setIsEditStatusModalOpen(true);
+          }}
+          className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-purple-600 hover:text-purple-700 hover:bg-purple-50 rounded-lg transition-colors"
+        >
+          <PencilIcon className="w-4 h-4" />
+          Edit Status
+        </button>
+      ),
+    },
+  ];
+
   // Calculate payable and receivable totals
   const payableTotal = useMemo(() => {
     if (activeMainTab === 'Payable') {
@@ -256,6 +377,19 @@ const AccountsList: React.FC = () => {
     { id: 'Laundry', label: 'Laundry', count: 0 },
   ];
 
+  // Receivable sub-tabs
+  const receivableSubTabs: Tab[] = [
+    { id: 'All', label: 'All', count: 0 },
+    { id: 'Received', label: 'Received', count: 0 },
+  ];
+
+  // Receivable category options
+  const receivableCategoryOptions = [
+    { value: '', label: 'All Categories' },
+    { value: 'Rent', label: 'Rent' },
+    { value: 'Deposit', label: 'Deposit' },
+  ];
+
   // Prepare hostel options for dropdown
   const hostelOptions = useMemo(() => {
     const options = [{ value: '', label: 'All Hostels' }];
@@ -268,12 +402,209 @@ const AccountsList: React.FC = () => {
     return options;
   }, [hostels]);
 
+  // Prepare vendor options for dropdown (only show when Vendor tab is active)
+  const vendorOptions = useMemo(() => {
+    const options = [{ value: '', label: 'All Vendors' }];
+    const vendors = vendorsData as any[];
+    vendors.forEach((vendor) => {
+      options.push({
+        value: String(vendor.id),
+        label: `${vendor.name} (${vendor.specialty})`,
+      });
+    });
+    return options;
+  }, []);
+
+  // Prepare vendor options for form (only active vendors)
+  const formVendorOptions = useMemo(() => {
+    const options = [{ value: '', label: 'Select Vendor' }];
+    const vendors = vendorsData as any[];
+    vendors
+      .filter((v) => v.status === 'Active')
+      .forEach((vendor) => {
+        options.push({
+          value: String(vendor.id),
+          label: `${vendor.name} (${vendor.specialty})`,
+        });
+      });
+    return options;
+  }, []);
+
+  // Category options for payable form
+  const categoryOptions = [
+    { value: '', label: 'Select Category' },
+    { value: 'Bills', label: 'Bills' },
+    { value: 'Vendor', label: 'Vendor' },
+    { value: 'Laundry', label: 'Laundry' },
+  ];
+
   // Get selected hostel name for display
   const selectedHostelName = useMemo(() => {
     if (!hostelFilter) return null;
     const hostel = hostels.find((h) => String(h.id) === hostelFilter);
     return hostel?.name || null;
   }, [hostelFilter, hostels]);
+
+  // Get selected vendor name for display
+  const selectedVendorName = useMemo(() => {
+    if (!vendorFilter) return null;
+    const vendors = vendorsData as any[];
+    const vendor = vendors.find((v) => String(v.id) === vendorFilter);
+    return vendor ? `${vendor.name} (${vendor.specialty})` : null;
+  }, [vendorFilter]);
+
+  // Handle add payable form submission
+  const handleAddPayable = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Validation
+    if (!payableForm.category) {
+      setToast({
+        open: true,
+        type: 'warning',
+        message: 'Please select a category',
+      });
+      return;
+    }
+    
+    if (!payableForm.hostelId) {
+      setToast({
+        open: true,
+        type: 'warning',
+        message: 'Please select a hostel',
+      });
+      return;
+    }
+    
+    if (!payableForm.amount || parseFloat(payableForm.amount) <= 0) {
+      setToast({
+        open: true,
+        type: 'warning',
+        message: 'Please enter a valid amount',
+      });
+      return;
+    }
+    
+    if (!payableForm.description) {
+      setToast({
+        open: true,
+        type: 'warning',
+        message: 'Please enter a description',
+      });
+      return;
+    }
+    
+    // If Vendor category is selected, vendor is required
+    if (payableForm.category === 'Vendor' && !payableForm.vendorId) {
+      setToast({
+        open: true,
+        type: 'warning',
+        message: 'Please select a vendor',
+      });
+      return;
+    }
+    
+    // Generate reference number
+    const refPrefix = payableForm.category === 'Bills' ? 'BILL' : 
+                      payableForm.category === 'Vendor' ? 'VEND' : 'LAUN';
+    const refNumber = `${refPrefix}-${Date.now()}`;
+    
+    // Get hostel name
+    const selectedHostel = hostels.find((h) => String(h.id) === payableForm.hostelId);
+    const hostelName = selectedHostel?.name || '';
+    
+    // Build description with vendor name if applicable
+    let description = payableForm.description;
+    if (payableForm.category === 'Vendor' && payableForm.vendorId) {
+      const selectedVendor = (vendorsData as any[]).find((v) => String(v.id) === payableForm.vendorId);
+      if (selectedVendor) {
+        description = `${selectedVendor.name} - ${payableForm.description}`;
+      }
+    }
+    
+    // Create new transaction with category stored
+    const newTransaction: Transaction & { payableCategory?: PayableSubTab } = {
+      id: Date.now(), // In real app, this would come from backend
+      date: payableForm.date,
+      ref: refNumber,
+      type: 'Expense',
+      amount: parseFloat(payableForm.amount),
+      status: payableForm.status,
+      description: description,
+      hostelId: Number(payableForm.hostelId),
+      hostelName: hostelName,
+      payableCategory: payableForm.category, // Store the category for filtering
+    };
+    
+    // Add to manually added payables
+    setManuallyAddedPayables((prev) => [...prev, newTransaction]);
+    
+    console.log('New Payable Entry:', newTransaction);
+    
+    setToast({
+      open: true,
+      type: 'success',
+      message: `${payableForm.category} payable entry added successfully! It will appear in the ${payableForm.category} tab.`,
+    });
+    
+    // Reset form
+    setPayableForm({
+      category: '' as PayableSubTab | '',
+      vendorId: '',
+      hostelId: '',
+      amount: '',
+      description: '',
+      date: new Date().toISOString().split('T')[0],
+      status: 'Pending',
+    });
+    
+    setIsAddModalOpen(false);
+  };
+
+  // Handle modal close
+  const handleCloseModal = () => {
+    setIsAddModalOpen(false);
+    setPayableForm({
+      category: '' as PayableSubTab | '',
+      vendorId: '',
+      hostelId: '',
+      amount: '',
+      description: '',
+      date: new Date().toISOString().split('T')[0],
+      status: 'Pending',
+    });
+  };
+
+  // Handle edit status form submission
+  const handleEditStatus = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!editingTransaction) return;
+    
+    // In a real app, this would update the transaction via API
+    console.log('Updating transaction status:', {
+      id: editingTransaction.id,
+      oldStatus: editingTransaction.status,
+      newStatus: editStatusForm.status,
+    });
+    
+    setToast({
+      open: true,
+      type: 'success',
+      message: `Transaction status updated to ${editStatusForm.status} successfully!`,
+    });
+    
+    setIsEditStatusModalOpen(false);
+    setEditingTransaction(null);
+    setEditStatusForm({ status: 'Pending' });
+  };
+
+  // Handle edit status modal close
+  const handleEditStatusClose = () => {
+    setIsEditStatusModalOpen(false);
+    setEditingTransaction(null);
+    setEditStatusForm({ status: 'Pending' });
+  };
 
   // Toolbar with search and status filters only (hostel filter is at top)
   const toolbar = (
@@ -314,12 +645,12 @@ const AccountsList: React.FC = () => {
         animate={{ opacity: 1, y: 0 }}
         className="glass rounded-xl p-4 border border-white/20 shadow-lg"
       >
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
             <label className="text-sm font-semibold text-slate-700 whitespace-nowrap">
               Filter by Hostel:
             </label>
-            <div className="w-full sm:w-64">
+            <div className="flex-1 sm:w-64">
               <Select
                 value={hostelFilter}
                 onChange={setHostelFilter}
@@ -328,10 +659,38 @@ const AccountsList: React.FC = () => {
               />
             </div>
           </div>
-          {selectedHostelName && (
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-brand-100/50 rounded-lg border border-brand-200/50">
-              <span className="text-xs text-brand-700 font-medium">Showing:</span>
-              <span className="text-sm text-brand-900 font-semibold">{selectedHostelName}</span>
+          
+          {/* Vendor Filter - Only show when Vendor tab is active */}
+          {activeMainTab === 'Payable' && activePayableTab === 'Vendor' && (
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <label className="text-sm font-semibold text-slate-700 whitespace-nowrap">
+                Filter by Vendor:
+              </label>
+              <div className="flex-1 sm:w-64">
+                <Select
+                  value={vendorFilter}
+                  onChange={setVendorFilter}
+                  options={vendorOptions}
+                  placeholder="Select Vendor"
+                />
+              </div>
+            </div>
+          )}
+          
+          {(selectedHostelName || selectedVendorName) && (
+            <div className="flex flex-wrap items-center gap-2">
+              {selectedHostelName && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-brand-100/50 rounded-lg border border-brand-200/50">
+                  <span className="text-xs text-brand-700 font-medium">Hostel:</span>
+                  <span className="text-sm text-brand-900 font-semibold">{selectedHostelName}</span>
+                </div>
+              )}
+              {selectedVendorName && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-100/50 rounded-lg border border-purple-200/50">
+                  <span className="text-xs text-purple-700 font-medium">Vendor:</span>
+                  <span className="text-sm text-purple-900 font-semibold">{selectedVendorName}</span>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -417,7 +776,7 @@ const AccountsList: React.FC = () => {
             </div>
             <span className="text-sm font-semibold text-orange-600">Loss</span>
           </div>
-          <p className="text-sm font-medium text-gray-600 mb-1">Bad Debt</p>
+          <p className="text-sm font-medium text-gray-600 mb-1">Capitial Invested</p>
           <p className="text-2xl font-bold text-orange-900">{formatCurrency(summary.badDebt)}</p>
         </motion.div>
       </div>
@@ -432,9 +791,9 @@ const AccountsList: React.FC = () => {
           />
         </div>
 
-        {/* Payable Sub-Tabs */}
+        {/* Payable Sub-Tabs - Category Tabs */}
         {activeMainTab === 'Payable' && (
-          <div className="px-6 pt-2 pb-2 border-b border-white/10">
+          <div className="px-6 pt-4 pb-4 border-b border-gray-200">
             <div className="flex gap-2">
               {payableSubTabs.map((tab) => (
                 <button
@@ -442,13 +801,46 @@ const AccountsList: React.FC = () => {
                   onClick={() => setActivePayableTab(tab.id as PayableSubTab)}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                     activePayableTab === tab.id
-                      ? 'bg-[#2176FF] text-white'
-                      : 'text-gray-600 hover:bg-white/10'
+                      ? 'bg-[#3b82f6] text-white shadow-sm'
+                      : 'text-[#475569] bg-white hover:text-[#334155]'
                   }`}
                 >
                   {tab.label}
                 </button>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Receivable Sub-Tabs - All and Received */}
+        {activeMainTab === 'Receivable' && (
+          <div className="px-6 pt-4 pb-4 border-b border-gray-200">
+            <div className="flex items-center justify-between">
+              <div className="flex gap-2">
+                {receivableSubTabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveReceivableTab(tab.id as ReceivableSubTab)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                      activeReceivableTab === tab.id
+                        ? 'bg-[#3b82f6] text-white shadow-sm'
+                        : 'text-[#475569] bg-white hover:text-[#334155]'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+              
+              {/* Category Filter for Receivable */}
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700">Category:</label>
+                <Select
+                  value={activeReceivableCategory}
+                  onChange={(value) => setActiveReceivableCategory(value as ReceivableCategory | '')}
+                  options={receivableCategoryOptions}
+                />
+              </div>
             </div>
           </div>
         )}
@@ -468,21 +860,262 @@ const AccountsList: React.FC = () => {
                   {formatCurrency(activeMainTab === 'Payable' ? payableTotal : receivableTotal)}
                 </p>
               </div>
-              <Badge variant={activeMainTab === 'Payable' ? 'warning' : 'info'}>
-                {filteredData.length} {activeMainTab === 'Payable' ? 'Bills' : 'Invoices'}
-              </Badge>
+              <div className="flex items-center gap-4">
+                <Badge variant={activeMainTab === 'Payable' ? 'warning' : 'info'}>
+                  {filteredData.length} {activeMainTab === 'Payable' ? 'Bills' : 'Invoices'}
+                </Badge>
+                {/* Add Button - Show different text based on active tab */}
+                {activeMainTab === 'Payable' && (
+                  <Button
+                    variant="primary"
+                    onClick={() => {
+                      // Pre-select the category based on active tab
+                      setPayableForm((prev) => ({
+                        ...prev,
+                        category: activePayableTab as PayableSubTab,
+                      }));
+                      setIsAddModalOpen(true);
+                    }}
+                    icon={PlusIcon}
+                  >
+                    {activePayableTab === 'Vendor' 
+                      ? 'Add Vendor' 
+                      : activePayableTab === 'Bills'
+                      ? 'Add Bill'
+                      : activePayableTab === 'Laundry'
+                      ? 'Add Laundry'
+                      : 'Add Payable'}
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
 
           {/* Data table */}
           <DataTable
-            columns={columns}
+            columns={activeMainTab === 'Receivable' ? receivableColumns : columns}
             data={filteredData}
             toolbar={toolbar}
             emptyMessage={`No ${activeMainTab === 'Payable' ? activePayableTab.toLowerCase() : 'receivable'} records found. Try adjusting your search or filters.`}
           />
         </div>
       </div>
+
+      {/* Add Payable Modal */}
+      <Modal
+        isOpen={isAddModalOpen}
+        onClose={handleCloseModal}
+        title="Add New Payable Entry"
+        size="lg"
+      >
+        <form onSubmit={handleAddPayable} className="space-y-4">
+          {/* Category Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Category <span className="text-red-500">*</span>
+            </label>
+            <Select
+              value={payableForm.category}
+              onChange={(value) => {
+                setPayableForm({ ...payableForm, category: value as PayableSubTab, vendorId: value !== 'Vendor' ? '' : payableForm.vendorId });
+              }}
+              options={categoryOptions}
+            />
+          </div>
+
+          {/* Vendor Selection - Only show when Vendor category is selected */}
+          {payableForm.category === 'Vendor' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Vendor <span className="text-red-500">*</span>
+              </label>
+              <Select
+                value={payableForm.vendorId}
+                onChange={(value) => setPayableForm({ ...payableForm, vendorId: value })}
+                options={formVendorOptions}
+              />
+            </div>
+          )}
+
+          {/* Hostel Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Hostel <span className="text-red-500">*</span>
+            </label>
+            <Select
+              value={payableForm.hostelId}
+              onChange={(value) => setPayableForm({ ...payableForm, hostelId: value })}
+              options={hostelOptions.filter((opt) => opt.value !== '')} // Remove "All Hostels" option
+            />
+          </div>
+
+          {/* Amount */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Amount <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={payableForm.amount}
+              onChange={(e) => setPayableForm({ ...payableForm, amount: e.target.value })}
+              placeholder="0.00"
+              className="block w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2176FF]"
+              required
+            />
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Description <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              value={payableForm.description}
+              onChange={(e) => setPayableForm({ ...payableForm, description: e.target.value })}
+              placeholder="Enter description..."
+              rows={3}
+              className="block w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2176FF]"
+              required
+            />
+          </div>
+
+          {/* Date and Status Row */}
+          <div className="grid grid-cols-2 gap-4">
+            {/* Date */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Date <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="date"
+                value={payableForm.date}
+                onChange={(e) => setPayableForm({ ...payableForm, date: e.target.value })}
+                className="block w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2176FF]"
+                required
+              />
+            </div>
+
+            {/* Status */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Status <span className="text-red-500">*</span>
+              </label>
+              <Select
+                value={payableForm.status}
+                onChange={(value) => setPayableForm({ ...payableForm, status: value as Transaction['status'] })}
+                options={[
+                  { value: 'Pending', label: 'Pending' },
+                  { value: 'Paid', label: 'Paid' },
+                  { value: 'Overdue', label: 'Overdue' },
+                ]}
+              />
+            </div>
+          </div>
+
+          {/* Form Actions */}
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleCloseModal}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+            >
+              Add Payable Entry
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Edit Status Modal */}
+      <Modal
+        isOpen={isEditStatusModalOpen}
+        onClose={handleEditStatusClose}
+        title="Edit Transaction Status"
+        size="md"
+      >
+        <form onSubmit={handleEditStatus} className="space-y-4">
+          {editingTransaction && (
+            <>
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Reference:</span>
+                    <span className="font-medium text-gray-900">{editingTransaction.ref}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Type:</span>
+                    <span className="font-medium text-gray-900">{editingTransaction.type}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Amount:</span>
+                    <span className="font-medium text-gray-900">{formatCurrency(editingTransaction.amount)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Current Status:</span>
+                    <Badge
+                      variant={
+                        editingTransaction.status === 'Paid'
+                          ? 'success'
+                          : editingTransaction.status === 'Overdue'
+                          ? 'danger'
+                          : 'warning'
+                      }
+                    >
+                      {editingTransaction.status}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  New Status <span className="text-red-500">*</span>
+                </label>
+                <Select
+                  value={editStatusForm.status}
+                  onChange={(value) => setEditStatusForm({ status: value as Transaction['status'] })}
+                  options={[
+                    { value: 'Pending', label: 'Pending' },
+                    { value: 'Paid', label: 'Paid' },
+                    { value: 'Overdue', label: 'Overdue' },
+                  ]}
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={handleEditStatusClose}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                >
+                  Update Status
+                </Button>
+              </div>
+            </>
+          )}
+        </form>
+      </Modal>
+
+      {/* Toast Notification */}
+      <Toast
+        open={toast.open}
+        type={toast.type}
+        message={toast.message}
+        onClose={() => setToast({ ...toast, open: false })}
+      />
     </div>
   );
 };

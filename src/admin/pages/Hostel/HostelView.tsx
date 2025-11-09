@@ -30,7 +30,7 @@ const HostelView: React.FC = () => {
   const [architectureData, setArchitectureData] =
     useState<ArchitectureData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'details' | 'architecture'>(
+  const [activeTab, setActiveTab] = useState<'details' | 'arrangement' | 'architecture'>(
     'details'
   );
   const [isAddRoomOpen, setIsAddRoomOpen] = useState(false);
@@ -183,6 +183,10 @@ const HostelView: React.FC = () => {
       label: 'Details',
     },
     {
+      id: 'arrangement',
+      label: 'Arrangement',
+    },
+    {
       id: 'architecture',
       label: 'Architecture',
     },
@@ -223,7 +227,7 @@ const HostelView: React.FC = () => {
       <Tabs
         tabs={tabs}
         activeTab={activeTab}
-        onChange={(tab) => setActiveTab(tab as 'details' | 'architecture')}
+        onChange={(tab) => setActiveTab(tab as 'details' | 'arrangement' | 'architecture')}
       />
 
       {/* Tab Content */}
@@ -367,11 +371,249 @@ const HostelView: React.FC = () => {
         </motion.div>
       )}
 
+      {activeTab === 'arrangement' && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8"
+        >
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold text-slate-900 mb-2">Block, Room & Seat Arrangement</h2>
+            <p className="text-slate-600">Manage blocks (floors), rooms, and seat allocations</p>
+          </div>
+
+          {/* Blocks (renamed from Floors) */}
+          <div className="space-y-6">
+            {architectureData.floors.map((floor) => (
+              <div
+                key={floor.floorNumber}
+                className="border border-slate-200 rounded-xl p-6 bg-slate-50"
+              >
+                {/* Block Header */}
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-blue-500 text-white rounded-lg flex items-center justify-center font-bold">
+                      {floor.floorNumber}
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-slate-900">
+                        Block {floor.floorNumber}
+                      </h3>
+                      <p className="text-sm text-slate-600">
+                        {floor.rooms.length} Rooms • {floor.rooms.reduce((sum, r) => sum + r.totalSeats, 0)} Seats
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-slate-600">
+                      Occupied: {floor.rooms.reduce((sum, r) => sum + r.seats.filter(s => s.isOccupied).length, 0)} / {floor.rooms.reduce((sum, r) => sum + r.totalSeats, 0)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Rooms in this Block */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+                  {floor.rooms.map((room) => (
+                    <div
+                      key={room.id}
+                      className="bg-white border border-slate-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-semibold text-slate-900">
+                          Room {room.roomNumber}
+                        </h4>
+                        <span className="text-xs text-slate-500">
+                          {room.seats.filter(s => s.isOccupied).length}/{room.totalSeats} occupied
+                        </span>
+                      </div>
+
+                      {/* Seats in this Room */}
+                      <div className="grid grid-cols-2 gap-2">
+                        {room.seats.map((seat) => (
+                          <div
+                            key={seat.id}
+                            className={`p-2 rounded border text-sm ${
+                              seat.isOccupied
+                                ? 'bg-red-50 border-red-200 text-red-700'
+                                : 'bg-green-50 border-green-200 text-green-700'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium">Seat {seat.seatNumber}</span>
+                              {seat.isOccupied ? (
+                                <span className="text-xs">Occupied</span>
+                              ) : (
+                                <span className="text-xs">Available</span>
+                              )}
+                            </div>
+                            {seat.isOccupied && seat.tenantName && (
+                              <p className="text-xs mt-1 truncate" title={seat.tenantName}>
+                                {seat.tenantName}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Summary Stats */}
+          <div className="mt-8 pt-8 border-t border-slate-200">
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">
+              Arrangement Summary
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-blue-50 p-4 rounded-xl">
+                <p className="text-sm text-blue-600 font-medium">Total Blocks</p>
+                <p className="text-2xl font-bold text-blue-900 mt-1">
+                  {architectureData.floors.length}
+                </p>
+              </div>
+              <div className="bg-purple-50 p-4 rounded-xl">
+                <p className="text-sm text-purple-600 font-medium">Total Rooms</p>
+                <p className="text-2xl font-bold text-purple-900 mt-1">
+                  {architectureData.totalRooms}
+                </p>
+              </div>
+              <div className="bg-green-50 p-4 rounded-xl">
+                <p className="text-sm text-green-600 font-medium">Available Seats</p>
+                <p className="text-2xl font-bold text-green-900 mt-1">
+                  {architectureData.availableSeats}
+                </p>
+              </div>
+              <div className="bg-red-50 p-4 rounded-xl">
+                <p className="text-sm text-red-600 font-medium">Occupied Seats</p>
+                <p className="text-2xl font-bold text-red-900 mt-1">
+                  {architectureData.occupiedSeats}
+                </p>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
       {activeTab === 'architecture' && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
+          className="space-y-6"
         >
+          {/* Tree Diagram - Vertical Layout */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+            <h2 className="text-xl font-bold text-slate-900 mb-6">Structure Tree Diagram</h2>
+            
+            {/* Tree Container - Vertical Layout */}
+            <div className="relative py-6 overflow-y-auto max-h-[800px]">
+              {/* Root Node - Hostel (Level 0) - Dark Gray */}
+              <div className="flex justify-center mb-6">
+                <div className="relative">
+                  <div className="w-20 h-20 bg-slate-600 text-white rounded-full flex items-center justify-center font-bold text-sm shadow-lg border-3 border-white">
+                    {hostel.name.split(' ').map(w => w[0]).join('').substring(0, 3).toUpperCase()}
+                  </div>
+                  <div className="absolute -bottom-5 left-1/2 transform -translate-x-1/2 text-xs font-semibold text-slate-800 whitespace-nowrap">
+                    {hostel.name}
+                  </div>
+                </div>
+              </div>
+
+              {/* Vertical Line from Root */}
+              <div className="flex justify-center mb-2">
+                <div className="w-0.5 h-6 bg-slate-400"></div>
+              </div>
+
+              {/* Level 1: Blocks (Teal) - Vertical Stack */}
+              <div className="space-y-8">
+                {architectureData.floors.map((floor) => (
+                  <div key={floor.floorNumber} className="flex flex-col items-center">
+                    {/* Block Node (Teal) */}
+                    <div className="relative mb-3">
+                      <div className="w-16 h-16 bg-teal-500 text-white rounded-full flex items-center justify-center font-bold text-xs shadow-md border-2 border-white">
+                        B{floor.floorNumber}
+                      </div>
+                      <div className="absolute -bottom-5 left-1/2 transform -translate-x-1/2 text-[10px] font-medium text-slate-700 whitespace-nowrap">
+                        Block {floor.floorNumber}
+                      </div>
+                    </div>
+
+                    {/* Vertical Line from Block */}
+                    <div className="w-0.5 h-4 bg-slate-400 mb-2"></div>
+
+                    {/* Level 2: Rooms (Purple) - Compact Grid */}
+                    <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-4">
+                      {floor.rooms.map((room) => (
+                        <div key={room.id} className="flex flex-col items-center">
+                          {/* Vertical Line from Block to Room */}
+                          <div className="w-0.5 h-3 bg-slate-400 mb-1"></div>
+                          
+                          {/* Room Node (Purple) */}
+                          <div className="relative mb-2">
+                            <div className="w-12 h-12 bg-purple-500 text-white rounded-full flex items-center justify-center font-semibold text-[10px] shadow-sm border-2 border-white">
+                              R{room.roomNumber}
+                            </div>
+                            <div className="absolute -bottom-4 left-1/2 transform -translate-x-1/2 text-[9px] font-medium text-slate-700 whitespace-nowrap">
+                              {room.totalSeats}
+                            </div>
+                          </div>
+
+                          {/* Vertical Line from Room */}
+                          <div className="w-0.5 h-2 bg-slate-400 mb-1"></div>
+
+                          {/* Level 3: Seats (Light Green) - Horizontal Compact */}
+                          <div className="flex gap-1">
+                            {room.seats.map((seat) => (
+                              <div key={seat.id} className="relative">
+                                {/* Seat Node (Light Green) */}
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-[9px] shadow-sm border border-white ${
+                                  seat.isOccupied
+                                    ? 'bg-red-400 text-white'
+                                    : 'bg-green-300 text-green-800'
+                                }`}>
+                                  {seat.seatNumber}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Separator between blocks */}
+                    {floor.floorNumber < architectureData.floors.length && (
+                      <div className="w-full h-0.5 bg-slate-200 my-4"></div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Tree Summary */}
+            <div className="mt-6 pt-6 border-t border-slate-200">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-blue-600">{architectureData.floors.length}</p>
+                  <p className="text-sm text-slate-600">Blocks</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-purple-600">{architectureData.totalRooms}</p>
+                  <p className="text-sm text-slate-600">Rooms</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-green-600">{architectureData.availableSeats}</p>
+                  <p className="text-sm text-slate-600">Available Seats</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-red-600">{architectureData.occupiedSeats}</p>
+                  <p className="text-sm text-slate-600">Occupied Seats</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Existing Architecture Diagram */}
           <ArchitectureDiagram data={architectureData} />
         </motion.div>
       )}

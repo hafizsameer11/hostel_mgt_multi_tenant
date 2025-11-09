@@ -1,12 +1,11 @@
 /**
  * PeopleHub page
- * Select a hostel, then view Tenants/Employees in tabs
+ * Sidebar navigation with Tenants, Employees, Vendors, and Prospects sections
  */
 
 import React, { useMemo, useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Tabs } from '../../components/Tabs';
-import type { Tab } from '../../components/Tabs';
 import { Badge } from '../../components/Badge';
 import { Select } from '../../components/Select';
 import { Button } from '../../components/Button';
@@ -14,6 +13,7 @@ import { Modal } from '../../components/Modal';
 import { Toast } from '../../components/Toast';
 import tenantsData from '../../mock/tenants.json';
 import employeesData from '../../mock/employees.json';
+import ownersData from '../../mock/owners.json';
 import hostels from '../../mock/hostels.json';
 import * as hostelService from '../../services/hostel.service';
 import type { ArchitectureData } from '../../types/hostel';
@@ -30,10 +30,22 @@ import {
   StarIcon
 } from '@heroicons/react/24/outline';
 
-type TabId = 'Tenants' | 'Employees';
+type PeopleSection = 'Tenants' | 'Employees' | 'Owners' | 'Vendors' | 'Prospects';
 
 const PeopleHub: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<TabId>('Tenants');
+  const location = useLocation();
+  
+  // Get active section from URL
+  const getActiveSection = (): PeopleSection | null => {
+    if (location.pathname.includes('/tenants')) return 'Tenants';
+    if (location.pathname.includes('/employees')) return 'Employees';
+    if (location.pathname.includes('/owners')) return 'Owners';
+    if (location.pathname.includes('/vendors')) return 'Vendors';
+    if (location.pathname.includes('/prospects')) return 'Prospects';
+    return null; // On base route
+  };
+  
+  const activeSection = getActiveSection();
   const [selectedHostelId, setSelectedHostelId] = useState<string>('');
   const [modal, setModal] = useState<{ mode: 'view' | 'edit'; type: 'Tenant' | 'Employee'; data: any } | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -118,10 +130,14 @@ const PeopleHub: React.FC = () => {
     return data;
   }, [selectedHostelId]);
 
-  const tabs: Tab[] = [
-    { id: 'Tenants', label: 'Tenants', count: (filteredTenants as any[]).length },
-    { id: 'Employees', label: 'Employees', count: (filteredEmployees as any[]).length },
-  ];
+  const filteredOwners = useMemo(() => {
+    let data = ownersData as any[];
+    if (selectedHostelId) {
+      data = data.filter((o) => String(o.hostelId) === selectedHostelId);
+    }
+    return data;
+  }, [selectedHostelId]);
+
 
   // Load architecture data when hostel is selected
   useEffect(() => {
@@ -279,7 +295,7 @@ const PeopleHub: React.FC = () => {
   };
 
   const handleAddClick = () => {
-    if (activeTab === 'Tenants') {
+    if (activeSection === 'Tenants') {
       // Reset tenant form for multi-step wizard
       setCurrentStep(1);
       setTenantFormData({
@@ -302,7 +318,7 @@ const PeopleHub: React.FC = () => {
       setAvailableFloors([]);
       setAvailableRooms([]);
       setAvailableSeats([]);
-    } else if (activeTab === 'Employees') {
+    } else if (activeSection === 'Employees') {
       // Reset employee form for multi-step wizard
       setEmployeeCurrentStep(1);
       setEmployeeFormData({
@@ -417,7 +433,13 @@ const PeopleHub: React.FC = () => {
     });
   };
 
-  const handleEmployeeNextStep = () => {
+  const handleEmployeeNextStep = (e?: React.MouseEvent) => {
+    // Prevent any form submission
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
     // Validate step 1 fields before moving to step 2
     if (employeeCurrentStep === 1) {
       if (!employeeFormData.name || !employeeFormData.email || !employeeFormData.phone) {
@@ -430,7 +452,9 @@ const PeopleHub: React.FC = () => {
       }
     }
     
+    // Move to next step
     if (employeeCurrentStep < 2) {
+      console.log('Moving from step', employeeCurrentStep, 'to step', employeeCurrentStep + 1);
       setEmployeeCurrentStep(employeeCurrentStep + 1);
     }
   };
@@ -445,13 +469,25 @@ const PeopleHub: React.FC = () => {
     e.preventDefault();
     e.stopPropagation();
     
-    console.log('Form submitted, current step:', employeeCurrentStep);
+    console.log('Form onSubmit triggered, current step:', employeeCurrentStep);
     
     // Only submit if we're on the final step (step 2)
     if (employeeCurrentStep !== 2) {
-      console.log('Not on final step, moving to next step');
+      console.log('Not on final step, preventing submission and moving to next step');
       // If not on final step, just move to next step and prevent any submission
-      handleEmployeeNextStep();
+      // Don't call handleEmployeeNextStep here to avoid double execution
+      if (employeeCurrentStep === 1) {
+        // Validate step 1 fields
+        if (!employeeFormData.name || !employeeFormData.email || !employeeFormData.phone) {
+          setToast({
+            open: true,
+            type: 'warning',
+            message: 'Please fill in all required fields (Name, Email, Phone) before proceeding.',
+          });
+          return;
+        }
+      }
+      setEmployeeCurrentStep(employeeCurrentStep + 1);
       return;
     }
     
@@ -578,44 +614,53 @@ const PeopleHub: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">People</h1>
-          <p className="text-slate-600 mt-1">Choose a hostel, then manage tenants and employees.</p>
-        </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="w-full sm:w-80">
-            <Select
-              value={selectedHostelId}
-              onChange={setSelectedHostelId}
-              options={hostelOptions}
-            />
+    <div className="flex flex-col h-full">
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {activeSection ? (
+          <>
+            {/* Header */}
+            <div className="flex items-center justify-between gap-4 flex-wrap p-6 pb-4">
+              <div>
+                <h1 className="text-3xl font-bold text-slate-900">{activeSection}</h1>
+                <p className="text-slate-600 mt-1">
+              {activeSection === 'Tenants' && 'Manage tenant information and room allocations.'}
+              {activeSection === 'Employees' && 'Manage employee information and roles.'}
+              {activeSection === 'Owners' && 'Manage property owners and their properties.'}
+              {activeSection === 'Vendors' && 'Manage vendor information and services.'}
+              {activeSection === 'Prospects' && 'Manage potential tenants and applications.'}
+            </p>
+              </div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="w-full sm:w-80">
+              <Select
+                value={selectedHostelId}
+                onChange={setSelectedHostelId}
+                options={hostelOptions}
+              />
+            </div>
+            {(activeSection === 'Tenants' || activeSection === 'Employees') && (
+              <Button
+                variant="primary"
+                onClick={handleAddClick}
+                icon={UserPlusIcon}
+              >
+                {activeSection === 'Tenants' ? 'Add Tenant' : 'Add Employee'}
+              </Button>
+            )}
           </div>
-          <Button
-            variant="primary"
-            onClick={handleAddClick}
-            icon={UserPlusIcon}
-          >
-            {activeTab === 'Tenants' ? 'Add Tenant' : 'Add Employee'}
-          </Button>
-        </div>
-      </div>
-
-      <div className="glass rounded-2xl border border-white/20 shadow-xl">
-        <div className="px-6 pt-4">
-          <Tabs tabs={tabs} activeTab={activeTab} onChange={(id) => setActiveTab(id as TabId)} />
         </div>
 
-        <div className="p-6">
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto px-6 pb-6">
+          <div className="glass rounded-2xl border border-white/20 shadow-xl p-6">
           {!selectedHostelId ? (
             <div className="text-center py-16">
               <HomeIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
               <h3 className="text-xl font-semibold text-gray-900 mb-2">Select a Hostel</h3>
-              <p className="text-gray-600 mb-6">Please select a hostel from the dropdown above to view tenants and employees.</p>
+              <p className="text-gray-600 mb-6">Please select a hostel from the dropdown above to view {activeSection?.toLowerCase()}.</p>
             </div>
-          ) : activeTab === 'Tenants' ? (
+          ) : activeSection === 'Tenants' ? (
             filteredTenants.length === 0 ? (
               <div className="text-center py-16">
                 <UserPlusIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
@@ -686,18 +731,19 @@ const PeopleHub: React.FC = () => {
                 ))}
               </div>
             )
-          ) : filteredEmployees.length === 0 ? (
-            <div className="text-center py-16">
-              <BriefcaseIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">No Employees Found</h3>
-              <p className="text-gray-600 mb-6">No employees found for the selected hostel.</p>
-              <Button variant="primary" onClick={handleAddClick} icon={UserPlusIcon}>
-                Add Employee
-              </Button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {(filteredEmployees as any[]).map((e, idx) => (
+          ) : activeSection === 'Employees' ? (
+            filteredEmployees.length === 0 ? (
+              <div className="text-center py-16">
+                <BriefcaseIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">No Employees Found</h3>
+                <p className="text-gray-600 mb-6">No employees found for the selected hostel.</p>
+                <Button variant="primary" onClick={handleAddClick} icon={UserPlusIcon}>
+                  Add Employee
+                </Button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {(filteredEmployees as any[]).map((e, idx) => (
                 <motion.div
                   key={e.id}
                   initial={{ opacity: 0, y: 20 }}
@@ -753,10 +799,102 @@ const PeopleHub: React.FC = () => {
                     </motion.button>
                   </div>
                 </motion.div>
-              ))}
+                ))}
+              </div>
+            )
+          ) : activeSection === 'Owners' ? (
+            filteredOwners.length === 0 ? (
+              <div className="text-center py-16">
+                <BriefcaseIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">No Owners Found</h3>
+                <p className="text-gray-600 mb-6">No owners found for the selected hostel.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {(filteredOwners as any[]).map((o, idx) => (
+                <motion.div
+                  key={o.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.03 }}
+                  className="bg-white p-6 rounded-xl border border-gray-200 hover:shadow-lg transition-all"
+                >
+                  <div className="flex items-center gap-4 mb-4 pb-4 border-b border-gray-100">
+                    <div className="w-14 h-14 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 text-white flex items-center justify-center font-bold text-lg">
+                      {o.name.charAt(0)}
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-bold text-gray-900">{o.name}</h3>
+                      <Badge variant={o.status === 'Active' ? 'success' : o.status === 'Pending' ? 'warning' : 'default'}>
+                        {o.status}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="space-y-2 text-sm text-gray-700 mb-4">
+                    <div className="flex items-center gap-2"><EnvelopeIcon className="w-4 h-4 text-purple-500" />{o.email}</div>
+                    <div className="flex items-center gap-2"><PhoneIcon className="w-4 h-4 text-purple-500" />{o.phone}</div>
+                    <div className="flex items-center gap-2"><HomeIcon className="w-4 h-4 text-purple-500" />{o.propertyCount} Properties</div>
+                    <div className="flex items-center gap-2"><BriefcaseIcon className="w-4 h-4 text-purple-500" />{o.totalUnits} Total Units</div>
+                  </div>
+                  
+                  {/* Action Buttons */}
+                  <div className="flex items-center justify-end gap-2 pt-4 border-t border-gray-100">
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => handleView(o.id, 'Tenant')}
+                      className="p-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
+                      title="View Details"
+                    >
+                      <EyeIcon className="w-5 h-5" />
+                    </motion.button>
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => handleEdit(o.id, 'Tenant')}
+                      className="p-2 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 transition-colors"
+                      title="Edit"
+                    >
+                      <PencilIcon className="w-5 h-5" />
+                    </motion.button>
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => handleDelete(o.id, 'Tenant', o.name)}
+                      className="p-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
+                      title="Delete"
+                    >
+                      <TrashIcon className="w-5 h-5" />
+                    </motion.button>
+                  </div>
+                </motion.div>
+                ))}
+              </div>
+            )
+          ) : activeSection === 'Vendors' ? (
+            <div className="text-center py-16">
+              <BriefcaseIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">Vendors</h3>
+              <p className="text-gray-600">Vendor management coming soon.</p>
             </div>
-          )}
+          ) : activeSection === 'Prospects' ? (
+            <div className="text-center py-16">
+              <UserPlusIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">Prospects</h3>
+              <p className="text-gray-600">Prospect management coming soon.</p>
+            </div>
+          ) : null}
+          </div>
         </div>
+          </>
+        ) : (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <h2 className="text-2xl font-semibold text-slate-900 mb-2">Select a Section</h2>
+              <p className="text-slate-600">Choose a section from the directory to get started.</p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* View/Edit Modal */}
@@ -860,10 +998,10 @@ const PeopleHub: React.FC = () => {
       <Modal
         isOpen={isAddModalOpen}
         onClose={handleAddClose}
-        title={activeTab === 'Tenants' ? `Add New Tenant - Step ${currentStep} of 3` : 'Add New Employee'}
+        title={activeSection === 'Tenants' ? `Add New Tenant - Step ${currentStep} of 3` : 'Add New Employee'}
         size="lg"
       >
-        {activeTab === 'Tenants' ? (
+        {activeSection === 'Tenants' ? (
           <form onSubmit={handleTenantSubmit} className="space-y-6">
             {/* Step Progress Indicator */}
             <div className="mb-6">
@@ -1378,15 +1516,18 @@ const PeopleHub: React.FC = () => {
               </Button>
               <div className="flex gap-2">
                 {employeeCurrentStep < 2 ? (
-                  <Button
+                  <button
                     type="button"
-                    variant="primary"
-                    onClick={() => {
-                      handleEmployeeNextStep();
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      console.log('Next button clicked, current step:', employeeCurrentStep);
+                      handleEmployeeNextStep(e);
                     }}
+                    className="px-6 py-2.5 bg-[#2176FF] text-white font-semibold rounded-lg hover:bg-[#1966E6] active:bg-[#1555CC] shadow-sm transition-colors"
                   >
                     Next
-                  </Button>
+                  </button>
                 ) : (
                   <Button
                     type="submit"

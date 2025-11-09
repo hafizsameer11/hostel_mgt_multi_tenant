@@ -50,13 +50,20 @@ export const ArchitectureDiagram: React.FC<ArchitectureDiagramProps> = ({
             transition={{ duration: 0.3 }}
             className="bg-white rounded-xl border-2 border-slate-200 p-6 shadow-sm"
           >
-            {/* Floor Header */}
+            {/* Architecture Header (renamed from Floor) */}
             <div className="mb-4 pb-4 border-b border-slate-200">
               <h3 className="text-xl font-bold text-slate-900">
-                Floor {floor.floorNumber}
+                Architecture
               </h3>
               <p className="text-sm text-slate-600 mt-1">
                 {floor.rooms.length} rooms
+              </p>
+            </div>
+
+            {/* Block Label - Appears once before room cards */}
+            <div className="mb-3">
+              <p className="text-sm font-semibold text-slate-700">
+                Block {floor.floorNumber}
               </p>
             </div>
 
