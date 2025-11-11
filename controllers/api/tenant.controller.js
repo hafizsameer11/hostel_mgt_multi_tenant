@@ -63,7 +63,13 @@ const createTenant = async (req, res) => {
       companyName,
       designation,
       monthlyIncome,
-      notes
+      notes,
+      leaseStartDate,
+      leaseEndDate,
+      monthlyRent,
+      securityDeposit: securityDepositInput,
+      deposit,
+      depositAmount
     } = req.body;
 
     // ✅ Handle uploaded files
@@ -73,6 +79,44 @@ const createTenant = async (req, res) => {
 
     const documentFiles = req.files?.documents?.map(file => `/uploads/tenants/${file.filename}`) || [];
     const documents = documentFiles.length ? JSON.stringify(documentFiles) : null;
+
+    // ✅ Parse lease + rent values
+    let parsedLeaseStartDate = null;
+    if (leaseStartDate) {
+      parsedLeaseStartDate = new Date(leaseStartDate);
+      if (Number.isNaN(parsedLeaseStartDate.getTime())) {
+        return errorResponse(res, "Invalid lease start date", 400);
+      }
+    }
+
+    let parsedLeaseEndDate = null;
+    if (leaseEndDate) {
+      parsedLeaseEndDate = new Date(leaseEndDate);
+      if (Number.isNaN(parsedLeaseEndDate.getTime())) {
+        return errorResponse(res, "Invalid lease end date", 400);
+      }
+    }
+
+    if (parsedLeaseStartDate && parsedLeaseEndDate && parsedLeaseEndDate < parsedLeaseStartDate) {
+      return errorResponse(res, "Lease end date cannot be before lease start date", 400);
+    }
+
+    let parsedMonthlyRent = null;
+    if (monthlyRent !== undefined && monthlyRent !== null && monthlyRent !== "") {
+      parsedMonthlyRent = parseFloat(monthlyRent);
+      if (Number.isNaN(parsedMonthlyRent) || parsedMonthlyRent < 0) {
+        return errorResponse(res, "Invalid monthly rent amount", 400);
+      }
+    }
+
+    const rawDepositValue = deposit ?? depositAmount ?? securityDepositInput;
+    let parsedSecurityDeposit = null;
+    if (rawDepositValue !== undefined && rawDepositValue !== null && rawDepositValue !== "") {
+      parsedSecurityDeposit = parseFloat(rawDepositValue);
+      if (Number.isNaN(parsedSecurityDeposit) || parsedSecurityDeposit < 0) {
+        return errorResponse(res, "Invalid deposit amount", 400);
+      }
+    }
 
     // ✅ Validation
     if (!firstName || !phone) {
@@ -123,7 +167,11 @@ const createTenant = async (req, res) => {
         monthlyIncome: monthlyIncome ? parseFloat(monthlyIncome) : null,
         documents,
         profilePhoto,
-        notes: notes || null
+        notes: notes || null,
+        leaseStartDate: parsedLeaseStartDate,
+        leaseEndDate: parsedLeaseEndDate,
+        monthlyRent: parsedMonthlyRent,
+        securityDeposit: parsedSecurityDeposit ?? 0
       }
     });
 
@@ -178,6 +226,65 @@ const updateTenant = async (req, res) => {
       if (cnicExists) return errorResponse(res, "CNIC number already registered", 400);
     }
 
+    let updateLeaseStartDate = existingTenant.leaseStartDate;
+    if (Object.prototype.hasOwnProperty.call(updates, "leaseStartDate")) {
+      if (!updates.leaseStartDate) {
+        updateLeaseStartDate = null;
+      } else {
+        const parsed = new Date(updates.leaseStartDate);
+        if (Number.isNaN(parsed.getTime())) {
+          return errorResponse(res, "Invalid lease start date", 400);
+        }
+        updateLeaseStartDate = parsed;
+      }
+    }
+
+    let updateLeaseEndDate = existingTenant.leaseEndDate;
+    if (Object.prototype.hasOwnProperty.call(updates, "leaseEndDate")) {
+      if (!updates.leaseEndDate) {
+        updateLeaseEndDate = null;
+      } else {
+        const parsed = new Date(updates.leaseEndDate);
+        if (Number.isNaN(parsed.getTime())) {
+          return errorResponse(res, "Invalid lease end date", 400);
+        }
+        updateLeaseEndDate = parsed;
+      }
+    }
+
+    if (updateLeaseStartDate && updateLeaseEndDate && updateLeaseEndDate < updateLeaseStartDate) {
+      return errorResponse(res, "Lease end date cannot be before lease start date", 400);
+    }
+
+    let updateMonthlyRent = existingTenant.monthlyRent;
+    if (Object.prototype.hasOwnProperty.call(updates, "monthlyRent")) {
+      if (updates.monthlyRent === null || updates.monthlyRent === "") {
+        updateMonthlyRent = null;
+      } else {
+        const parsed = parseFloat(updates.monthlyRent);
+        if (Number.isNaN(parsed) || parsed < 0) {
+          return errorResponse(res, "Invalid monthly rent amount", 400);
+        }
+        updateMonthlyRent = parsed;
+      }
+    }
+
+    const rawUpdateDeposit = (updates.deposit ?? updates.depositAmount ?? updates.securityDeposit);
+    let updateSecurityDeposit = existingTenant.securityDeposit;
+    if (Object.prototype.hasOwnProperty.call(updates, "deposit") ||
+        Object.prototype.hasOwnProperty.call(updates, "depositAmount") ||
+        Object.prototype.hasOwnProperty.call(updates, "securityDeposit")) {
+      if (rawUpdateDeposit === null || rawUpdateDeposit === "" || rawUpdateDeposit === undefined) {
+        updateSecurityDeposit = 0;
+      } else {
+        const parsed = parseFloat(rawUpdateDeposit);
+        if (Number.isNaN(parsed) || parsed < 0) {
+          return errorResponse(res, "Invalid deposit amount", 400);
+        }
+        updateSecurityDeposit = parsed;
+      }
+    }
+
     // ✅ Update data
     const updateData = {
       firstName: updates.firstName || existingTenant.firstName,
@@ -189,6 +296,7 @@ const updateTenant = async (req, res) => {
       gender: updates.gender || existingTenant.gender,
       dateOfBirth: updates.dateOfBirth ? new Date(updates.dateOfBirth) : existingTenant.dateOfBirth,
       cnicNumber: updates.cnicNumber || existingTenant.cnicNumber,
+      
       address: updates.address || existingTenant.address,
       permanentAddress: updates.permanentAddress || existingTenant.permanentAddress,
       emergencyContact: updates.emergencyContact || existingTenant.emergencyContact,
@@ -200,7 +308,11 @@ const updateTenant = async (req, res) => {
       profilePhoto: profilePhoto ?? existingTenant.profilePhoto,
       notes: updates.notes || existingTenant.notes,
       status: updates.status || existingTenant.status,
-      rating: updates.rating ? parseInt(updates.rating) : existingTenant.rating
+      rating: updates.rating ? parseInt(updates.rating) : existingTenant.rating,
+      leaseStartDate: updateLeaseStartDate,
+      leaseEndDate: updateLeaseEndDate,
+      monthlyRent: updateMonthlyRent,
+      securityDeposit: updateSecurityDeposit
     };
 
     const tenant = await prisma.tenant.update({

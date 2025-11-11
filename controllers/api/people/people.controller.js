@@ -31,6 +31,22 @@ const briefAddress = (addr) => {
   }
 };
 
+const parseDocuments = (docs) => {
+  if (!docs) return [];
+  if (Array.isArray(docs)) return docs;
+  try {
+    const parsed = typeof docs === 'string' ? JSON.parse(docs) : docs;
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const buildUploads = (profilePhoto, docs) => ({
+  profilePhoto: profilePhoto || null,
+  documents: parseDocuments(docs),
+});
+
 /* -------------------------- list (cards) --------------------------- */
 
 /**
@@ -78,6 +94,11 @@ const listTenants = async (req, res) => {
           profilePhoto: true,
           address: true,
           userId: true,
+          leaseStartDate: true,
+          leaseEndDate: true,
+          monthlyRent: true,
+          securityDeposit: true,
+          documents: true,
           allocations: {
             where: { status: 'active' },
             select: {
@@ -133,6 +154,7 @@ const listTenants = async (req, res) => {
     const cards = rows.map((t) => {
       const bedInfo = bedInfoMap[t.id];
       const allocation = t.allocations[0];
+      const documentList = parseDocuments(t.documents);
       
       let location = briefAddress(t.address);
       if (allocation && bedInfo) {
@@ -149,6 +171,14 @@ const listTenants = async (req, res) => {
         avatar: t.profilePhoto,
         status: t.status === 'active' ? 'Active' : t.status === 'inactive' ? 'Inactive' : t.status,
         room: bedInfo ? `Room ${bedInfo.roomNumber}-${bedInfo.bedNumber}` : null,
+        documents: documentList,
+        uploads: buildUploads(t.profilePhoto, t.documents),
+        lease: {
+          startDate: t.leaseStartDate ? t.leaseStartDate.toISOString().split('T')[0] : null,
+          endDate: t.leaseEndDate ? t.leaseEndDate.toISOString().split('T')[0] : null,
+          monthlyRent: t.monthlyRent ?? null,
+          deposit: typeof t.securityDeposit === 'number' ? t.securityDeposit : null,
+        },
       };
     });
 
@@ -176,10 +206,13 @@ const listEmployees = async (req, res) => {
       ...(search
         ? {
             OR: [
-              { name: { contains: search, mode: 'insensitive' } },
-              { email: { contains: search, mode: 'insensitive' } },
-              { phone: { contains: search } },
-              { role: { contains: search, mode: 'insensitive' } },
+              { user: { name: { contains: search, mode: 'insensitive' } } },
+              { user: { username: { contains: search, mode: 'insensitive' } } },
+              { user: { email: { contains: search, mode: 'insensitive' } } },
+              { user: { phone: { contains: search } } },
+              { employeeCode: { contains: search, mode: 'insensitive' } },
+              { designation: { contains: search, mode: 'insensitive' } },
+              { department: { contains: search, mode: 'insensitive' } },
             ],
           }
         : {}),
@@ -191,30 +224,67 @@ const listEmployees = async (req, res) => {
         orderBy: { createdAt: 'desc' },
         skip,
         take,
-        select: {
-          id: true,
-          name: true,           // if you keep firstName/lastName, replace with a computed name in select
-          email: true,
-          phone: true,
-          role: true,
-          status: true,
-          avatar: true,
-          joinedAt: true,
+        include: {
+          user: {
+            select: {
+              id: true,
+              username: true,
+              name: true,
+              email: true,
+              phone: true,
+              role: true,
+              status: true,
+            },
+          },
         },
       }),
       prisma.employee.count({ where }),
     ]);
 
-    const cards = rows.map((e) => ({
-      id: e.id,
-      name: e.name,
-      email: e.email,
-      phone: e.phone,
-      role: e.role,
-      status: e.status === 'active' ? 'Active' : e.status === 'inactive' ? 'Inactive' : e.status,
-      avatar: e.avatar,
-      joinedAt: e.joinedAt ? e.joinedAt.toISOString().split('T')[0] : null,
-    }));
+    const hostelIds = Array.from(
+      new Set(
+        rows
+          .map((emp) => emp.hostelAssigned)
+          .filter((id) => typeof id === 'number' && !Number.isNaN(id)),
+      ),
+    );
+
+    const hostels = hostelIds.length
+      ? await prisma.hostel.findMany({
+          where: { id: { in: hostelIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const hostelMap = hostels.reduce((acc, hostel) => {
+      acc[hostel.id] = hostel.name;
+      return acc;
+    }, {});
+
+    const cards = rows.map((e) => {
+      const hostelId = e.hostelAssigned ?? null;
+      const hostelName = hostelId ? hostelMap[hostelId] ?? null : null;
+
+      return {
+        id: e.id,
+        userId: e.user?.id ?? null,
+        name: e.user?.name ?? null,
+        username: e.user?.username ?? null,
+        email: e.user?.email ?? null,
+        phone: e.user?.phone ?? null,
+        role: e.role,
+        userRole: e.user?.role ?? null,
+        status: e.status === 'active' ? 'Active' : e.status === 'inactive' ? 'Inactive' : e.status,
+        avatar: e.profilePhoto ?? null,
+        joinedAt: e.joinDate ? e.joinDate.toISOString().split('T')[0] : null,
+        salary: typeof e.salary === 'number' ? e.salary : null,
+        hostel: hostelId
+          ? {
+              id: hostelId,
+              name: hostelName,
+            }
+          : null,
+      };
+    });
 
     return successResponse(res, { items: cards, total });
   } catch (e) {
@@ -282,10 +352,10 @@ const tenantDetails = async (req, res) => {
 
     // Get lease dates from allocation (using createdAt as lease start)
     const allocation = tenant.allocations[0];
-    const leaseStart = allocation ? allocation.createdAt : null;
-    // For lease end, we can use a default 6 months or check Booking model
-    let leaseEnd = null;
-    if (tenant.userId) {
+    let leaseStart = tenant.leaseStartDate || (allocation ? allocation.createdAt : null);
+    // For lease end, prefer explicit lease, else fallback to booking/default
+    let leaseEnd = tenant.leaseEndDate || null;
+    if (!leaseEnd && tenant.userId) {
       const booking = await prisma.booking.findFirst({
         where: {
           tenantId: id,
@@ -327,6 +397,8 @@ const tenantDetails = async (req, res) => {
       console.log('ScoreCard query failed:', e.message);
     }
 
+    const tenantDocuments = parseDocuments(tenant.documents);
+
     return successResponse(res, {
       id: tenant.id,
       name: tenant.name,
@@ -338,6 +410,14 @@ const tenantDetails = async (req, res) => {
       roomBed: roomBed,
       leaseStart: leaseStart ? leaseStart.toISOString().split('T')[0] : null,
       leaseEnd: leaseEnd ? leaseEnd.toISOString().split('T')[0] : null,
+      documents: tenantDocuments,
+      uploads: buildUploads(tenant.profilePhoto, tenant.documents),
+      lease: {
+        startDate: leaseStart ? leaseStart.toISOString().split('T')[0] : null,
+        endDate: leaseEnd ? leaseEnd.toISOString().split('T')[0] : null,
+        monthlyRent: tenant.monthlyRent ?? null,
+        deposit: tenant.securityDeposit ?? null,
+      },
       allocation: allocation
         ? {
             hostel: allocation.hostel.name,
@@ -363,12 +443,31 @@ const employeeDetails = async (req, res) => {
 
     const emp = await prisma.employee.findUnique({
       where: { id },
-      select: {
-        id: true, name: true, email: true, phone: true,
-        role: true, status: true, avatar: true, joinedAt: true,
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            name: true,
+            email: true,
+            phone: true,
+            role: true,
+            status: true,
+          },
+        },
       },
     });
     if (!emp) return errorResponse(res, 'Employee not found', 404);
+
+    let hostel = null;
+    if (emp.hostelAssigned) {
+      hostel = await prisma.hostel.findUnique({
+        where: { id: emp.hostelAssigned },
+        select: { id: true, name: true, address: true },
+      });
+    }
+
+    const employeeDocuments = parseDocuments(emp.documents);
 
     // Try to get current score (using ScoreCard model)
     let currentScore = null;
@@ -389,11 +488,47 @@ const employeeDetails = async (req, res) => {
     } catch (e) {
       console.log('ScoreCard query failed:', e.message);
     }
+    const formattedStatus =
+      emp.status === 'active' ? 'Active' : emp.status === 'inactive' ? 'Inactive' : emp.status;
 
     return successResponse(res, {
-      ...emp,
-      status: emp.status === 'active' ? 'Active' : emp.status === 'inactive' ? 'Inactive' : emp.status,
-      joined: emp.joinedAt ? emp.joinedAt.toISOString().split('T')[0] : null,
+      id: emp.id,
+      userId: emp.userId,
+      name: emp.user?.name ?? null,
+      username: emp.user?.username ?? null,
+      email: emp.user?.email ?? null,
+      phone: emp.user?.phone ?? null,
+      role: emp.role,
+      userRole: emp.user?.role ?? null,
+      status: formattedStatus,
+      profilePhoto: emp.profilePhoto ?? null,
+      avatar: emp.profilePhoto ?? null,
+      joinDate: emp.joinDate ? emp.joinDate.toISOString().split('T')[0] : null,
+      terminationDate: emp.terminationDate
+        ? emp.terminationDate.toISOString().split('T')[0]
+        : null,
+      department: emp.department ?? null,
+      designation: emp.designation ?? null,
+      employeeCode: emp.employeeCode ?? null,
+      salary: typeof emp.salary === 'number' ? emp.salary : null,
+      salaryType: emp.salaryType ?? null,
+      workingHours: emp.workingHours ?? null,
+      hostel: hostel
+        ? {
+            id: hostel.id,
+            name: hostel.name,
+            address: hostel.address ?? null,
+          }
+        : emp.hostelAssigned
+        ? { id: emp.hostelAssigned, name: null, address: null }
+        : null,
+      bankDetails: emp.bankDetails ?? null,
+      address: emp.address ?? null,
+      emergencyContact: emp.emergencyContact ?? null,
+      qualifications: emp.qualifications ?? null,
+      notes: emp.notes ?? null,
+      documents: employeeDocuments,
+      uploads: buildUploads(emp.profilePhoto, emp.documents),
       score: currentScore,
     });
   } catch (e) {

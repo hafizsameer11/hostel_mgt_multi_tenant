@@ -288,6 +288,7 @@ model Hostel {
   vendors      Vendor[]
   expenses     Expense[]
   fpas         FPA[]
+  beds         Bed[]
 
   @@index([name])
   @@index([status])
@@ -312,6 +313,9 @@ model Tenant {
   companyName      String?
   designation      String?
   monthlyIncome    Float?
+  leaseStartDate   DateTime?
+  leaseEndDate     DateTime?
+  monthlyRent      Float?
   documents        Json?
   profilePhoto     String?
   status           TenantStatus @default(active)
@@ -510,6 +514,7 @@ model Floor {
   hostel Hostel @relation(fields: [hostelId], references: [id], onDelete: Cascade)
   rooms  Room[]
   beds   Bed[]
+  allocations Allocation[]
 
   @@unique([hostelId, floorNumber], name: "hostelId_floorNumber")
   @@index([status])

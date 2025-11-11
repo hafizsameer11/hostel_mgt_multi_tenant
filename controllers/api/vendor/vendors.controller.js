@@ -2,6 +2,11 @@ const { prisma } = require('../../../config/db');
 const { successResponse, errorResponse } = require('../../../Helper/helper');
 
 const ALLOWED_STATUSES = ['active', 'inactive', 'blacklisted'];
+const STATUS_LABELS = {
+  active: 'Active',
+  inactive: 'Inactive',
+  blacklisted: 'Blacklisted',
+};
 const ALLOWED_PAYMENT_TERMS = ['prepaid', 'cod', 'net15', 'net30', 'net45', 'net60'];
 
 const normalizePaymentTerms = (value) => {
@@ -28,6 +33,64 @@ const parseNullableInt = (value) => {
   return Number.isNaN(parsed) ? null : parsed;
 };
 
+const safeParseJson = (value) => {
+  if (!value) return null;
+  if (typeof value === 'object') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+};
+
+const ensureArray = (value) => {
+  if (!value && value !== 0) return [];
+  if (Array.isArray(value)) return value;
+  return [value];
+};
+
+const normalizeServices = (rawServices, fallbackCategory) => {
+  const parsed = safeParseJson(rawServices);
+  const arr = ensureArray(parsed ?? rawServices).flatMap((entry) => {
+    if (typeof entry === 'string' && entry.includes(',')) {
+      return entry
+        .split(',')
+        .map((part) => part.trim())
+        .filter(Boolean);
+    }
+    return [entry];
+  });
+  return arr
+    .map((service) => {
+      if (!service) return null;
+      if (typeof service === 'string') {
+        return {
+          name: service,
+          specialty: service,
+          category: fallbackCategory ?? null,
+        };
+      }
+      if (typeof service === 'object') {
+        const name = service.name || service.title || service.type || null;
+        const category = service.category || fallbackCategory || null;
+        const specialty = service.specialty || service.focus || name || category || null;
+        const tags = ensureArray(service.tags || service.labels || []).map((tag) =>
+          typeof tag === 'string' ? tag : JSON.stringify(tag),
+        );
+        return {
+          id: service.id ?? null,
+          name,
+          category,
+          specialty,
+          description: service.description || null,
+          tags: tags.length ? tags : null,
+        };
+      }
+      return null;
+    })
+    .filter(Boolean);
+};
+
 const buildScoreSnapshot = (aggregateRow) => {
   if (!aggregateRow) return null;
   const average = aggregateRow._avg?.score ?? null;
@@ -42,21 +105,64 @@ const buildScoreSnapshot = (aggregateRow) => {
   };
 };
 
-const serializeVendor = (vendor, metricMaps) => {
+const buildRatingSummary = (aggregateRow) => {
+  const snapshot = buildScoreSnapshot(aggregateRow);
+  if (!snapshot) {
+    return {
+      average: null,
+      totalReviews: 0,
+      lastRecordedAt: null,
+      label: null,
+    };
+  }
+  return {
+    ...snapshot,
+    label: snapshot.average ? `${snapshot.average}/5` : null,
+  };
+};
+
+const briefAddress = (address) => {
+  const parsed = safeParseJson(address);
+  if (!parsed) return null;
+  if (typeof parsed === 'string') return parsed;
+  const { line1, street, area, city, state, country } = parsed;
+  const parts = [line1, street, area, city, state, country].filter(Boolean);
+  return parts.length ? parts.join(', ') : null;
+};
+
+const serializeVendor = (vendor, metricMaps = {}) => {
   const scoreAggregate = metricMaps?.scores?.[vendor.id];
-  const rating = scoreAggregate ? buildScoreSnapshot(scoreAggregate) : null;
+  const rating = buildRatingSummary(scoreAggregate);
+  const services = normalizeServices(vendor.services, vendor.category);
+  const primaryService = services[0] || null;
+
+  const statusLabel = STATUS_LABELS[vendor.status] || vendor.status || 'Unknown';
+  const hostel = vendor.hostel
+    ? {
+        id: vendor.hostel.id,
+        name: vendor.hostel.name,
+      }
+    : null;
 
   return {
     id: vendor.id,
     name: vendor.name,
     companyName: vendor.companyName,
-    category: vendor.category,
-    services: vendor.services,
-    hostel: vendor.hostel ? { id: vendor.hostel.id, name: vendor.hostel.name } : null,
-    phone: vendor.phone,
-    email: vendor.email,
     status: vendor.status,
+    statusLabel,
     paymentTerms: vendor.paymentTerms,
+    category: vendor.category,
+    primaryService: primaryService?.name ?? vendor.category ?? null,
+    specialty: primaryService?.specialty ?? vendor.category ?? null,
+    services,
+    serviceTags: services.map((service) => service?.name).filter(Boolean),
+    contact: {
+      phone: vendor.phone ?? null,
+      alternatePhone: vendor.alternatePhone ?? null,
+      email: vendor.email ?? null,
+    },
+    hostel,
+    location: briefAddress(vendor.address),
     financials: {
       totalPayable: vendor.totalPayable,
       totalPaid: vendor.totalPaid,
@@ -206,10 +312,69 @@ const listVendors = async (req, res) => {
     const vendorIds = vendors.map((vendor) => vendor.id);
     const metricMaps = await fetchVendorMetrics(vendorIds);
 
-    const items = vendors.map((vendor) => serializeVendor(vendor, metricMaps));
+    const serviceMap = {};
+    const hostelMap = new Map();
+
+    const items = vendors.map((vendor) => {
+      if (vendor.hostel) {
+        hostelMap.set(vendor.hostel.id, {
+          id: vendor.hostel.id,
+          name: vendor.hostel.name,
+        });
+      }
+
+      const serialized = serializeVendor(vendor, metricMaps);
+
+      serialized.services.forEach((service) => {
+        const key = service?.name || serialized.category || 'General';
+        if (!key) return;
+        if (!serviceMap[key]) {
+          serviceMap[key] = {
+            service: key,
+            category: service?.category || serialized.category || null,
+            description: service?.description || null,
+            vendors: [],
+          };
+        }
+        serviceMap[key].vendors.push({
+          id: serialized.id,
+          name: serialized.name,
+          status: serialized.status,
+          statusLabel: serialized.statusLabel,
+          hostel: serialized.hostel,
+          rating: serialized.rating?.average ?? null,
+          contact: serialized.contact,
+        });
+      });
+
+      if (!serialized.services.length) {
+        const key = serialized.category || 'General';
+        if (!serviceMap[key]) {
+          serviceMap[key] = {
+            service: key,
+            category: serialized.category || null,
+            description: null,
+            vendors: [],
+          };
+        }
+        serviceMap[key].vendors.push({
+          id: serialized.id,
+          name: serialized.name,
+          status: serialized.status,
+          statusLabel: serialized.statusLabel,
+          hostel: serialized.hostel,
+          rating: serialized.rating?.average ?? null,
+          contact: serialized.contact,
+        });
+      }
+
+      return serialized;
+    });
 
     return successResponse(res, {
       items,
+      serviceBoard: Object.values(serviceMap),
+      hostels: Array.from(hostelMap.values()),
       pagination: {
         total,
         page: parseInt(page, 10),
