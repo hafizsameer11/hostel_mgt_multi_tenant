@@ -4,12 +4,14 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/Button';
-import { PlusIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, EyeIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { DataTable } from '../../components/DataTable';
 import type { Column } from '../../components/DataTable';
 import { SearchInput } from '../../components/SearchInput';
+import { Select } from '../../components/Select';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Toast } from '../../components/Toast';
 import { AddHostelForm } from '../../components/AddHostelForm';
@@ -25,6 +27,7 @@ const HostelList: React.FC = () => {
   const navigate = useNavigate();
   const [hostels, setHostels] = useState<Hostel[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCity, setSelectedCity] = useState<string>('');
   const [isAddHostelOpen, setIsAddHostelOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{
     open: boolean;
@@ -46,10 +49,36 @@ const HostelList: React.FC = () => {
     setHostels(data);
   };
 
-  // Search filtering
-  const filteredData = searchQuery
-    ? hostelService.searchHostels(searchQuery)
-    : hostels;
+  // Get unique cities from hostels
+  const cities = React.useMemo(() => {
+    const uniqueCities = Array.from(
+      new Set(hostels.map((h) => h.city).filter(Boolean))
+    ).sort();
+    return uniqueCities.map((city) => ({ value: city, label: city }));
+  }, [hostels]);
+
+  // Combined filtering: search query + city filter
+  const filteredData = React.useMemo(() => {
+    let filtered = hostels;
+
+    // Apply city filter
+    if (selectedCity) {
+      filtered = hostelService.getHostelsByCity(selectedCity);
+    }
+
+    // Apply search query
+    if (searchQuery.trim()) {
+      const lowerQuery = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (h) =>
+          h.name.toLowerCase().includes(lowerQuery) ||
+          h.city.toLowerCase().includes(lowerQuery) ||
+          h.managerName.toLowerCase().includes(lowerQuery)
+      );
+    }
+
+    return filtered;
+  }, [hostels, selectedCity, searchQuery]);
 
   // Handle add hostel
   const handleAddHostel = (data: HostelFormData) => {
@@ -124,37 +153,67 @@ const HostelList: React.FC = () => {
     },
   ];
 
-  // Actions renderer
+  // Actions renderer - Professional styled buttons with icons
   const actionsRender = (hostel: Hostel) => (
-    <div className="flex gap-2">
-      <button
+    <div className="flex items-center gap-2">
+      {/* View Button - Blue with icon */}
+      <motion.button
         onClick={() => navigate(`/admin/hostel/${hostel.id}`)}
-        className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors font-medium"
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg shadow-sm hover:shadow-md hover:from-blue-600 hover:to-blue-700 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+        title="View Hostel Details"
       >
-        View
-      </button>
-      <button
+        <EyeIcon className="w-4 h-4" />
+        <span>View</span>
+      </motion.button>
+
+      {/* Edit Button - Brand color with icon */}
+      <motion.button
         onClick={() => navigate(ROUTES.HOSTEL_EDIT(hostel.id))}
-        className="px-3 py-1 text-sm bg-brand-100 text-brand-700 rounded-lg hover:bg-brand-200 transition-colors font-medium"
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-[#2176FF] to-[#1966E6] rounded-lg shadow-sm hover:shadow-md hover:from-[#1966E6] hover:to-[#1555CC] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#2176FF] focus:ring-offset-1"
+        title="Edit Hostel"
       >
-        Edit
-      </button>
-      <button
+        <PencilIcon className="w-4 h-4" />
+        <span>Edit</span>
+      </motion.button>
+
+      {/* Delete Button - Red with icon */}
+      <motion.button
         onClick={() => setDeleteConfirm({ open: true, hostel })}
-        className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors font-medium"
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-red-500 to-red-600 rounded-lg shadow-sm hover:shadow-md hover:from-red-600 hover:to-red-700 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1"
+        title="Delete Hostel"
       >
-        Delete
-      </button>
+        <TrashIcon className="w-4 h-4" />
+        <span>Delete</span>
+      </motion.button>
     </div>
   );
 
-  // Toolbar
+  // Toolbar with search and city filter
   const toolbar = (
-    <SearchInput
-      value={searchQuery}
-      onChange={setSearchQuery}
-      placeholder="Search by name, city, or manager..."
-    />
+    <div className="flex flex-col sm:flex-row gap-4">
+      <div className="flex-1">
+        <SearchInput
+          value={searchQuery}
+          onChange={setSearchQuery}
+          placeholder="Search by name, city, or manager..."
+        />
+      </div>
+      <div className="w-full sm:w-48">
+        <Select
+          value={selectedCity}
+          onChange={setSelectedCity}
+          options={cities}
+          placeholder="All Cities"
+          // label="Filter by City"
+        />
+      </div>
+    </div>
   );
 
   return (

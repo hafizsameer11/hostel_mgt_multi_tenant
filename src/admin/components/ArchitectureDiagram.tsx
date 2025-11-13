@@ -1,14 +1,17 @@
 import React from 'react';
 import { motion } from 'framer-motion';
+import { PlusIcon } from '@heroicons/react/24/outline';
 import { Tooltip } from './Tooltip';
 import type { ArchitectureData } from '../types/hostel';
 
 interface ArchitectureDiagramProps {
   data: ArchitectureData;
+  onAddSeat?: (floorNumber: number, roomId: string) => void;
 }
 
 export const ArchitectureDiagram: React.FC<ArchitectureDiagramProps> = ({
   data,
+  onAddSeat,
 }) => {
   return (
     <div className="space-y-8">
@@ -113,6 +116,18 @@ export const ArchitectureDiagram: React.FC<ArchitectureDiagramProps> = ({
                         </motion.div>
                       </Tooltip>
                     ))}
+                    {/* Add Seat Button */}
+                    {onAddSeat && (
+                      <motion.button
+                        onClick={() => onAddSeat(floor.floorNumber, room.id)}
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.95 }}
+                        className="w-8 h-8 rounded-full border-2 border-dashed border-blue-400 bg-blue-50 hover:bg-blue-100 hover:border-blue-500 flex items-center justify-center text-blue-600 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                        title="Add New Seat"
+                      >
+                        <PlusIcon className="w-4 h-4" />
+                      </motion.button>
+                    )}
                   </div>
 
                   {/* Room Info */}

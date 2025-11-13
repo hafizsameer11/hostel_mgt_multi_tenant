@@ -4,24 +4,29 @@
  * 2. Vendor Management - Shows all services and vendor assignments
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   BuildingOfficeIcon,
   WrenchScrewdriverIcon,
-  PlusIcon
+  PlusIcon,
+  CurrencyDollarIcon,
+  MapPinIcon
 } from '@heroicons/react/24/outline';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Select } from '../../components/Select';
 import { Modal } from '../../components/Modal';
 import { Toast } from '../../components/Toast';
+import { DataTable } from '../../components/DataTable';
+import type { Column } from '../../components/DataTable';
+import ROUTES from '../../routes/routePaths';
+import { formatCurrency } from '../../types/common';
 import vendorsData from '../../mock/vendors.json';
 import servicesData from '../../mock/services.json';
 import vendorServicesData from '../../mock/vendor-services.json';
 import hostelsData from '../../mock/hostels.json';
-
-type TabType = 'list' | 'management';
 
 interface Vendor {
   id: number;
@@ -40,6 +45,8 @@ interface Service {
   name: string;
   description: string;
   category: string;
+  price?: number; // Optional price field
+  unit?: string; // Price unit (per hour, per service, etc.)
 }
 
 interface VendorService {
@@ -55,8 +62,26 @@ interface VendorService {
 }
 
 const VendorList: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<TabType>('list');
+  const location = useLocation();
+  const navigate = useNavigate();
+  
+  // Determine active section from route
+  const getActiveSection = (): 'list' | 'management' => {
+    if (location.pathname.includes('/vendor/management')) return 'management';
+    return 'list'; // Default to list
+  };
+  
+  const activeSection = getActiveSection();
+  
+  // Redirect to /vendor/list if just /vendor
+  useEffect(() => {
+    if (location.pathname === ROUTES.VENDOR) {
+      navigate(ROUTES.VENDOR_LIST, { replace: true });
+    }
+  }, [location.pathname, navigate]);
+  
   const [selectedHostelId, setSelectedHostelId] = useState<string>('');
+  const [selectedHostelIdForManagement, setSelectedHostelIdForManagement] = useState<string>('');
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [isAddVendorModalOpen, setIsAddVendorModalOpen] = useState(false);
   const [assignForm, setAssignForm] = useState({
@@ -100,14 +125,178 @@ const VendorList: React.FC = () => {
     const services = servicesData as Service[];
     const assignments = vendorServicesData as VendorService[];
     
+    // Generate dummy prices if not present (for demo purposes)
+    const priceMap: Record<string, { price: number; unit: string }> = {
+      'Plumbing': { price: 150, unit: 'per hour' },
+      'Cleaning Supplies': { price: 500, unit: 'per month' },
+      'IT Services': { price: 200, unit: 'per hour' },
+      'Landscaping': { price: 300, unit: 'per service' },
+      'Security': { price: 2000, unit: 'per month' },
+      'HVAC Maintenance': { price: 250, unit: 'per hour' },
+      'Linen Supply': { price: 800, unit: 'per month' },
+      'Electrical': { price: 175, unit: 'per hour' },
+      'Furniture': { price: 5000, unit: 'per order' },
+      'General Maintenance': { price: 120, unit: 'per hour' },
+      'Pest Control': { price: 400, unit: 'per service' },
+      'Web Services': { price: 1000, unit: 'per month' },
+    };
+    
     return services.map((service) => {
-      const serviceAssignments = assignments.filter((a) => a.serviceId === service.id);
+      // Filter assignments by selected hostel if filter is applied
+      let serviceAssignments = assignments.filter((a) => a.serviceId === service.id);
+      
+      // Apply hostel filter if selected
+      if (selectedHostelIdForManagement) {
+        serviceAssignments = serviceAssignments.filter(
+          (a) => String(a.hostelId) === selectedHostelIdForManagement
+        );
+      }
+      
+      const priceInfo = priceMap[service.name] || { price: 0, unit: 'per service' };
       return {
         ...service,
+        price: service.price || priceInfo.price,
+        unit: service.unit || priceInfo.unit,
         assignments: serviceAssignments,
+        assignedVendorsCount: serviceAssignments.length,
+        assignedVendors: serviceAssignments.map(a => a.vendorName).join(', '),
+        hostels: [...new Set(serviceAssignments.map(a => a.hostelName))].join(', '),
       };
+    }).filter((service) => {
+      // If hostel filter is applied, only show services that have assignments for that hostel
+      if (selectedHostelIdForManagement) {
+        return service.assignments.length > 0;
+      }
+      // If no filter, show all services
+      return true;
     });
-  }, []);
+  }, [selectedHostelIdForManagement]);
+
+  // Table columns for Vendor Management
+  const vendorManagementColumns: Column<typeof servicesWithVendors[0]>[] = [
+    {
+      key: 'name',
+      label: 'Service Name',
+      sortable: true,
+      width: '200px',
+    },
+    {
+      key: 'description',
+      label: 'Description',
+      sortable: true,
+      width: '250px',
+    },
+    {
+      key: 'category',
+      label: 'Category',
+      sortable: true,
+      render: (row) => (
+        <Badge variant="default">{row.category}</Badge>
+      ),
+      width: '120px',
+    },
+    {
+      key: 'price',
+      label: 'Price',
+      sortable: true,
+      render: (row) => (
+        <div className="flex items-center gap-1">
+          <CurrencyDollarIcon className="w-4 h-4 text-green-600" />
+          <span className="font-semibold text-green-600">{formatCurrency(row.price || 0)}</span>
+          <span className="text-xs text-gray-500 ml-1">({row.unit || 'per service'})</span>
+        </div>
+      ),
+      width: '150px',
+    },
+    {
+      key: 'assignedVendorsCount',
+      label: 'Vendors',
+      sortable: true,
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-gray-900">{row.assignedVendorsCount}</span>
+          <Badge variant={row.assignedVendorsCount > 0 ? 'success' : 'default'}>
+            {row.assignedVendorsCount > 0 ? 'Assigned' : 'None'}
+          </Badge>
+        </div>
+      ),
+      width: '120px',
+    },
+    {
+      key: 'assignedVendors',
+      label: 'Vendor Names',
+      sortable: false,
+      render: (row) => (
+        <div className="max-w-xs">
+          {row.assignments.length > 0 ? (
+            <div className="space-y-1">
+              {row.assignments.slice(0, 2).map((assignment) => (
+                <div key={assignment.id} className="text-sm text-gray-700">
+                  • {assignment.vendorName}
+                </div>
+              ))}
+              {row.assignments.length > 2 && (
+                <div className="text-xs text-gray-500">
+                  +{row.assignments.length - 2} more
+                </div>
+              )}
+            </div>
+          ) : (
+            <span className="text-sm text-gray-400 italic">No vendors</span>
+          )}
+        </div>
+      ),
+      width: '200px',
+    },
+    {
+      key: 'hostels',
+      label: 'Hostels',
+      sortable: false,
+      render: (row) => (
+        <div className="max-w-xs">
+          {row.assignments.length > 0 ? (
+            <div className="space-y-1">
+              {[...new Set(row.assignments.map(a => a.hostelName))].slice(0, 2).map((hostel, idx) => (
+                <div key={idx} className="flex items-center gap-1 text-sm text-gray-700">
+                  <MapPinIcon className="w-3 h-3" />
+                  <span>{hostel}</span>
+                </div>
+              ))}
+              {[...new Set(row.assignments.map(a => a.hostelName))].length > 2 && (
+                <div className="text-xs text-gray-500">
+                  +{[...new Set(row.assignments.map(a => a.hostelName))].length - 2} more
+                </div>
+              )}
+            </div>
+          ) : (
+            <span className="text-sm text-gray-400 italic">-</span>
+          )}
+        </div>
+      ),
+      width: '180px',
+    },
+    {
+      key: 'actions',
+      label: 'Actions',
+      sortable: false,
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setAssignForm({ ...assignForm, serviceId: String(row.id) });
+              setIsAssignModalOpen(true);
+            }}
+            icon={PlusIcon}
+          >
+            Assign
+          </Button>
+        </div>
+      ),
+      width: '120px',
+    },
+  ];
 
   // Get vendor options for assignment
   const vendorOptions = useMemo(() => {
@@ -234,8 +423,8 @@ const VendorList: React.FC = () => {
             <h1 className="text-3xl font-bold text-slate-900">Vendors</h1>
             <p className="text-slate-600 mt-1">Manage vendors and service assignments</p>
           </div>
-          {/* Add Vendor Button - Only show in Vendor List tab */}
-          {activeTab === 'list' && (
+          {/* Add Vendor Button - Only show in Vendor List section */}
+          {activeSection === 'list' && (
             <Button
               variant="primary"
               onClick={() => setIsAddVendorModalOpen(true)}
@@ -246,35 +435,9 @@ const VendorList: React.FC = () => {
           )}
         </div>
 
-        {/* Tabs */}
-        <div className="border-b border-gray-200">
-          <nav className="flex gap-4">
-            <button
-              onClick={() => setActiveTab('list')}
-              className={`px-4 py-2 font-medium text-sm transition-colors border-b-2 ${
-                activeTab === 'list'
-                  ? 'text-purple-600 border-purple-600'
-                  : 'text-gray-600 border-transparent hover:text-gray-900'
-              }`}
-            >
-              Vendor List
-            </button>
-            <button
-              onClick={() => setActiveTab('management')}
-              className={`px-4 py-2 font-medium text-sm transition-colors border-b-2 ${
-                activeTab === 'management'
-                  ? 'text-purple-600 border-purple-600'
-                  : 'text-gray-600 border-transparent hover:text-gray-900'
-              }`}
-            >
-              Vendor Management
-            </button>
-          </nav>
-        </div>
-
-        {/* Tab Content */}
+        {/* Content */}
         <AnimatePresence mode="wait">
-          {activeTab === 'list' ? (
+          {activeSection === 'list' ? (
             <motion.div
               key="list"
               initial={{ opacity: 0, y: 20 }}
@@ -364,70 +527,56 @@ const VendorList: React.FC = () => {
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.3 }}
             >
-              {/* Header with Add Button */}
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h2 className="text-xl font-semibold text-gray-900">Service Management</h2>
-                  <p className="text-sm text-gray-600 mt-1">Manage which vendors perform which services</p>
+              {/* Header with Filter and Add Button */}
+              <div className="flex flex-col gap-4 mb-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xl font-semibold text-gray-900">Service Management</h2>
+                    <p className="text-sm text-gray-600 mt-1">Manage which vendors perform which services</p>
+                  </div>
+                  <Button
+                    variant="primary"
+                    onClick={() => setIsAssignModalOpen(true)}
+                    icon={PlusIcon}
+                  >
+                    Assign Vendor to Service
+                  </Button>
                 </div>
-                <Button
-                  variant="primary"
-                  onClick={() => setIsAssignModalOpen(true)}
-                  icon={PlusIcon}
-                >
-                  Assign Vendor to Service
-                </Button>
+                
+                {/* Hostel Filter */}
+                <div className="flex items-center gap-3">
+                  <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                    Filter by Hostel:
+                  </label>
+                  <div className="w-64">
+                    <Select
+                      value={selectedHostelIdForManagement}
+                      onChange={(value) => setSelectedHostelIdForManagement(value)}
+                      options={hostelOptions}
+                    />
+                  </div>
+                  {selectedHostelIdForManagement && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSelectedHostelIdForManagement('')}
+                    >
+                      Clear Filter
+                    </Button>
+                  )}
+                </div>
               </div>
 
-              {/* Services List - Two services per row */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {servicesWithVendors.map((service) => (
-                  <div
-                    key={service.id}
-                    className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-md transition-shadow flex flex-col"
-                  >
-                    <div className="flex items-start justify-between mb-4">
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-900">{service.name}</h3>
-                        <p className="text-sm text-gray-600 mt-1">{service.description}</p>
-                        <div className="mt-2">
-                          <Badge variant="default">
-                            {service.category}
-                          </Badge>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Assigned Vendors */}
-                    {service.assignments.length > 0 ? (
-                      <div className="mt-4 pt-4 border-t border-gray-100 flex-1">
-                        <h4 className="text-sm font-medium text-gray-700 mb-3">Assigned Vendors:</h4>
-                        <div className="space-y-2">
-                          {service.assignments.map((assignment) => (
-                            <div
-                              key={assignment.id}
-                              className="flex items-center justify-between p-3 bg-purple-50 rounded-lg border border-purple-100"
-                            >
-                              <div className="flex-1 min-w-0">
-                                <p className="font-medium text-gray-900 truncate">{assignment.vendorName}</p>
-                                <p className="text-xs text-gray-600 truncate">{assignment.hostelName}</p>
-                              </div>
-                              <div className="ml-2 shrink-0">
-                                <Badge variant={assignment.status === 'Active' ? 'success' : 'default'}>
-                                  {assignment.status}
-                                </Badge>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="mt-4 pt-4 border-t border-gray-100 flex-1">
-                        <p className="text-sm text-gray-500 italic">No vendors assigned to this service</p>
-                      </div>
-                    )}
-                  </div>
-                ))}
+              {/* Services Table - Table format with all details */}
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                <DataTable
+                  columns={vendorManagementColumns}
+                  data={servicesWithVendors.map((service) => ({
+                    ...service,
+                    id: service.id,
+                  }))}
+                  emptyMessage="No services found. Please add services to get started."
+                />
               </div>
             </motion.div>
           )}

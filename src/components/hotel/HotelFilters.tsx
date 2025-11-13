@@ -1,21 +1,25 @@
-import type { ChangeEvent } from 'react';
+import { ChangeEvent } from 'react';
 import type {
     HostelFilters,
     HostelPriceRange,
     HostelSortOption,
     HostelGender,
+    HostelStarRating,
 } from './types';
 
 interface HotelFiltersProps {
     filters: HostelFilters;
     amenities: string[];
     sortBy: HostelSortOption;
+    cities: string[];
+    starRatings: HostelStarRating[];
     onCityChange: (value: string) => void;
     onToggleAmenity: (amenity: string) => void;
     onAvailabilityChange: (checked: boolean) => void;
     onPriceRangeChange: (range: HostelPriceRange) => void;
     onGenderChange: (gender: 'all' | HostelGender) => void;
     onSortChange: (sort: HostelSortOption) => void;
+    onStarRatingChange: (rating: 'all' | HostelStarRating) => void;
 }
 
 const priceRangeOptions: { value: HostelPriceRange; label: string }[] = [
@@ -45,15 +49,23 @@ export const HotelFilters = ({
     filters,
     amenities,
     sortBy,
+    cities,
+    starRatings,
     onCityChange,
     onToggleAmenity,
     onAvailabilityChange,
     onPriceRangeChange,
     onGenderChange,
     onSortChange,
+    onStarRatingChange,
 }: HotelFiltersProps) => {
-    const handleCityChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const handleCityChange = (event: ChangeEvent<HTMLSelectElement>) => {
         onCityChange(event.target.value);
+    };
+
+    const handleStarRatingChange = (event: ChangeEvent<HTMLSelectElement>) => {
+        const value = event.target.value;
+        onStarRatingChange(value === 'all' ? 'all' : (Number(value) as HostelStarRating));
     };
 
     const handleAmenitiesChange = (amenity: string) => {
@@ -69,13 +81,37 @@ export const HotelFilters = ({
             <div className="container mx-auto px-6">
                 <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
                     <div className="flex flex-wrap gap-4 flex-1">
-                        <input
-                            type="text"
-                            placeholder="Search by city/area..."
-                            value={filters.city}
-                            onChange={handleCityChange}
-                            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        />
+                        <div className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg">
+                            <span className="text-sm font-medium text-gray-700">City</span>
+                            <select
+                                value={filters.city}
+                                onChange={handleCityChange}
+                                className="bg-transparent text-sm font-medium text-gray-700 focus:outline-none"
+                            >
+                                <option value="">All</option>
+                                {cities.map((city) => (
+                                    <option key={city} value={city}>
+                                        {city}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg">
+                            <span className="text-sm font-medium text-gray-700">Star</span>
+                            <select
+                                value={filters.starRating}
+                                onChange={handleStarRatingChange}
+                                className="bg-transparent text-sm font-medium text-gray-700 focus:outline-none"
+                            >
+                                <option value="all">All</option>
+                                {starRatings.map((rating) => (
+                                    <option key={rating} value={rating}>
+                                        {rating}-Star
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
 
                         <div className="flex flex-wrap gap-2">
                             {amenities.map((amenity) => {

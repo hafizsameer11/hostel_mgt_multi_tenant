@@ -56,6 +56,14 @@ export const AdminRoutes: React.FC = () => {
 
           {/* Accounts */}
           <Route path="accounts" element={<AccountsList />} />
+          <Route path="accounts/payable" element={<AccountsList />} />
+          <Route path="accounts/payable/all" element={<AccountsList />} />
+          <Route path="accounts/payable/bills" element={<AccountsList />} />
+          <Route path="accounts/payable/vendor" element={<AccountsList />} />
+          <Route path="accounts/payable/laundry" element={<AccountsList />} />
+          <Route path="accounts/receivable" element={<AccountsList />} />
+          <Route path="accounts/receivable/all" element={<AccountsList />} />
+          <Route path="accounts/receivable/received" element={<AccountsList />} />
 
           {/* Hostel Management */}
           <Route path="hostel" element={<HostelList />} />
@@ -68,9 +76,14 @@ export const AdminRoutes: React.FC = () => {
 
           {/* Vendor */}
           <Route path="vendor" element={<VendorList />} />
+          <Route path="vendor/list" element={<VendorList />} />
+          <Route path="vendor/management" element={<VendorList />} />
 
           {/* Communication */}
           <Route path="communication" element={<CommunicationBoard />} />
+          <Route path="communication/tenants" element={<CommunicationBoard />} />
+          <Route path="communication/employees" element={<CommunicationBoard />} />
+          <Route path="communication/vendors" element={<CommunicationBoard />} />
 
           {/* FP&A */}
           <Route path="fpa" element={<FinanceDashboard />} />

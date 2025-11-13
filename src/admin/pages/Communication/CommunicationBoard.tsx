@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useMemo, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
   UserCircleIcon, 
@@ -20,8 +21,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { Button } from '../../components/Button';
 import { Modal } from '../../components/Modal';
-import { Tabs } from '../../components/Tabs';
-import type { Tab } from '../../components/Tabs';
+import ROUTES from '../../routes/routePaths';
 import { Badge } from '../../components/Badge';
 import { Select } from '../../components/Select';
 import type { Tenant } from '../../types/people';
@@ -41,7 +41,24 @@ type ActiveTab = 'Tenants' | 'Employees' | 'Vendors';
  * Communication board page - Shows all biodata
  */
 const CommunicationBoard: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<ActiveTab>('Tenants');
+  const location = useLocation();
+  const navigate = useNavigate();
+  
+  // Determine active tab from route
+  const getActiveTab = (): ActiveTab => {
+    if (location.pathname.includes('/communication/employees')) return 'Employees';
+    if (location.pathname.includes('/communication/vendors')) return 'Vendors';
+    return 'Tenants'; // Default
+  };
+  
+  const activeTab = getActiveTab();
+  
+  // Redirect to /communication/tenants if just /communication
+  useEffect(() => {
+    if (location.pathname === ROUTES.COMM) {
+      navigate(ROUTES.COMM_TENANTS, { replace: true });
+    }
+  }, [location.pathname, navigate]);
   const [hostelFilter, setHostelFilter] = useState('');
   const [hostels, setHostels] = useState<Hostel[]>([]);
   const [isEmailCampaignOpen, setIsEmailCampaignOpen] = useState(false);
@@ -109,24 +126,12 @@ const CommunicationBoard: React.FC = () => {
     return hostel?.name || null;
   }, [hostelFilter, hostels]);
 
-  // Define tabs with counts (based on filtered data)
-  const tabs: Tab[] = useMemo(() => [
-    {
-      id: 'Tenants',
-      label: 'Tenants',
-      count: filteredTenants.length,
-    },
-    {
-      id: 'Employees',
-      label: 'Employees',
-      count: filteredEmployees.length,
-    },
-    {
-      id: 'Vendors',
-      label: 'Vendors',
-      count: filteredVendors.length,
-    },
-  ], [filteredTenants.length, filteredEmployees.length, filteredVendors.length]);
+  // Tab counts (for reference, not used in UI anymore - navigation handled by second sidebar)
+  const tabCounts = useMemo(() => ({
+    Tenants: filteredTenants.length,
+    Employees: filteredEmployees.length,
+    Vendors: filteredVendors.length,
+  }), [filteredTenants, filteredEmployees, filteredVendors]);
 
   const handleEmailCampaign = () => {
     setIsEmailCampaignOpen(true);
@@ -238,16 +243,8 @@ const CommunicationBoard: React.FC = () => {
         </div>
       </motion.div>
 
-      {/* Tabs */}
+      {/* Content - No tabs, navigation handled by second sidebar */}
       <div className="glass rounded-2xl border border-white/20 shadow-xl">
-        <div className="px-6 pt-4">
-          <Tabs
-            tabs={tabs}
-            activeTab={activeTab}
-            onChange={(id) => setActiveTab(id as ActiveTab)}
-          />
-        </div>
-
         {/* Biodata Cards */}
         <div className="p-6">
           {/* Tenants */}

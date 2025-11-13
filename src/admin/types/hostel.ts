@@ -95,3 +95,60 @@ export interface RoomFormData {
   pricePerSeat?: number;
 }
 
+/**
+ * Meal type
+ */
+export type MealType = 'breakfast' | 'lunch' | 'dinner';
+
+/**
+ * Mess item - represents an ingredient/item used in mess
+ */
+export interface MessItem {
+  id: string;
+  name: string;
+  quantity: string; // e.g., "2 kg", "5 pieces", "1 liter"
+  unit?: string; // kg, pieces, liter, etc.
+}
+
+/**
+ * Meal - represents a single meal (breakfast, lunch, or dinner)
+ */
+export interface Meal {
+  type: MealType;
+  items: MessItem[];
+  notes?: string;
+}
+
+/**
+ * Mess entry - represents mess for a specific day
+ */
+export interface MessEntry {
+  id: Id;
+  hostelId: Id;
+  date: string; // ISO date string (YYYY-MM-DD)
+  breakfast: Meal;
+  lunch: Meal;
+  dinner: Meal;
+  createdAt: string; // ISO date string
+  updatedAt?: string; // ISO date string
+}
+
+/**
+ * Mess form data for creating/editing mess entries
+ */
+export interface MessFormData {
+  date: string; // YYYY-MM-DD
+  breakfast: {
+    items: Array<{ id?: string; name: string; quantity: string; unit?: string }>;
+    notes?: string;
+  };
+  lunch: {
+    items: Array<{ id?: string; name: string; quantity: string; unit?: string }>;
+    notes?: string;
+  };
+  dinner: {
+    items: Array<{ id?: string; name: string; quantity: string; unit?: string }>;
+    notes?: string;
+  };
+}
+

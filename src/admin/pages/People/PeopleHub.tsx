@@ -5,6 +5,7 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
+import * as alertService from '../../services/alert.service';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Badge } from '../../components/Badge';
 import { Select } from '../../components/Select';
@@ -388,11 +389,12 @@ const PeopleHub: React.FC = () => {
 
     // Combine room number: floorNumber + roomNumber (e.g., "101" from floor 1, room "01")
     const fullRoomNumber = `${tenantFormData.floorNumber}${tenantFormData.roomNumber}`;
+    const tenantName = `${tenantFormData.firstName} ${tenantFormData.lastName}`;
     
     console.log('New Tenant:', {
       firstName: tenantFormData.firstName,
       lastName: tenantFormData.lastName,
-      name: `${tenantFormData.firstName} ${tenantFormData.lastName}`,
+      name: tenantName,
       username: tenantFormData.username,
       email: tenantFormData.email,
       cnic: tenantFormData.cnic,
@@ -407,10 +409,21 @@ const PeopleHub: React.FC = () => {
       status: 'Pending',
     });
 
+    // Create check-in alert in maintenance tab
+    try {
+      alertService.createCheckInAlert(
+        tenantName,
+        fullRoomNumber,
+        tenantFormData.seatNumber
+      );
+    } catch (error) {
+      console.error('Failed to create check-in alert:', error);
+    }
+
     setToast({
       open: true,
       type: 'success',
-      message: `Tenant "${tenantFormData.firstName} ${tenantFormData.lastName}" added successfully!`,
+      message: `Tenant "${tenantName}" added successfully!`,
     });
 
     setIsAddModalOpen(false);
@@ -1712,6 +1725,26 @@ const EditForm = ({ modal, onClose }: { modal: { mode: 'view' | 'edit'; type: 'T
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // If tenant status changed, create appropriate alert
+    if (modal.type === 'Tenant' && modal.data.status !== form.status) {
+      const tenantName = form.name || modal.data.name;
+      const room = form.room || modal.data.room;
+      const seat = form.bed || modal.data.bed;
+      
+      try {
+        if (form.status === 'Active' && modal.data.status !== 'Active') {
+          // Check-in: Status changed to Active
+          alertService.createCheckInAlert(tenantName, room, seat);
+        } else if (form.status === 'Inactive' && modal.data.status === 'Active') {
+          // Check-out: Status changed from Active to Inactive
+          alertService.createCheckOutAlert(tenantName, room, seat);
+        }
+      } catch (error) {
+        console.error('Failed to create alert:', error);
+      }
+    }
+    
     console.log('Update', modal.type, form);
     onClose();
   };
@@ -1733,6 +1766,18 @@ const EditForm = ({ modal, onClose }: { modal: { mode: 'view' | 'edit'; type: 'T
             <Field label="Bed" value={form.bed} onChange={(v) => setForm({ ...form, bed: v })} />
             <Field label="Lease Start" value={form.leaseStart} onChange={(v) => setForm({ ...form, leaseStart: v })} type="date" />
             <Field label="Lease End" value={form.leaseEnd} onChange={(v) => setForm({ ...form, leaseEnd: v })} type="date" />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+              <select
+                value={form.status || 'Pending'}
+                onChange={(e) => setForm({ ...form, status: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="Pending">Pending</option>
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+            </div>
           </>
         )}
       </div>

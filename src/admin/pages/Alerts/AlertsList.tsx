@@ -3,16 +3,21 @@
  * View and manage system alerts
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { PlusIcon } from '@heroicons/react/24/outline';
 import { DataTable } from '../../components/DataTable';
 import type { Column } from '../../components/DataTable';
 import { Select } from '../../components/Select';
 import { Badge } from '../../components/Badge';
 import { Tabs } from '../../components/Tabs';
-import type { Alert } from '../../types/comms';
+import { Button } from '../../components/Button';
+import { Modal } from '../../components/Modal';
+import { Toast } from '../../components/Toast';
+import type { Alert, AlertSeverity } from '../../types/comms';
+import type { ToastType } from '../../types/common';
 import { formatDate } from '../../types/common';
-import alertsData from '../../mock/alerts.json';
+import * as alertService from '../../services/alert.service';
 
 /**
  * Alerts list page
@@ -21,6 +26,31 @@ const AlertsList: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'bills' | 'maintenance'>('bills');
   const [severityFilter, setSeverityFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [isAddAlertOpen, setIsAddAlertOpen] = useState(false);
+  const [toast, setToast] = useState<{
+    open: boolean;
+    type: ToastType;
+    message: string;
+  }>({ open: false, type: 'success', message: '' });
+  
+  // Form state for new maintenance alert
+  const [alertForm, setAlertForm] = useState({
+    title: '',
+    description: '',
+    severity: 'warn' as AlertSeverity,
+    assignedTo: '',
+  });
+
+  // Load alerts
+  useEffect(() => {
+    loadAlerts();
+  }, []);
+
+  const loadAlerts = () => {
+    const data = alertService.getAllAlerts();
+    setAlerts(data);
+  };
 
   // Helper function to determine alert category
   const getAlertCategory = (alert: Alert): 'bills' | 'maintenance' => {
@@ -48,7 +78,7 @@ const AlertsList: React.FC = () => {
 
   // Filter data by tab and filters
   const filteredData = useMemo(() => {
-    let data = alertsData as Alert[];
+    let data = alerts;
 
     // Filter by tab (Bills or Maintenance)
     data = data.filter((a) => getAlertCategory(a) === activeTab);
@@ -64,11 +94,11 @@ const AlertsList: React.FC = () => {
     }
 
     return data;
-  }, [activeTab, severityFilter, statusFilter]);
+  }, [alerts, activeTab, severityFilter, statusFilter]);
 
   // Calculate counts for tabs
-  const billsCount = (alertsData as Alert[]).filter((a) => getAlertCategory(a) === 'bills').length;
-  const maintenanceCount = (alertsData as Alert[]).filter((a) => getAlertCategory(a) === 'maintenance').length;
+  const billsCount = alerts.filter((a) => getAlertCategory(a) === 'bills').length;
+  const maintenanceCount = alerts.filter((a) => getAlertCategory(a) === 'maintenance').length;
 
   // Define tabs
   const tabs = [
@@ -85,10 +115,56 @@ const AlertsList: React.FC = () => {
   ];
 
   // Calculate stats for current tab
-  const currentTabData = (alertsData as Alert[]).filter((a) => getAlertCategory(a) === activeTab);
+  const currentTabData = alerts.filter((a) => getAlertCategory(a) === activeTab);
   const dangerCount = currentTabData.filter((a) => a.severity === 'danger').length;
   const warningCount = currentTabData.filter((a) => a.severity === 'warn').length;
   const infoCount = currentTabData.filter((a) => a.severity === 'info').length;
+
+  // Handle add maintenance alert
+  const handleAddAlert = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!alertForm.title.trim()) {
+      setToast({
+        open: true,
+        type: 'warning',
+        message: 'Please enter an alert title',
+      });
+      return;
+    }
+
+    try {
+      alertService.createAlert({
+        title: alertForm.title,
+        description: alertForm.description || undefined,
+        severity: alertForm.severity,
+        assignedTo: alertForm.assignedTo || undefined,
+        status: 'open',
+      });
+
+      setToast({
+        open: true,
+        type: 'success',
+        message: 'Maintenance alert created successfully!',
+      });
+
+      // Reset form and close modal
+      setAlertForm({
+        title: '',
+        description: '',
+        severity: 'warn',
+        assignedTo: '',
+      });
+      setIsAddAlertOpen(false);
+      loadAlerts();
+    } catch (error) {
+      setToast({
+        open: true,
+        type: 'error',
+        message: 'Failed to create alert. Please try again.',
+      });
+    }
+  };
 
   // Define columns
   const columns: Column<Alert>[] = [
@@ -172,9 +248,20 @@ const AlertsList: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-slate-900">Alerts</h1>
-        <p className="text-slate-600 mt-1">System alerts and notifications</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900">Alerts</h1>
+          <p className="text-slate-600 mt-1">System alerts and notifications</p>
+        </div>
+        {activeTab === 'maintenance' && (
+          <Button
+            variant="primary"
+            onClick={() => setIsAddAlertOpen(true)}
+            icon={PlusIcon}
+          >
+            Add Maintenance Alert
+          </Button>
+        )}
       </div>
 
       {/* Tabs */}
@@ -220,6 +307,111 @@ const AlertsList: React.FC = () => {
           emptyMessage={`No ${activeTab} alerts found.`}
         />
       </motion.div>
+
+      {/* Add Maintenance Alert Modal */}
+      <Modal
+        isOpen={isAddAlertOpen}
+        onClose={() => {
+          setIsAddAlertOpen(false);
+          setAlertForm({
+            title: '',
+            description: '',
+            severity: 'warn',
+            assignedTo: '',
+          });
+        }}
+        title="Create Maintenance Alert"
+      >
+        <form onSubmit={handleAddAlert} className="space-y-4">
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">
+              Title <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={alertForm.title}
+              onChange={(e) => setAlertForm({ ...alertForm, title: e.target.value })}
+              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="e.g., Maintenance Request - Room 305"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">
+              Description
+            </label>
+            <textarea
+              value={alertForm.description}
+              onChange={(e) => setAlertForm({ ...alertForm, description: e.target.value })}
+              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Describe the maintenance issue or requirement..."
+              rows={4}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">
+              Severity
+            </label>
+            <Select
+              value={alertForm.severity}
+              onChange={(value) => setAlertForm({ ...alertForm, severity: value as AlertSeverity })}
+              options={[
+                { value: 'info', label: 'Info' },
+                { value: 'warn', label: 'Warning' },
+                { value: 'danger', label: 'Danger' },
+              ]}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">
+              Assign To
+            </label>
+            <input
+              type="text"
+              value={alertForm.assignedTo}
+              onChange={(e) => setAlertForm({ ...alertForm, assignedTo: e.target.value })}
+              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="e.g., David Kim (optional)"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <Button
+              type="submit"
+              variant="primary"
+              className="flex-1"
+            >
+              Create Alert
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setIsAddAlertOpen(false);
+                setAlertForm({
+                  title: '',
+                  description: '',
+                  severity: 'warn',
+                  assignedTo: '',
+                });
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Toast */}
+      <Toast
+        open={toast.open}
+        type={toast.type}
+        message={toast.message}
+        onClose={() => setToast({ ...toast, open: false })}
+      />
     </div>
   );
 };

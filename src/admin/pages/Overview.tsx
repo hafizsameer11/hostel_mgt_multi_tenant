@@ -201,7 +201,7 @@ const Overview: React.FC = () => {
       });
   }, []);
 
-  // Unpaid rent by aging
+  // Unpaid rent by aging with tenant details
   const unpaidRentData = useMemo(() => {
     const unpaid = accountsData.filter(a => a.type === 'Rent' && (a.status === 'Pending' || a.status === 'Overdue'));
     const now = Date.now();
@@ -223,6 +223,49 @@ const Overview: React.FC = () => {
       { category: '61-90', amount: aging['61-90'] || 0 },
       { category: '91+', amount: aging['91+'] || 0 },
     ];
+  }, []);
+
+  // Get tenants with unpaid rent
+  const tenantsWithUnpaidRent = useMemo(() => {
+    const unpaid = accountsData.filter(a => a.type === 'Rent' && (a.status === 'Pending' || a.status === 'Overdue'));
+    const now = Date.now();
+    
+    return unpaid.map(payment => {
+      const tenant = tenantsData.find(t => t.name === payment.tenantName);
+      const daysOld = Math.floor((now - new Date(payment.date).getTime()) / (1000 * 60 * 60 * 24));
+      let category = '91+';
+      if (daysOld <= 30) category = '0-30';
+      else if (daysOld <= 60) category = '31-60';
+      else if (daysOld <= 90) category = '61-90';
+      
+      return {
+        tenantName: payment.tenantName || 'Unknown',
+        room: tenant ? `${tenant.room}-${tenant.bed}` : 'N/A',
+        amount: payment.amount,
+        daysOld,
+        category,
+        status: payment.status,
+        hostelName: payment.hostelName || 'N/A',
+      };
+    }).sort((a, b) => b.amount - a.amount);
+  }, []);
+
+  // Get all tenants and mark their payment status
+  const allTenantsWithPaymentStatus = useMemo(() => {
+    return tenantsData.map(tenant => {
+      const unpaidRent = accountsData.find(
+        a => a.type === 'Rent' && 
+        a.tenantName === tenant.name && 
+        (a.status === 'Pending' || a.status === 'Overdue')
+      );
+      
+      return {
+        ...tenant,
+        hasUnpaidRent: !!unpaidRent,
+        unpaidAmount: unpaidRent?.amount || 0,
+        unpaidStatus: unpaidRent?.status || null,
+      };
+    });
   }, []);
 
   const totalUnpaidRent = useMemo(() => {
@@ -685,10 +728,10 @@ const Overview: React.FC = () => {
             </p>
           </div>
           <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={unpaidRentData}>
+            <BarChart data={unpaidRentData} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis dataKey="category" stroke="#64748b" style={{ fontSize: '12px' }} />
-              <YAxis stroke="#64748b" style={{ fontSize: '12px' }} />
+              <XAxis type="number" stroke="#64748b" style={{ fontSize: '12px' }} />
+              <YAxis dataKey="category" type="category" stroke="#64748b" style={{ fontSize: '12px' }} width={80} />
               <Tooltip
                 formatter={(value: number) => formatCurrency(value)}
                 contentStyle={{
@@ -697,7 +740,7 @@ const Overview: React.FC = () => {
                   borderRadius: '8px',
                 }}
               />
-              <Bar dataKey="amount" fill="#3b82f6" radius={[8, 8, 0, 0]} />
+              <Bar dataKey="amount" fill="#ef4444" radius={[0, 8, 8, 0]} />
             </BarChart>
           </ResponsiveContainer>
           <div className="mt-4 space-y-2">
@@ -707,6 +750,71 @@ const Overview: React.FC = () => {
                 <span className="font-medium text-slate-900">{formatCurrency(item.amount)}</span>
               </div>
             ))}
+          </div>
+          
+          {/* Tenants with Unpaid Rent List */}
+          <div className="mt-6 pt-6 border-t border-gray-200">
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">Tenants with Unpaid Rent</h3>
+            {tenantsWithUnpaidRent.length === 0 ? (
+              <div className="text-center py-4 text-slate-500 text-sm">
+                No tenants with unpaid rent
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                {tenantsWithUnpaidRent.map((tenant, index) => (
+                  <motion.div
+                    key={`${tenant.tenantName}-${index}`}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors border border-gray-100"
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="font-medium text-slate-900">{tenant.tenantName}</p>
+                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                          tenant.status === 'Overdue' 
+                            ? 'bg-red-100 text-red-700' 
+                            : 'bg-yellow-100 text-yellow-700'
+                        }`}>
+                          {tenant.status}
+                        </span>
+                        <span className="px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">
+                          {tenant.category} days
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-600">
+                        {tenant.room} • {tenant.hostelName}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold text-red-600">{formatCurrency(tenant.amount)}</p>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* All Tenants Payment Status Summary */}
+          <div className="mt-6 pt-6 border-t border-gray-200">
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">Tenant Payment Status</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-green-50 border border-green-200 p-4 rounded-lg">
+                <p className="text-sm text-green-600 font-medium mb-1">Paid Rent</p>
+                <p className="text-2xl font-bold text-green-900">
+                  {allTenantsWithPaymentStatus.filter(t => !t.hasUnpaidRent).length}
+                </p>
+                <p className="text-xs text-green-600 mt-1">Tenants</p>
+              </div>
+              <div className="bg-red-50 border border-red-200 p-4 rounded-lg">
+                <p className="text-sm text-red-600 font-medium mb-1">Unpaid Rent</p>
+                <p className="text-2xl font-bold text-red-900">
+                  {allTenantsWithPaymentStatus.filter(t => t.hasUnpaidRent).length}
+                </p>
+                <p className="text-xs text-red-600 mt-1">Tenants</p>
+              </div>
+            </div>
           </div>
         </div>
 

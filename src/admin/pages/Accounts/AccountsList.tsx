@@ -4,9 +4,9 @@
  */
 
 import React, { useState, useMemo, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Tabs } from '../../components/Tabs';
-import type { Tab } from '../../components/Tabs';
+import ROUTES from '../../routes/routePaths';
 import { DataTable } from '../../components/DataTable';
 import type { Column } from '../../components/DataTable';
 import { SearchInput } from '../../components/SearchInput';
@@ -25,13 +25,13 @@ import {
   CurrencyDollarIcon,
   ArrowTrendingDownIcon,
   ArrowTrendingUpIcon,
-  ExclamationTriangleIcon,
   PlusIcon,
   PencilIcon,
+  BanknotesIcon,
 } from '@heroicons/react/24/outline';
 
 type MainTab = 'Payable' | 'Receivable';
-type PayableSubTab = 'Bills' | 'Vendor' | 'Laundry';
+type PayableSubTab = 'All' | 'Bills' | 'Vendor' | 'Laundry';
 type ReceivableSubTab = 'All' | 'Received';
 type ReceivableCategory = 'Rent' | 'Deposit';
 
@@ -39,9 +39,41 @@ type ReceivableCategory = 'Rent' | 'Deposit';
  * Accounts list page with Payable/Receivable tabs
  */
 const AccountsList: React.FC = () => {
-  const [activeMainTab, setActiveMainTab] = useState<MainTab>('Payable');
-  const [activePayableTab, setActivePayableTab] = useState<PayableSubTab>('Bills');
-  const [activeReceivableTab, setActiveReceivableTab] = useState<ReceivableSubTab>('All');
+  const location = useLocation();
+  const navigate = useNavigate();
+  
+  // Determine active sections from route
+  const getActiveMainTab = (): MainTab => {
+    if (location.pathname.includes('/accounts/receivable')) return 'Receivable';
+    return 'Payable'; // Default to Payable
+  };
+  
+  const getActivePayableTab = (): PayableSubTab => {
+    if (location.pathname.includes('/accounts/payable/bills')) return 'Bills';
+    if (location.pathname.includes('/accounts/payable/vendor')) return 'Vendor';
+    if (location.pathname.includes('/accounts/payable/laundry')) return 'Laundry';
+    if (location.pathname.includes('/accounts/payable/all')) return 'All';
+    if (location.pathname === ROUTES.ACCOUNTS_PAYABLE) return 'All'; // Default to All when just /payable
+    return 'All'; // Default
+  };
+  
+  const getActiveReceivableTab = (): ReceivableSubTab => {
+    if (location.pathname.includes('/accounts/receivable/received')) return 'Received';
+    return 'All'; // Default
+  };
+  
+  const activeMainTab = getActiveMainTab();
+  const activePayableTab = getActivePayableTab();
+  const activeReceivableTab = getActiveReceivableTab();
+  
+  // Redirect to /accounts/payable/all if just /accounts or /accounts/payable
+  useEffect(() => {
+    if (location.pathname === ROUTES.ACCOUNTS) {
+      navigate(ROUTES.ACCOUNTS_PAYABLE_ALL, { replace: true });
+    } else if (location.pathname === ROUTES.ACCOUNTS_PAYABLE) {
+      navigate(ROUTES.ACCOUNTS_PAYABLE_ALL, { replace: true });
+    }
+  }, [location.pathname, navigate]);
   const [activeReceivableCategory, setActiveReceivableCategory] = useState<ReceivableCategory | ''>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -135,7 +167,10 @@ const AccountsList: React.FC = () => {
       data = data.filter((t) => t.type === 'Expense');
       
       // Further filter by payable sub-tab
-      if (activePayableTab === 'Bills') {
+      if (activePayableTab === 'All') {
+        // "All" tab: Show all Expense transactions (no further filtering)
+        // Don't apply any additional filters, just show all expenses
+      } else if (activePayableTab === 'Bills') {
         data = data.filter((t) => {
           // Check if transaction has a stored category (manually added)
           const transactionWithCategory = t as Transaction & { payableCategory?: PayableSubTab };
@@ -353,35 +388,19 @@ const AccountsList: React.FC = () => {
     return 0;
   }, [activeMainTab, filteredData]);
 
-  // Main tabs (counts based on hostel filter)
-  const mainTabs: Tab[] = useMemo(() => [
-    { 
-      id: 'Payable', 
-      label: 'Payable', 
-      count: baseFilteredData.filter((t) => t.type === 'Expense').length 
-    },
-    { 
-      id: 'Receivable', 
-      label: 'Receivable', 
-      count: baseFilteredData.filter((t) => 
-        (t.type === 'Rent' || t.type === 'Deposit') && 
-        (t.status === 'Pending' || t.status === 'Overdue')
-      ).length 
-    },
-  ], [baseFilteredData]);
-
-  // Payable sub-tabs
-  const payableSubTabs: Tab[] = [
-    { id: 'Bills', label: 'Bills', count: 0 },
-    { id: 'Vendor', label: 'Vendor', count: 0 },
-    { id: 'Laundry', label: 'Laundry', count: 0 },
-  ];
-
-  // Receivable sub-tabs
-  const receivableSubTabs: Tab[] = [
-    { id: 'All', label: 'All', count: 0 },
-    { id: 'Received', label: 'Received', count: 0 },
-  ];
+  // Tab counts (for reference, not used in UI anymore - navigation handled by second sidebar)
+  const tabCounts = useMemo(() => ({
+    Payable: baseFilteredData.filter((t) => t.type === 'Expense').length,
+    Receivable: baseFilteredData.filter((t) => 
+      (t.type === 'Rent' || t.type === 'Deposit') && 
+      (t.status === 'Pending' || t.status === 'Overdue')
+    ).length,
+    Bills: baseFilteredData.filter((t) => t.type === 'Expense' && (t.status === 'Pending' || t.status === 'Overdue')).length,
+    Vendor: baseFilteredData.filter((t) => t.type === 'Expense' && t.ref?.includes('VENDOR')).length,
+    Laundry: baseFilteredData.filter((t) => t.type === 'Expense' && t.ref?.includes('LAUNDRY')).length,
+    All: baseFilteredData.filter((t) => t.type === 'Rent' && (t.status === 'Pending' || t.status === 'Overdue')).length,
+    Received: baseFilteredData.filter((t) => t.type === 'Rent' && t.status === 'Paid').length,
+  }), [baseFilteredData]);
 
   // Receivable category options
   const receivableCategoryOptions = [
@@ -763,7 +782,7 @@ const AccountsList: React.FC = () => {
           </p>
         </motion.div>
 
-        {/* Bad Debt Card */}
+        {/* Capital Invested Card */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -772,81 +791,29 @@ const AccountsList: React.FC = () => {
         >
           <div className="flex items-center justify-between mb-3">
             <div className="w-12 h-12 bg-gradient-to-br from-orange-400 to-orange-600 rounded-lg flex items-center justify-center">
-              <ExclamationTriangleIcon className="w-6 h-6 text-white" />
+              <BanknotesIcon className="w-6 h-6 text-white" />
             </div>
             <span className="text-sm font-semibold text-orange-600">Loss</span>
           </div>
-          <p className="text-sm font-medium text-gray-600 mb-1">Capitial Invested</p>
+          <p className="text-sm font-medium text-gray-600 mb-1">Capital Invested</p>
           <p className="text-2xl font-bold text-orange-900">{formatCurrency(summary.badDebt)}</p>
         </motion.div>
       </div>
 
-      {/* Main Tabs - Payable & Receivable */}
+      {/* Content - No tabs, navigation handled by second sidebar */}
       <div className="glass rounded-2xl border border-white/20 shadow-xl">
-        <div className="px-6 pt-4">
-          <Tabs
-            tabs={mainTabs}
-            activeTab={activeMainTab}
-            onChange={(id) => setActiveMainTab(id as MainTab)}
-          />
-        </div>
-
-        {/* Payable Sub-Tabs - Category Tabs */}
-        {activeMainTab === 'Payable' && (
-          <div className="px-6 pt-4 pb-4 border-b border-gray-200">
-            <div className="flex gap-2">
-              {payableSubTabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActivePayableTab(tab.id as PayableSubTab)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                    activePayableTab === tab.id
-                      ? 'bg-[#3b82f6] text-white shadow-sm'
-                      : 'text-[#475569] bg-white hover:text-[#334155]'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Receivable Sub-Tabs - All and Received */}
-        {activeMainTab === 'Receivable' && (
-          <div className="px-6 pt-4 pb-4 border-b border-gray-200">
-            <div className="flex items-center justify-between">
-              <div className="flex gap-2">
-                {receivableSubTabs.map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveReceivableTab(tab.id as ReceivableSubTab)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                      activeReceivableTab === tab.id
-                        ? 'bg-[#3b82f6] text-white shadow-sm'
-                        : 'text-[#475569] bg-white hover:text-[#334155]'
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-              
-              {/* Category Filter for Receivable */}
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-medium text-gray-700">Category:</label>
-                <Select
-                  value={activeReceivableCategory}
-                  onChange={(value) => setActiveReceivableCategory(value as ReceivableCategory | '')}
-                  options={receivableCategoryOptions}
-                />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Content Area */}
         <div className="p-6">
+          {/* Category Filter for Receivable - Only show in Receivable sections */}
+          {activeMainTab === 'Receivable' && (
+            <div className="mb-4 flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-700">Category:</label>
+              <Select
+                value={activeReceivableCategory}
+                onChange={(value) => setActiveReceivableCategory(value as ReceivableCategory | '')}
+                options={receivableCategoryOptions}
+              />
+            </div>
+          )}
           {/* Summary for current tab */}
           <div className="mb-6 p-4 bg-white/50 rounded-lg">
             <div className="flex items-center justify-between">

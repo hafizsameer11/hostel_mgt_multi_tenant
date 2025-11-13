@@ -14,19 +14,32 @@ export const HotelCard = ({ hostel, onSelect }: HotelCardProps) => {
             : hostel.gender === 'boys'
                 ? 'bg-blue-50 text-blue-600'
                 : 'bg-gray-100 text-gray-700';
+    const isLuxury = hostel.category === 'luxury';
+    const starLabel = `${hostel.starRating}-Star`;
 
     return (
         <div className="bg-white rounded-lg shadow-soft hover:shadow-soft-lg transition-all transform hover:-translate-y-1 overflow-hidden">
             <img src={hostel.image} alt={hostel.name} className="w-full h-48 object-cover" />
             <div className="p-6">
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">{hostel.name}</h3>
-                <div className="flex items-center justify-between mb-3">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-primary-50 text-primary-700 px-3 py-1 text-xs font-semibold">
+                <div className="flex items-center justify-between mb-3 gap-3">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-primary-50 text-primary-700 px-3 py-1 text-xs font-semibold whitespace-nowrap">
                         PKR {hostel.pricePerMonth.toLocaleString()}/month
                     </span>
-                    <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${genderClass}`}>
-                        {genderLabel}
-                    </span>
+                    <div className="flex items-center gap-2 flex-wrap justify-end">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 text-yellow-700 px-3 py-1 text-xs font-semibold whitespace-nowrap">
+                            <span aria-hidden="true">★</span>
+                            {starLabel}
+                        </span>
+                        {isLuxury && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-700 px-3 py-1 text-xs font-semibold uppercase tracking-wide whitespace-nowrap">
+                                Luxury
+                            </span>
+                        )}
+                        <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap ${genderClass}`}>
+                            {genderLabel}
+                        </span>
+                    </div>
                 </div>
                 <p className="text-gray-600 text-sm mb-4">{hostel.description}</p>
 
@@ -67,7 +80,10 @@ export const HotelCard = ({ hostel, onSelect }: HotelCardProps) => {
                             d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
                         />
                     </svg>
-                    {hostel.address}
+                    <span>
+                        <span className="font-medium text-gray-700">{hostel.city}</span>
+                        <span className="block text-gray-500">{hostel.address}</span>
+                    </span>
                 </div>
 
                 <div className="flex flex-wrap gap-2 mb-4">

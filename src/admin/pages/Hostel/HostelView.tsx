@@ -7,12 +7,20 @@ import {
   MapPinIcon,
   UserIcon,
   PlusIcon,
+  UserGroupIcon,
+  BriefcaseIcon,
+  BuildingStorefrontIcon,
+  BeakerIcon,
 } from '@heroicons/react/24/outline';
 import hostelsData from '../../mock/hostels.json';
 import tenantsData from '../../mock/tenants.json';
+import employeesData from '../../mock/employees.json';
+import vendorsData from '../../mock/vendors.json';
+import * as messService from '../../services/mess.service';
 import { Tabs } from '../../components/Tabs';
 import { ArchitectureDiagram } from '../../components/ArchitectureDiagram';
 import { AddRoomForm } from '../../components/AddRoomForm';
+import { MessManagement } from '../../components/MessManagement';
 import { Button } from '../../components/Button';
 import { Toast } from '../../components/Toast';
 import type { Hostel, ArchitectureData, RoomFormData } from '../../types/hostel';
@@ -30,7 +38,7 @@ const HostelView: React.FC = () => {
   const [architectureData, setArchitectureData] =
     useState<ArchitectureData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'details' | 'arrangement' | 'architecture'>(
+  const [activeTab, setActiveTab] = useState<'details' | 'arrangement' | 'architecture' | 'mess'>(
     'details'
   );
   const [isAddRoomOpen, setIsAddRoomOpen] = useState(false);
@@ -39,6 +47,49 @@ const HostelView: React.FC = () => {
     type: ToastType;
     message: string;
   }>({ open: false, type: 'success', message: '' });
+
+  // Calculate counts for additional cards
+  const additionalStats = React.useMemo(() => {
+    if (!hostel) {
+      return {
+        totalMess: 0,
+        totalVendors: 0,
+        totalEmployees: 0,
+        totalTenants: 0,
+      };
+    }
+
+    const hostelId = hostel.id;
+    
+    // Count mess entries
+    const messEntries = messService.getMessEntriesByHostel(hostelId);
+    const totalMess = messEntries.length;
+
+    // Count vendors for this hostel
+    const vendors = (vendorsData as any[]).filter(
+      (v) => v.hostelId === hostelId
+    );
+    const totalVendors = vendors.length;
+
+    // Count employees for this hostel
+    const employees = (employeesData as any[]).filter(
+      (e) => e.hostelId === hostelId
+    );
+    const totalEmployees = employees.length;
+
+    // Count tenants for this hostel
+    const tenants = (tenantsData as any[]).filter(
+      (t) => t.hostelId === hostelId
+    );
+    const totalTenants = tenants.length;
+
+    return {
+      totalMess,
+      totalVendors,
+      totalEmployees,
+      totalTenants,
+    };
+  }, [hostel]);
 
   useEffect(() => {
     if (!id) {
@@ -158,6 +209,94 @@ const HostelView: React.FC = () => {
     setArchitectureData(archData);
   };
 
+  // Handle adding a seat to a room
+  const handleAddSeat = (floorNumber: number, roomId: string) => {
+    if (!architectureData || !hostel) return;
+
+    try {
+      // Find the room in the architecture data
+      const floor = architectureData.floors.find((f) => f.floorNumber === floorNumber);
+      if (!floor) {
+        throw new Error('Floor not found');
+      }
+
+      const room = floor.rooms.find((r) => r.id === roomId);
+      if (!room) {
+        throw new Error('Room not found');
+      }
+
+      // Generate next seat letter (A, B, C, D, E, F, G, ...)
+      const existingSeatNumbers = room.seats.map((s) => s.seatNumber);
+      const seatLetters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+      let nextSeatLetter = 'A';
+      
+      for (const letter of seatLetters) {
+        if (!existingSeatNumbers.includes(letter)) {
+          nextSeatLetter = letter;
+          break;
+        }
+      }
+
+      // Create new seat
+      const newSeatId = `${floorNumber}-${room.roomNumber}-${nextSeatLetter}`;
+      const newSeat: import('../../types/hostel').Seat = {
+        id: newSeatId,
+        seatNumber: nextSeatLetter,
+        isOccupied: false,
+      };
+
+      // Update the room with the new seat
+      const updatedRoom = {
+        ...room,
+        seats: [...room.seats, newSeat],
+        totalSeats: room.totalSeats + 1,
+      };
+
+      // Update the floor with the updated room
+      const updatedFloor = {
+        ...floor,
+        rooms: floor.rooms.map((r) => (r.id === roomId ? updatedRoom : r)),
+      };
+
+      // Update the architecture data
+      const updatedFloors = architectureData.floors.map((f) =>
+        f.floorNumber === floorNumber ? updatedFloor : f
+      );
+
+      // Recalculate totals
+      let totalSeats = 0;
+      let occupiedSeats = 0;
+      updatedFloors.forEach((f) => {
+        f.rooms.forEach((r) => {
+          totalSeats += r.seats.length;
+          occupiedSeats += r.seats.filter((s) => s.isOccupied).length;
+        });
+      });
+
+      const updatedArchitectureData: ArchitectureData = {
+        ...architectureData,
+        floors: updatedFloors,
+        totalSeats,
+        occupiedSeats,
+        availableSeats: totalSeats - occupiedSeats,
+      };
+
+      setArchitectureData(updatedArchitectureData);
+
+      setToast({
+        open: true,
+        type: 'success',
+        message: `Seat ${nextSeatLetter} added to Room ${room.roomNumber} successfully!`,
+      });
+    } catch (error) {
+      setToast({
+        open: true,
+        type: 'error',
+        message: 'Failed to add seat. Please try again.',
+      });
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -189,6 +328,10 @@ const HostelView: React.FC = () => {
     {
       id: 'architecture',
       label: 'Architecture',
+    },
+    {
+      id: 'mess',
+      label: 'Mess',
     },
   ];
 
@@ -227,7 +370,7 @@ const HostelView: React.FC = () => {
       <Tabs
         tabs={tabs}
         activeTab={activeTab}
-        onChange={(tab) => setActiveTab(tab as 'details' | 'arrangement' | 'architecture')}
+        onChange={(tab) => setActiveTab(tab as 'details' | 'arrangement' | 'architecture' | 'mess')}
       />
 
       {/* Tab Content */}
@@ -355,6 +498,70 @@ const HostelView: React.FC = () => {
                 <p className="text-2xl font-bold text-slate-900 mt-1">
                   {architectureData.totalSeats}
                 </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Additional Stats Cards */}
+          <div className="mt-8 pt-8 border-t border-slate-200">
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">
+              Resources & Management
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {/* Total Mess */}
+              <div className="bg-amber-50 p-4 rounded-xl border border-amber-100">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2 bg-amber-100 rounded-lg">
+                    <BeakerIcon className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <p className="text-sm text-amber-600 font-medium">Total Mess</p>
+                </div>
+                <p className="text-2xl font-bold text-amber-900">
+                  {additionalStats.totalMess}
+                </p>
+                <p className="text-xs text-amber-600 mt-1">Entries</p>
+              </div>
+
+              {/* Total Vendors */}
+              <div className="bg-purple-50 p-4 rounded-xl border border-purple-100">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2 bg-purple-100 rounded-lg">
+                    <BuildingStorefrontIcon className="w-5 h-5 text-purple-600" />
+                  </div>
+                  <p className="text-sm text-purple-600 font-medium">Total Vendors</p>
+                </div>
+                <p className="text-2xl font-bold text-purple-900">
+                  {additionalStats.totalVendors}
+                </p>
+                <p className="text-xs text-purple-600 mt-1">Active</p>
+              </div>
+
+              {/* Total Employees */}
+              <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2 bg-emerald-100 rounded-lg">
+                    <BriefcaseIcon className="w-5 h-5 text-emerald-600" />
+                  </div>
+                  <p className="text-sm text-emerald-600 font-medium">Total Employees</p>
+                </div>
+                <p className="text-2xl font-bold text-emerald-900">
+                  {additionalStats.totalEmployees}
+                </p>
+                <p className="text-xs text-emerald-600 mt-1">Staff</p>
+              </div>
+
+              {/* Total Tenants */}
+              <div className="bg-cyan-50 p-4 rounded-xl border border-cyan-100">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2 bg-cyan-100 rounded-lg">
+                    <UserGroupIcon className="w-5 h-5 text-cyan-600" />
+                  </div>
+                  <p className="text-sm text-cyan-600 font-medium">Total Tenants</p>
+                </div>
+                <p className="text-2xl font-bold text-cyan-900">
+                  {additionalStats.totalTenants}
+                </p>
+                <p className="text-xs text-cyan-600 mt-1">Residents</p>
               </div>
             </div>
           </div>
@@ -614,7 +821,21 @@ const HostelView: React.FC = () => {
           </div>
 
           {/* Existing Architecture Diagram */}
-          <ArchitectureDiagram data={architectureData} />
+          <ArchitectureDiagram 
+            data={architectureData} 
+            onAddSeat={handleAddSeat}
+          />
+        </motion.div>
+      )}
+
+      {/* Mess Tab */}
+      {activeTab === 'mess' && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          <MessManagement hostelId={Number(hostel.id)} />
         </motion.div>
       )}
 

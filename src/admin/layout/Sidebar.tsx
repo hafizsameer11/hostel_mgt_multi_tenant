@@ -7,11 +7,11 @@ import {
   CurrencyDollarIcon,
   BuildingOfficeIcon,
   BellAlertIcon,
-  UserGroupIcon,
   ChatBubbleLeftRightIcon,
   PresentationChartLineIcon,
   Cog6ToothIcon,
   PlusIcon,
+  BuildingStorefrontIcon,
 } from "@heroicons/react/24/outline";
 import ROUTES from "../routes/routePaths";
 
@@ -25,7 +25,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { label: "Overview", path: ROUTES.OVERVIEW, icon: ChartBarIcon },
   { label: "People", path: ROUTES.PEOPLE, icon: UsersIcon },
-  { label: "Vendor", path: ROUTES.VENDOR, icon: UserGroupIcon },
+  { label: "Vendor", path: ROUTES.VENDOR, icon: BuildingStorefrontIcon },
   { label: "Accounts", path: ROUTES.ACCOUNTS, icon: CurrencyDollarIcon },
   { label: "Hostel Management", path: ROUTES.HOSTEL, icon: BuildingOfficeIcon },
   { label: "Alerts", path: ROUTES.ALERTS, icon: BellAlertIcon },

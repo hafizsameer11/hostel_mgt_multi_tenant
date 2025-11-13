@@ -1,4 +1,5 @@
 export type HostelGender = 'coed' | 'boys' | 'girls';
+export type HostelStarRating = 3 | 4 | 5 | 7;
 
 export type SeatStatus = 'available' | 'occupied';
 
@@ -26,6 +27,7 @@ export type HostelPriceRange = 'all' | 'low' | 'mid' | 'high' | 'premium';
 export interface Hostel {
     id: string;
     name: string;
+    city: string;
     manager: string;
     phone: string;
     address: string;
@@ -38,6 +40,8 @@ export interface Hostel {
     availableSeats: number;
     pricePerMonth: number;
     gender: HostelGender;
+    category?: 'standard' | 'premium' | 'luxury';
+    starRating: HostelStarRating;
 }
 
 export interface HostelFilters {
@@ -46,6 +50,7 @@ export interface HostelFilters {
     availability: boolean;
     priceRange: HostelPriceRange;
     gender: 'all' | HostelGender;
+    starRating: 'all' | HostelStarRating;
 }
 
 export type HostelSortOption = 'name' | 'rooms' | 'seats' | 'manager' | 'price';
