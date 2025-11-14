@@ -13,14 +13,6 @@ datasource db {
 
 // =================== ENUMS ===================
 
-enum Role {
-  admin
-  owner
-  manager
-  staff
-  user
-}
-
 enum HostelStatus {
   active
   inactive
@@ -209,37 +201,39 @@ enum CampaignStatus {
 // =================== MODELS ===================
 
 model User {
-  id        Int      @id @default(autoincrement())
-  username  String?  @db.VarChar(255)
-  name      String?  @db.VarChar(255)
-  email     String?  @unique @db.VarChar(255)
-  phone     String?  @db.VarChar(50)
-  password  String?  @db.VarChar(255)
-  status    String?  @default("active") @db.VarChar(50)
-  role      Role?    @default(user)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         Int      @id @default(autoincrement())
+  username   String?  @db.VarChar(255)
+  email      String?  @unique @db.VarChar(255)
+  phone      String?  @db.VarChar(50)
+  password   String?  @db.VarChar(255)
+  status     String?  @default("active") @db.VarChar(50)
+  isAdmin    Boolean  @default(false) // If true, user has full admin access
+  userRoleId Int?     // Foreign key to Role table
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   // Relations
-  managedHostels    Hostel[]           @relation("HostelManager")
-  tenantProfile     Tenant?            @relation("TenantUser") // If user is also a tenant (online registration)
-  allocatedBy       Allocation[]       @relation("AllocationCreator") // Allocations created by this user (admin/staff)
-  currentBeds       Bed[]              @relation("CurrentTenant")
-  reservedBeds      Bed[]              @relation("BedReservation")
-  paymentsCollected Payment[]          @relation("PaymentCollector") // Payments collected by this user
-  employeeProfile   Employee?          @relation("EmployeeUser") // If user is an employee (staff/manager)
-  ownerProfile      Owner?             @relation("OwnerUser") // If user is an owner
-  createdBookings   Booking[]          @relation("BookingCreator") // Bookings created by this user
-  assignedAlerts    Alert[]            @relation("AlertAssignedTo") // Alerts assigned to this user
-  createdAlerts     Alert[]            @relation("AlertCreator") // Alerts created by this user
-  resolvedAlerts    Alert[]            @relation("AlertResolver") // Alerts resolved by this user
+  userRole         Role?             @relation("UserRole", fields: [userRoleId], references: [id], onDelete: SetNull)
+  createdRoles     Role[]            @relation("RoleCreator") // Roles created by this user
+  managedHostels   Hostel[]          @relation("HostelManager")
+  tenantProfile    Tenant?           @relation("TenantUser") // If user is also a tenant (online registration)
+  allocatedBy      Allocation[]      @relation("AllocationCreator") // Allocations created by this user (admin/staff)
+  currentBeds      Bed[]             @relation("CurrentTenant")
+  reservedBeds     Bed[]             @relation("BedReservation")
+  paymentsCollected Payment[]         @relation("PaymentCollector") // Payments collected by this user
+  employeeProfile  Employee?         @relation("EmployeeUser") // If user is an employee (staff/manager)
+  ownerProfile     Owner?             @relation("OwnerUser") // If user is an owner
+  createdBookings  Booking[]         @relation("BookingCreator") // Bookings created by this user
+  assignedAlerts   Alert[]           @relation("AlertAssignedTo") // Alerts assigned to this user
+  createdAlerts    Alert[]           @relation("AlertCreator") // Alerts created by this user
+  resolvedAlerts   Alert[]           @relation("AlertResolver") // Alerts resolved by this user
   emailCampaigns    EmailCampaign[]
   whatsappCampaigns WhatsAppCampaign[]
   ActivityLog       ActivityLog[]
   ScoreCard         ScoreCard[]
 
   @@index([email])
-  @@index([role])
+  @@index([userRoleId])
 }
 
 model Hostel {
@@ -993,4 +987,55 @@ model ScoreCard {
 
   @@index([entityType, entityId])
   @@index([createdAt])
+}
+
+// =================== RBAC MODELS ===================
+
+model Role {
+  id          Int      @id @default(autoincrement())
+  roleName        String   @db.VarChar(100)
+  description String?  @db.Text
+  userId      Int?     // If null, role is global. If set, role is user-specific
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  users       User[]           @relation("UserRole")
+  createdBy   User?            @relation("RoleCreator", fields: [userId], references: [id], onDelete: Cascade)
+  permissions RolePermission[]
+
+  @@unique([roleName, userId]) // Role name must be unique per user (or globally if userId is null)
+  @@index([roleName])
+  @@index([userId])
+}
+
+model Permission {
+  id          Int      @id @default(autoincrement())
+  resource    String   @db.VarChar(100) // e.g., "tenants", "owners", "vendors", "users", "user_roles", "api_keys", "prospects"
+  action      String   @db.VarChar(50)  // e.g., "view_list", "view_one", "create", "edit", "delete"
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  roles RolePermission[]
+
+  @@unique([resource, action])
+  @@index([resource])
+  @@index([action])
+}
+
+model RolePermission {
+  id           Int      @id @default(autoincrement())
+  roleId       Int
+  permissionId Int
+  createdAt    DateTime @default(now())
+
+  // Relations
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
 }

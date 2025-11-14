@@ -164,10 +164,15 @@ const getDashboardOverview = async (req, res) => {
           ...(hostelIdNum && { hostelId: hostelIdNum })
         }
       }),
-      prisma.alert.count({ where: { status: 'open', ...(hostelIdNum && hostelf) } }),
+      prisma.alert.count({ 
+        where: { 
+          status: { in: ['pending', 'in_progress'] },
+          ...(hostelIdNum && hostelf) 
+        } 
+      }),
       prisma.alert.count({
         where: {
-          status: 'open',
+          status: { in: ['pending', 'in_progress'] },
           createdAt: { lt: currFrom },
           ...(hostelIdNum && hostelf)
         }
@@ -188,36 +193,187 @@ const getDashboardOverview = async (req, res) => {
     const alertGrowth   = growth(openAlerts,     lastAlerts);
     const pendingGrowth = growth(pendingPayments, lastPendingPayments);
 
-    // 4) PROFIT & LOSS (last 3 FPA rows)
-    const fpaRecords = await prisma.fPA.findMany({
-      where: hostelId ? hostelf : {},
-      orderBy: [{ year: 'desc' }, { month: 'desc' }],
-      take: 3
+    // 4) PROFIT & LOSS (last 3 months from Transaction and Payment records)
+    const threeMonthsAgo = new Date(now);
+    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+    threeMonthsAgo.setDate(1);
+    threeMonthsAgo.setHours(0, 0, 0, 0);
+
+    // Get all transactions and payments for last 3 months
+    // Use both Transaction and Payment tables to ensure we get data
+    const [revenueTransactions, revenuePayments, expenseTransactions, expensePayments, expenseRecords] = await Promise.all([
+      // Revenue: Rent + Deposit transactions (status = completed)
+      prisma.transaction.findMany({
+        where: {
+          status: 'completed',
+          transactionType: { in: ['rent', 'deposit', 'rent_received', 'deposit_received'] },
+          createdAt: { gte: threeMonthsAgo },
+          ...(hostelIdNum && hostelf)
+        },
+        select: {
+          amount: true,
+          createdAt: true
+        }
+      }),
+      // Revenue: Rent + Deposit payments (status = paid) - fallback
+      prisma.payment.findMany({
+        where: {
+          status: 'paid',
+          paymentType: { in: ['rent', 'deposit'] },
+          paymentDate: { gte: threeMonthsAgo },
+          ...(hostelIdNum && hostelf)
+        },
+        select: {
+          amount: true,
+          paymentDate: true
+        }
+      }),
+      // Expenses: Expense transactions (status = completed)
+      prisma.transaction.findMany({
+        where: {
+          status: 'completed',
+          transactionType: { 
+            in: ['expense', 'maintenance', 'electricity', 'water', 'other', 'expense_paid'] 
+          },
+          createdAt: { gte: threeMonthsAgo },
+          ...(hostelIdNum && hostelf)
+        },
+        select: {
+          amount: true,
+          createdAt: true
+        }
+      }),
+      // Expenses: Maintenance, electricity, water, other payments (status = paid) - fallback
+      prisma.payment.findMany({
+        where: {
+          status: 'paid',
+          paymentType: { in: ['maintenance', 'electricity', 'water', 'other'] },
+          paymentDate: { gte: threeMonthsAgo },
+          ...(hostelIdNum && hostelf)
+        },
+        select: {
+          amount: true,
+          paymentDate: true
+        }
+      }),
+      // Expenses from Expense model
+      prisma.expense.findMany({
+        where: {
+          date: { gte: threeMonthsAgo },
+          ...(hostelIdNum && hostelf)
+        },
+        select: {
+          amount: true,
+          date: true
+        }
+      })
+    ]);
+
+    // Group by month
+    const monthMap = new Map();
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                        'July', 'August', 'September', 'October', 'November', 'December'];
+
+    // Process revenue transactions
+    revenueTransactions.forEach(transaction => {
+      const date = new Date(transaction.createdAt);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      if (!monthMap.has(monthKey)) {
+        monthMap.set(monthKey, { revenue: 0, expenses: 0, year: date.getFullYear(), month: date.getMonth() + 1 });
+      }
+      const entry = monthMap.get(monthKey);
+      entry.revenue += Number(transaction.amount || 0);
     });
-    const profitLossSeries = fpaRecords.reverse().map(f => ({
-      month: f.month,
-      year: f.year,
-      revenue: f.totalIncome || 0,
-      expenses: f.totalExpense || 0,
-      netIncome: f.profit || 0
-    }));
+
+    // Process revenue payments (fallback if transactions are empty)
+    revenuePayments.forEach(payment => {
+      const date = new Date(payment.paymentDate);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      if (!monthMap.has(monthKey)) {
+        monthMap.set(monthKey, { revenue: 0, expenses: 0, year: date.getFullYear(), month: date.getMonth() + 1 });
+      }
+      const entry = monthMap.get(monthKey);
+      entry.revenue += Number(payment.amount || 0);
+    });
+
+    // Process expense transactions
+    expenseTransactions.forEach(transaction => {
+      const date = new Date(transaction.createdAt);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      if (!monthMap.has(monthKey)) {
+        monthMap.set(monthKey, { revenue: 0, expenses: 0, year: date.getFullYear(), month: date.getMonth() + 1 });
+      }
+      const entry = monthMap.get(monthKey);
+      entry.expenses += Number(transaction.amount || 0);
+    });
+
+    // Process expense payments (fallback if transactions are empty)
+    expensePayments.forEach(payment => {
+      const date = new Date(payment.paymentDate);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      if (!monthMap.has(monthKey)) {
+        monthMap.set(monthKey, { revenue: 0, expenses: 0, year: date.getFullYear(), month: date.getMonth() + 1 });
+      }
+      const entry = monthMap.get(monthKey);
+      entry.expenses += Number(payment.amount || 0);
+    });
+
+    // Process expense records
+    expenseRecords.forEach(expense => {
+      const date = new Date(expense.date);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      if (!monthMap.has(monthKey)) {
+        monthMap.set(monthKey, { revenue: 0, expenses: 0, year: date.getFullYear(), month: date.getMonth() + 1 });
+      }
+      const entry = monthMap.get(monthKey);
+      entry.expenses += Number(expense.amount || 0);
+    });
+
+    // Convert to array and format
+    const profitLossSeries = Array.from(monthMap.entries())
+      .sort((a, b) => {
+        if (a[1].year !== b[1].year) return a[1].year - b[1].year;
+        return a[1].month - b[1].month;
+      })
+      .slice(-3) // Last 3 months
+      .map(([key, data]) => ({
+        month: `${monthNames[data.month - 1]} ${data.year}`,
+        revenue: Number(data.revenue.toFixed(2)),
+        expenses: Number(data.expenses.toFixed(2)),
+        netIncome: Number((data.revenue - data.expenses).toFixed(2))
+      }));
+
     const totalNetIncome = profitLossSeries.reduce((a, r) => a + r.netIncome, 0);
 
-    // 5) EMPLOYEE/USER ACTIVITY LOG (latest)
+    // 5) EMPLOYEE/USER ACTIVITY LOG (latest 10)
     const activityLog = await prisma.activityLog.findMany({
-      take: 6,
+      take: 10,
       orderBy: { createdAt: 'desc' },
       include: {
         user: {
           select: {
             id: true,
-            name: true,
-            role: true,
+            username: true,
+            email: true,
+            userRole: {
+              select: {
+                id: true,
+                roleName: true,
+                description: true
+              }
+            },
             employeeProfile: {
               select: {
                 designation: true,
                 department: true
               }
+            },
+            managedHostels: {
+              select: {
+                id: true,
+                name: true
+              },
+              take: 1
             }
           }
         }
@@ -226,23 +382,28 @@ const getDashboardOverview = async (req, res) => {
 
     const formattedActivityLog = activityLog.map((entry) => ({
       id: entry.id,
-      actor: entry.user?.name || 'System',
-      role: entry.user?.employeeProfile?.designation
-        || toTitleCase(entry.user?.role)
+      employeeName: entry.user?.username || entry.user?.email || 'System',
+      employeeRole: entry.user?.employeeProfile?.designation
+        || (entry.user?.userRole ? toTitleCase(entry.user.userRole.roleName) : null)
         || 'Staff',
       action: entry.action,
-      module: entry.module,
       description: entry.description,
-      createdAt: entry.createdAt,
-      relativeTime: relativeTimeFromNow(entry.createdAt)
+      hostelName: entry.user?.managedHostels?.[0]?.name || null,
+      timestamp: entry.createdAt
     }));
 
-    // 6) PAYABLE (outgoing) & RECEIVABLE (incoming) payment snapshots
+    // 6) PAYABLE (all paid transactions) & RECEIVABLE (paid Rent/Deposit) payment snapshots
+    // Using Payment table since it has status='paid' and paymentType
     const [payablePaymentsRaw, receivablePaymentsRaw] = await Promise.all([
+      // Payable: All paid transactions (5 most recent) - includes Rent, Deposit, Expense
       prisma.payment.findMany({
         take: 5,
         orderBy: { paymentDate: 'desc' },
-        where: { status: { in: ['pending', 'partial', 'overdue'] }, ...(hostelIdNum && hostelf) },
+        where: { 
+          status: 'paid',
+          paymentType: { in: ['rent', 'deposit', 'maintenance', 'electricity', 'water', 'other'] },
+          ...(hostelIdNum && hostelf) 
+        },
         include: {
           tenant: { select: { id: true, name: true } },
           hostel: { select: { id: true, name: true } },
@@ -260,10 +421,15 @@ const getDashboardOverview = async (req, res) => {
           }
         }
       }),
+      // Receivable: Paid Rent/Deposit transactions (5 most recent)
       prisma.payment.findMany({
         take: 5,
         orderBy: { paymentDate: 'desc' },
-        where: { status: 'paid', ...(hostelIdNum && hostelf) },
+        where: { 
+          status: 'paid',
+          paymentType: { in: ['rent', 'deposit'] },
+          ...(hostelIdNum && hostelf) 
+        },
         include: {
           tenant: { select: { id: true, name: true } },
           hostel: { select: { id: true, name: true } },
@@ -291,22 +457,271 @@ const getDashboardOverview = async (req, res) => {
       const baseDate = payment.paymentDate || payment.createdAt;
       return {
         id: payment.id,
-        tenantName: payment.tenant?.name || 'N/A',
-        paymentType: payment.paymentType || 'rent',
-        paymentTypeLabel: toTitleCase(payment.paymentType || 'rent'),
-        amount: payment.amount || 0,
-        amountFormatted: safeCurrencyFormat(payment.amount || 0),
+        date: baseDate,
+        ref: payment.receiptNumber || `PAY-${String(payment.id).padStart(4, '0')}`,
+        type: payment.paymentType || 'rent',
+        amount: Number(payment.amount || 0),
         status: payment.status,
+        tenantName: payment.tenant?.name || 'N/A',
         hostelName: payment.hostel?.name || null,
-        roomNumber,
-        receiptNumber: payment.receiptNumber || `PAY-${String(payment.id).padStart(4, '0')}`,
-        paymentDate: baseDate,
-        relativeTime: relativeTimeFromNow(baseDate)
+        description: payment.remarks || null,
+        property: roomNumber || null
       };
     };
 
     const payablePayments = payablePaymentsRaw.map(mapPaymentRow);
     const receivablePayments = receivablePaymentsRaw.map(mapPaymentRow);
+
+    // 7) RECENT BILLS (Expense/Refund with Pending/Overdue status)
+    // Get Expense payments and Refund transactions
+    const [expenseBillsRaw, refundBillsRaw] = await Promise.all([
+      // Expense payments with Pending/Overdue status
+      prisma.payment.findMany({
+        take: 5,
+        orderBy: { paymentDate: 'desc' },
+        where: {
+          paymentType: { in: ['maintenance', 'electricity', 'water', 'other'] },
+          status: { in: ['pending', 'overdue'] },
+          ...(hostelIdNum && hostelf)
+        },
+        include: {
+          tenant: { select: { id: true, name: true } },
+          hostel: { select: { id: true, name: true } },
+          allocation: {
+            select: {
+              id: true,
+              room: { select: { id: true, roomNumber: true } }
+            }
+          },
+          booking: {
+            select: {
+              id: true,
+              room: { select: { id: true, roomNumber: true } }
+            }
+          }
+        }
+      }),
+      // Refund transactions with Pending/Overdue status
+      prisma.transaction.findMany({
+        take: 5,
+        orderBy: { createdAt: 'desc' },
+        where: {
+          transactionType: { contains: 'refund' },
+          status: { in: ['pending', 'processing'] },
+          ...(hostelIdNum && hostelf)
+        },
+        include: {
+          tenant: { select: { id: true, name: true } },
+          hostel: { select: { id: true, name: true } },
+          payment: {
+            include: {
+              allocation: {
+                select: {
+                  id: true,
+                  room: { select: { id: true, roomNumber: true } }
+                }
+              },
+              booking: {
+                select: {
+                  id: true,
+                  room: { select: { id: true, roomNumber: true } }
+                }
+              }
+            }
+          }
+        }
+      })
+    ]);
+
+    // Map expense bills
+    const expenseBills = expenseBillsRaw.map(payment => {
+      const roomNumber =
+        payment?.allocation?.room?.roomNumber ||
+        payment?.booking?.room?.roomNumber ||
+        null;
+      return {
+        id: payment.id,
+        date: payment.paymentDate || payment.createdAt,
+        ref: payment.receiptNumber || `PAY-${String(payment.id).padStart(4, '0')}`,
+        type: payment.paymentType || 'expense',
+        amount: Number(payment.amount || 0),
+        status: payment.status,
+        tenantName: payment.tenant?.name || 'N/A',
+        hostelName: payment.hostel?.name || null,
+        description: payment.remarks || null
+      };
+    });
+
+    // Map refund bills
+    const refundBills = refundBillsRaw.map(transaction => {
+      const roomNumber =
+        transaction?.payment?.allocation?.room?.roomNumber ||
+        transaction?.payment?.booking?.room?.roomNumber ||
+        null;
+      return {
+        id: transaction.id,
+        date: transaction.createdAt,
+        ref: transaction.orderId || transaction.merchantTxnId || `TXN-${String(transaction.id).padStart(4, '0')}`,
+        type: 'refund',
+        amount: Number(transaction.amount || 0),
+        status: transaction.status === 'pending' ? 'pending' : transaction.status === 'processing' ? 'pending' : 'overdue',
+        tenantName: transaction.tenant?.name || 'N/A',
+        hostelName: transaction.hostel?.name || null,
+        description: transaction.responseMessage || null
+      };
+    });
+
+    // Combine and sort by date DESC, take top 5
+    const recentBills = [...expenseBills, ...refundBills]
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .slice(0, 5);
+
+    // 8) RECENT MAINTENANCE (maintenance alerts/requests)
+    const recentMaintenanceRaw = await prisma.alert.findMany({
+      take: 5,
+      orderBy: { createdAt: 'desc' },
+      where: {
+        maintenanceType: { not: null },
+        ...(hostelIdNum && hostelf)
+      },
+      include: {
+        tenant: { select: { id: true, name: true } },
+        hostel: { select: { id: true, name: true } },
+        room: { select: { id: true, roomNumber: true } }
+      }
+    });
+
+    const recentMaintenance = recentMaintenanceRaw.map(alert => ({
+      id: alert.id,
+      description: alert.description || alert.title,
+      property: alert.room?.roomNumber || null,
+      unit: alert.room?.roomNumber || null,
+      status: alert.status,
+      createdAt: alert.createdAt,
+      tenantName: alert.tenant?.name || null,
+      hostelName: alert.hostel?.name || null
+    }));
+
+    // 9) UNPAID RENT (Rent payments with Pending/Overdue status)
+    const unpaidRentRaw = await prisma.payment.findMany({
+      where: {
+        paymentType: 'rent',
+        status: { in: ['pending', 'overdue'] },
+        ...(hostelIdNum && hostelf)
+      },
+      include: {
+        tenant: { select: { id: true, name: true } },
+        hostel: { select: { id: true, name: true } },
+        allocation: {
+          select: {
+            id: true,
+            room: { select: { id: true, roomNumber: true } }
+          }
+        }
+      }
+    });
+
+    // Calculate aging buckets
+    const agingBuckets = {
+      '0-30': { amount: 0, count: 0 },
+      '31-60': { amount: 0, count: 0 },
+      '61-90': { amount: 0, count: 0 },
+      '91+': { amount: 0, count: 0 }
+    };
+
+    const unpaidRentTenants = unpaidRentRaw.map(payment => {
+      const paymentDate = new Date(payment.paymentDate || payment.createdAt);
+      const daysOld = Math.floor((now.getTime() - paymentDate.getTime()) / (1000 * 60 * 60 * 24));
+      const amount = Number(payment.amount || 0);
+
+      // Categorize into aging buckets
+      if (daysOld <= 30) {
+        agingBuckets['0-30'].amount += amount;
+        agingBuckets['0-30'].count += 1;
+      } else if (daysOld <= 60) {
+        agingBuckets['31-60'].amount += amount;
+        agingBuckets['31-60'].count += 1;
+      } else if (daysOld <= 90) {
+        agingBuckets['61-90'].amount += amount;
+        agingBuckets['61-90'].count += 1;
+      } else {
+        agingBuckets['91+'].amount += amount;
+        agingBuckets['91+'].count += 1;
+      }
+
+      return {
+        id: payment.id,
+        tenantName: payment.tenant?.name || 'N/A',
+        amount: amount,
+        daysOld: daysOld,
+        status: payment.status,
+        date: payment.paymentDate || payment.createdAt,
+        hostelName: payment.hostel?.name || null,
+        property: payment.allocation?.room?.roomNumber || null
+      };
+    }).sort((a, b) => b.amount - a.amount); // Sort by amount DESC
+
+    const totalUnpaidAmount = unpaidRentTenants.reduce((sum, t) => sum + t.amount, 0);
+    
+    // Get count of paid rent payments for summary
+    const paidRentCount = await prisma.payment.count({
+      where: {
+        paymentType: 'rent',
+        status: 'paid',
+        ...(hostelIdNum && hostelf)
+      }
+    });
+
+    const unpaidRent = {
+      totalAmount: totalUnpaidAmount,
+      totalFormatted: safeCurrencyFormat(totalUnpaidAmount),
+      aging: Object.entries(agingBuckets).map(([range, data]) => ({
+        range,
+        amount: Number(data.amount.toFixed(2)),
+        count: data.count
+      })),
+      tenants: unpaidRentTenants,
+      summary: {
+        paidCount: paidRentCount,
+        unpaidCount: unpaidRentTenants.length
+      }
+    };
+
+    // 10) CHECK-IN / CHECK-OUT (from Allocation table)
+    const thirtyDaysAgo = new Date(now);
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const thirtyDaysFromNow = new Date(now);
+    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+
+    const [checkIns, checkOuts] = await Promise.all([
+      // Check-ins in last 30 days
+      prisma.allocation.count({
+        where: {
+          checkInDate: { gte: thirtyDaysAgo, lte: now },
+          ...(hostelIdNum && hostelf)
+        }
+      }),
+      // Check-outs in next 30 days
+      prisma.allocation.count({
+        where: {
+          expectedCheckOutDate: { gte: now, lte: thirtyDaysFromNow },
+          status: 'active',
+          ...(hostelIdNum && hostelf)
+        }
+      })
+    ]);
+
+    const checkInCheckOut = {
+      checkIns: {
+        count: checkIns,
+        period: 'Last 30 days'
+      },
+      checkOuts: {
+        count: checkOuts,
+        period: 'Next 30 days'
+      },
+      total: checkIns + checkOuts
+    };
 
     const sumAmount = (records) => records.reduce((acc, row) => acc + (row.amount || 0), 0);
 
@@ -357,8 +772,10 @@ const getDashboardOverview = async (req, res) => {
 
     const overview = {
       occupancy: {
-        occupied: occupancyRate.toFixed(2),
-        vacant: (100 - occupancyRate).toFixed(2),
+        occupied: Number(occupancyRate.toFixed(2)),
+        vacant: Number((100 - occupancyRate).toFixed(2)),
+        occupiedPercent: Number(occupancyRate.toFixed(2)),
+        vacantPercent: Number((100 - occupancyRate).toFixed(2)),
         growth: `${occGrowth.toFixed(2)}%`,
         totalUnits,
         occupiedUnits
@@ -411,6 +828,10 @@ const getDashboardOverview = async (req, res) => {
           items: receivablePayments
         }
       },
+      recentBills,
+      recentMaintenance,
+      unpaidRent,
+      checkInCheckOut,
       meta: {
         hostelId: hostelIdNum,
         currency: DASHBOARD_CURRENCY,

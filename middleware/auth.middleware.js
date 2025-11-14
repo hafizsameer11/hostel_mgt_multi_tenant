@@ -7,14 +7,10 @@ const { errorResponse } = require('../Helper/helper');
 const { prisma } = require('../config/db');
 
 /**
- * Supported User Roles:
- * - admin: System administrator with full access
- * - owner: Property owner with access to their properties
- * - manager: Property manager with management access
- * - staff: Staff member with limited access
- * - user: Regular user/tenant with basic access
+ * Note: Role-based authorization is now handled through the Permission system.
+ * The authorize() function below is kept for backward compatibility but should
+ * be replaced with checkPermission() middleware for new routes.
  */
-const VALID_ROLES = ['admin', 'owner', 'manager', 'staff', 'user'];
 
 /**
  * Verify JWT Token Middleware
@@ -40,18 +36,19 @@ const authenticate = async (req, res, next) => {
         // Verify token
         const decoded = verifyToken(token);
 
-        // Get user from database using Prisma
+        // Get user from database using Prisma with role and permissions
         const user = await prisma.user.findUnique({
             where: { id: decoded.id },
-            select: {
-                id: true,
-                username: true,
-                email: true,
-                phone: true,
-                role: true,
-                status: true,
-                createdAt: true,
-                updatedAt: true
+            include: {
+                userRole: {
+                    include: {
+                        permissions: {
+                            include: {
+                                permission: true
+                            }
+                        }
+                    }
+                }
             }
         });
 
@@ -64,15 +61,38 @@ const authenticate = async (req, res, next) => {
             return errorResponse(res, "Your account is inactive. Please contact support.", 403);
         }
 
-        // Validate user role
-        if (user.role && !VALID_ROLES.includes(user.role)) {
-            console.warn(`Invalid role detected for user ${user.id}: ${user.role}`);
-        }
+        // Extract user data for response (without sensitive info)
+        const userData = {
+            id: user.id,
+            username: user.username,
+            email: user.email,
+            phone: user.phone,
+            status: user.status,
+            isAdmin: user.isAdmin,
+            createdAt: user.createdAt,
+            updatedAt: user.updatedAt,
+            role: user.userRole ? {
+                id: user.userRole.id,
+                name: user.userRole.roleName,
+                description: user.userRole.description
+            } : null
+        };
+
+        // Extract permissions for easy access
+        const userPermissions = user.userRole
+            ? user.userRole.permissions.map(rp => ({
+                  resource: rp.permission.resource,
+                  action: rp.permission.action,
+                  permission: `${rp.permission.resource}.${rp.permission.action}`
+              }))
+            : [];
 
         // Attach user to request object
-        req.user = user;
+        req.user = userData;
         req.userId = user.id;
-        req.userRole = user.role;
+        req.isAdmin = user.isAdmin;
+        req.userRole = user.userRole;
+        req.userPermissions = userPermissions;
 
         next();
     } catch (err) {
@@ -82,28 +102,41 @@ const authenticate = async (req, res, next) => {
 };
 
 /**
- * Check if user has required role
- * Supports: 'admin', 'owner', 'manager', 'staff', 'user'
- * @param {...string} roles - Allowed roles (e.g., authorize('admin', 'owner'))
+ * Check if user has required role (by role name)
+ * Note: This is for backward compatibility. For new routes, use checkPermission() middleware.
+ * @param {...string} roleNames - Allowed role names (e.g., authorize('admin', 'manager'))
  * @example
  * router.get('/route', authenticate, authorize('admin', 'owner'), handler);
  */
-const authorize = (...roles) => {
+const authorize = (...roleNames) => {
     return (req, res, next) => {
         if (!req.user) {
             return errorResponse(res, "Authentication required", 401);
         }
 
-        // Validate that the user's role is valid
-        if (!req.user.role) {
+        // If user is admin (isAdmin flag), allow access regardless of role
+        if (req.isAdmin) {
+            return next();
+        }
+
+        // Check if user has a role
+        if (!req.userRole) {
             return errorResponse(res, "User role not found", 403);
         }
 
-        // Check if user has one of the required roles
-        if (!roles.includes(req.user.role)) {
+        // Allow owner role to access role management endpoints (for backward compatibility)
+        // If checking for admin/manager/staff, also allow owner
+        if (req.userRole.roleName === 'owner' && 
+            (roleNames.includes('admin') || roleNames.includes('manager') || roleNames.includes('staff'))) {
+            // Special case: owner role can access role management
+            return next();
+        }
+
+        // Check if user's role name matches one of the required roles
+        if (!roleNames.includes(req.userRole.roleName)) {
             return errorResponse(
                 res,
-                `Access denied. This action requires ${roles.join(' or ')} role. Your role: ${req.user.role}`,
+                `Access denied. This action requires ${roleNames.join(' or ')} role. Your role: ${req.userRole.roleName}`,
                 403
             );
         }
@@ -130,20 +163,47 @@ const optionalAuth = async (req, res, next) => {
             const decoded = verifyToken(token);
             const user = await prisma.user.findUnique({
                 where: { id: decoded.id },
-                select: {
-                    id: true,
-                    username: true,
-                    email: true,
-                    phone: true,
-                    role: true,
-                    status: true
+                include: {
+                    userRole: {
+                        include: {
+                            permissions: {
+                                include: {
+                                    permission: true
+                                }
+                            }
+                        }
+                    }
                 }
             });
             
             if (user && user.status === 'active') {
-                req.user = user;
+                const userData = {
+                    id: user.id,
+                    username: user.username,
+                    email: user.email,
+                    phone: user.phone,
+                    status: user.status,
+                    isAdmin: user.isAdmin,
+                    role: user.userRole ? {
+                        id: user.userRole.id,
+                        name: user.userRole.roleName,
+                        description: user.userRole.description
+                    } : null
+                };
+
+                const userPermissions = user.userRole
+                    ? user.userRole.permissions.map(rp => ({
+                          resource: rp.permission.resource,
+                          action: rp.permission.action,
+                          permission: `${rp.permission.resource}.${rp.permission.action}`
+                      }))
+                    : [];
+
+                req.user = userData;
                 req.userId = user.id;
-                req.userRole = user.role;
+                req.isAdmin = user.isAdmin;
+                req.userRole = user.userRole;
+                req.userPermissions = userPermissions;
             }
         }
 

@@ -5,34 +5,25 @@
 const express = require('express');
 const router = express.Router();
 const {
-    createHostel,
-    getAllHostels,
-    getHostelById,
-    updateHostel,
-    deleteHostel,
-    getHostelStats
+  createHostel,
+  getAllHostels,
+  getHostelById,
+  updateHostel,
+  deleteHostel,
+  getHostelStats,
+  getHostelArchitecture,
 } = require('../../../controllers/api/hostel.controller');
 const { authenticate, authorize } = require('../../../middleware/auth.middleware');
 
-// All routes require authentication and admin/manager role
+router.use(authenticate, authorize('admin', 'manager'));
 
-// Create hostel (Admin & Manager only)
-router.post('/hostel', authenticate, authorize('admin', 'manager', 'owner'), createHostel);
-
-// Get all hostels (Admin & Manager only)
-router.get('/hostels', authenticate, authorize('admin', 'manager', 'owner'), getAllHostels);
-
-// Get hostel by ID (Admin & Manager only)
-router.get('/hostel/:id', authenticate, authorize('admin', 'manager', 'owner'), getHostelById);
-
-// Get hostel statistics (Admin & Manager only)
-router.get('/hostel/:id/stats', authenticate, authorize('admin', 'manager', 'owner'), getHostelStats);
-
-// Update hostel (Admin & Manager only)
-router.put('/hostel/:id', authenticate, authorize('admin', 'manager', 'owner'), updateHostel);
-
-// Delete hostel (Admin only)
-router.delete('/hostel/:id', authenticate, authorize('admin', 'owner'), deleteHostel);
+router.post('/hostels', createHostel);
+router.get('/hostels', getAllHostels);
+router.get('/hostels/:id', getHostelById);
+router.put('/hostels/:id', updateHostel);
+router.get('/hostels/:id/stats', getHostelStats);
+router.get('/hostels/:id/architecture', getHostelArchitecture);
+router.delete('/hostels/:id', authorize('admin'), deleteHostel);
 
 module.exports = router;
 

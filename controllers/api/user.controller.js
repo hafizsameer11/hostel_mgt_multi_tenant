@@ -38,14 +38,22 @@ const registerUser = async (req, res) => {
         // Hash password
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // Create user
+        // Create user (default role will be set via userRoleId if needed)
         const user = await prisma.user.create({
             data: {
                 username,
                 email,
                 phone,
-                password: hashedPassword,
-                role: 'user'
+                password: hashedPassword
+            },
+            include: {
+                userRole: {
+                    select: {
+                        id: true,
+                        roleName: true,
+                        description: true
+                    }
+                }
             }
         });
 
@@ -55,7 +63,7 @@ const registerUser = async (req, res) => {
             username: user.username,
             email: user.email,
             phone: user.phone,
-            role: user.role,
+            role: user.userRole,
             status: user.status,
             createdAt: user.createdAt
         };
@@ -100,11 +108,24 @@ const loginUser = async (req, res) => {
             return errorResponse(res, "Invalid email or password", 401);
         }
 
+        // Get user with role information
+        const userWithRole = await prisma.user.findUnique({
+            where: { id: user.id },
+            include: {
+                userRole: {
+                    select: {
+                        id: true,
+                        roleName: true,
+                        description: true
+                    }
+                }
+            }
+        });
+
         // Generate JWT token
         const tokenPayload = {
             id: user.id,
-            email: user.email,
-            role: user.role
+            email: user.email
         };
         
         const token = generateToken(tokenPayload);
@@ -118,7 +139,7 @@ const loginUser = async (req, res) => {
             username: user.username,
             email: user.email,
             phone: user.phone,
-            role: user.role,
+            role: userWithRole.userRole,
             status: user.status,
             createdAt: user.createdAt,
             token: token // Also return token in response for mobile apps
@@ -142,10 +163,17 @@ const getAllUsers = async (req, res) => {
                 username: true,
                 email: true,
                 phone: true,
-                role: true,
+                userRoleId: true,
                 status: true,
                 createdAt: true,
-                updatedAt: true
+                updatedAt: true,
+                userRole: {
+                    select: {
+                        id: true,
+                        roleName: true,
+                        description: true
+                    }
+                }
             },
             orderBy: { createdAt: 'desc' }
         });
@@ -177,10 +205,17 @@ const getUserById = async (req, res) => {
                 username: true,
                 email: true,
                 phone: true,
-                role: true,
+                userRoleId: true,
                 status: true,
                 createdAt: true,
-                updatedAt: true
+                updatedAt: true,
+                userRole: {
+                    select: {
+                        id: true,
+                        roleName: true,
+                        description: true
+                    }
+                }
             }
         });
 
@@ -201,7 +236,7 @@ const getUserById = async (req, res) => {
 const updateUser = async (req, res) => {
     try {
         const { id } = req.params;
-        const { username, email, phone, password, role, status } = req.body;
+        const { username, email, phone, password, userRoleId, status } = req.body;
 
         // Validate ID is a valid number
         const userId = parseInt(id);
@@ -223,8 +258,17 @@ const updateUser = async (req, res) => {
 
         if (username) updateData.username = username;
         if (phone) updateData.phone = phone;
-        if (role && ['admin', 'manager', 'staff', 'user'].includes(role)) {
-            updateData.role = role;
+        if (userRoleId !== undefined) {
+            // Validate role exists if provided
+            if (userRoleId !== null) {
+                const roleExists = await prisma.role.findUnique({
+                    where: { id: parseInt(userRoleId) }
+                });
+                if (!roleExists) {
+                    return errorResponse(res, "Role not found", 400);
+                }
+            }
+            updateData.userRoleId = userRoleId ? parseInt(userRoleId) : null;
         }
         if (status && ['active', 'inactive'].includes(status)) {
             updateData.status = status;
@@ -265,9 +309,16 @@ const updateUser = async (req, res) => {
                 username: true,
                 email: true,
                 phone: true,
-                role: true,
+                userRoleId: true,
                 status: true,
-                updatedAt: true
+                updatedAt: true,
+                userRole: {
+                    select: {
+                        id: true,
+                        roleName: true,
+                        description: true
+                    }
+                }
             }
         });
 

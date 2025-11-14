@@ -1,9 +1,44 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 const bcrypt = require('bcrypt');
+const { successResponse, errorResponse } = require('../../Helper/helper');
+
+const paged = (page = 1, limit = 12) => {
+    const p = parseInt(page, 10) || 1;
+    const l = Math.min(parseInt(limit, 10) || 12, 100);
+    return { skip: (p - 1) * l, take: l, page: p, limit: l };
+};
+
+const clamp0to5 = (n) => {
+    const x = Number(n);
+    if (Number.isNaN(x)) return 0;
+    return Math.max(0, Math.min(5, x));
+};
+
+const overallFrom = (...vals) => {
+    const arr = vals.map(clamp0to5);
+    const sum = arr.reduce((a, b) => a + b, 0);
+    return +(sum / arr.length).toFixed(1);
+};
+
+const parseDocumentsList = (value) => {
+    if (!value) return [];
+    if (Array.isArray(value)) return value;
+    try {
+        const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [];
+    }
+};
+
+const buildUploads = (profilePhoto, docs) => ({
+    profilePhoto: profilePhoto || null,
+    documents: parseDocumentsList(docs),
+});
 
 // =================== CREATE EMPLOYEE ===================
-exports.createEmployee = async (req, res) => {
+const createEmployee = async (req, res) => {
     try {
         const {
             // User data
@@ -130,7 +165,7 @@ exports.createEmployee = async (req, res) => {
 };
 
 // =================== GET ALL EMPLOYEES ===================
-exports.getAllEmployees = async (req, res) => {
+const getAllEmployees = async (req, res) => {
     try {
         const {
             status,
@@ -215,7 +250,7 @@ exports.getAllEmployees = async (req, res) => {
 };
 
 // =================== GET EMPLOYEE BY ID ===================
-exports.getEmployeeById = async (req, res) => {
+const getEmployeeById = async (req, res) => {
     try {
         const { id } = req.params;
 
@@ -260,7 +295,7 @@ exports.getEmployeeById = async (req, res) => {
 };
 
 // =================== GET EMPLOYEE BY USER ID ===================
-exports.getEmployeeByUserId = async (req, res) => {
+const getEmployeeByUserId = async (req, res) => {
     try {
         const { userId } = req.params;
 
@@ -304,7 +339,7 @@ exports.getEmployeeByUserId = async (req, res) => {
 };
 
 // =================== UPDATE EMPLOYEE ===================
-exports.updateEmployee = async (req, res) => {
+const updateEmployee = async (req, res) => {
     try {
         const { id } = req.params;
         const {
@@ -422,7 +457,7 @@ exports.updateEmployee = async (req, res) => {
 };
 
 // =================== UPDATE EMPLOYEE SALARY ===================
-exports.updateEmployeeSalary = async (req, res) => {
+const updateEmployeeSalary = async (req, res) => {
     try {
         const { id } = req.params;
         const { salary, salaryType, effectiveDate, notes } = req.body;
@@ -470,7 +505,7 @@ exports.updateEmployeeSalary = async (req, res) => {
 };
 
 // =================== UPDATE EMPLOYEE STATUS ===================
-exports.updateEmployeeStatus = async (req, res) => {
+const updateEmployeeStatus = async (req, res) => {
     try {
         const { id } = req.params;
         const { status, terminationDate, notes } = req.body;
@@ -528,7 +563,7 @@ exports.updateEmployeeStatus = async (req, res) => {
 };
 
 // =================== DELETE EMPLOYEE ===================
-exports.deleteEmployee = async (req, res) => {
+const deleteEmployee = async (req, res) => {
     try {
         const { id } = req.params;
 
@@ -574,7 +609,7 @@ exports.deleteEmployee = async (req, res) => {
 };
 
 // =================== GET EMPLOYEE STATISTICS ===================
-exports.getEmployeeStatistics = async (req, res) => {
+const getEmployeeStatistics = async (req, res) => {
     try {
         const [
             totalEmployees,
@@ -640,5 +675,287 @@ exports.getEmployeeStatistics = async (req, res) => {
             error: error.message
         });
     }
+};
+
+const listEmployees = async (req, res) => {
+    try {
+        const { status, search, page, limit } = req.query;
+        const { skip, take } = paged(page, limit);
+
+        const where = {
+            ...(status ? { status } : {}),
+            ...(search
+                ? {
+                    OR: [
+                        { user: { name: { contains: search, mode: 'insensitive' } } },
+                        { user: { username: { contains: search, mode: 'insensitive' } } },
+                        { user: { email: { contains: search, mode: 'insensitive' } } },
+                        { user: { phone: { contains: search } } },
+                        { employeeCode: { contains: search, mode: 'insensitive' } },
+                        { designation: { contains: search, mode: 'insensitive' } },
+                        { department: { contains: search, mode: 'insensitive' } },
+                    ],
+                }
+                : {}),
+        };
+
+        const [rows, total] = await Promise.all([
+            prisma.employee.findMany({
+                where,
+                orderBy: { createdAt: 'desc' },
+                skip,
+                take,
+                include: {
+                    user: {
+                        select: {
+                            id: true,
+                            username: true,
+                            name: true,
+                            email: true,
+                            phone: true,
+                            role: true,
+                            status: true,
+                        },
+                    },
+                },
+            }),
+            prisma.employee.count({ where }),
+        ]);
+
+        const hostelIds = Array.from(
+            new Set(
+                rows
+                    .map((emp) => emp.hostelAssigned)
+                    .filter((id) => typeof id === 'number' && !Number.isNaN(id)),
+            ),
+        );
+
+        const hostels = hostelIds.length
+            ? await prisma.hostel.findMany({
+                where: { id: { in: hostelIds } },
+                select: { id: true, name: true },
+            })
+            : [];
+        const hostelMap = hostels.reduce((acc, hostel) => {
+            acc[hostel.id] = hostel.name;
+            return acc;
+        }, {});
+
+        const cards = rows.map((e) => {
+            const hostelId = e.hostelAssigned ?? null;
+            const hostelName = hostelId ? hostelMap[hostelId] ?? null : null;
+
+            return {
+                id: e.id,
+                userId: e.user?.id ?? null,
+                name: e.user?.name ?? null,
+                username: e.user?.username ?? null,
+                email: e.user?.email ?? null,
+                phone: e.user?.phone ?? null,
+                role: e.role,
+                userRole: e.user?.role ?? null,
+                status: e.status === 'active' ? 'Active' : e.status === 'inactive' ? 'Inactive' : e.status,
+                avatar: e.profilePhoto ?? null,
+                joinedAt: e.joinDate ? e.joinDate.toISOString().split('T')[0] : null,
+                salary: typeof e.salary === 'number' ? e.salary : null,
+                hostel: hostelId
+                    ? {
+                        id: hostelId,
+                        name: hostelName,
+                    }
+                    : null,
+            };
+        });
+
+        return successResponse(res, { items: cards, total });
+    } catch (e) {
+        console.error('List employees error:', e);
+        return errorResponse(res, e.message);
+    }
+};
+
+const employeeDetails = async (req, res) => {
+    try {
+        const id = Number(req.params.id);
+
+        const emp = await prisma.employee.findUnique({
+            where: { id },
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        username: true,
+                        name: true,
+                        email: true,
+                        phone: true,
+                        role: true,
+                        status: true,
+                    },
+                },
+            },
+        });
+        if (!emp) return errorResponse(res, 'Employee not found', 404);
+
+        let hostel = null;
+        if (emp.hostelAssigned) {
+            hostel = await prisma.hostel.findUnique({
+                where: { id: emp.hostelAssigned },
+                select: { id: true, name: true, address: true },
+            });
+        }
+
+        const employeeDocuments = parseDocumentsList(emp.documents);
+
+        let currentScore = null;
+        try {
+            currentScore = await prisma.scoreCard.findFirst({
+                where: {
+                    entityType: 'employee',
+                    entityId: id,
+                },
+                orderBy: { createdAt: 'desc' },
+                select: {
+                    score: true,
+                    criteria: true,
+                    remarks: true,
+                    createdAt: true,
+                },
+            });
+        } catch (err) {
+            console.log('ScoreCard query failed:', err.message);
+        }
+        const formattedStatus =
+            emp.status === 'active' ? 'Active' : emp.status === 'inactive' ? 'Inactive' : emp.status;
+
+        return successResponse(res, {
+            id: emp.id,
+            userId: emp.userId,
+            name: emp.user?.name ?? null,
+            username: emp.user?.username ?? null,
+            email: emp.user?.email ?? null,
+            phone: emp.user?.phone ?? null,
+            role: emp.role,
+            userRole: emp.user?.role ?? null,
+            status: formattedStatus,
+            profilePhoto: emp.profilePhoto ?? null,
+            avatar: emp.profilePhoto ?? null,
+            joinDate: emp.joinDate ? emp.joinDate.toISOString().split('T')[0] : null,
+            terminationDate: emp.terminationDate
+                ? emp.terminationDate.toISOString().split('T')[0]
+                : null,
+            department: emp.department ?? null,
+            designation: emp.designation ?? null,
+            employeeCode: emp.employeeCode ?? null,
+            salary: typeof emp.salary === 'number' ? emp.salary : null,
+            salaryType: emp.salaryType ?? null,
+            workingHours: emp.workingHours ?? null,
+            hostel: hostel
+                ? {
+                    id: hostel.id,
+                    name: hostel.name,
+                    address: hostel.address ?? null,
+                }
+                : emp.hostelAssigned
+                    ? { id: emp.hostelAssigned, name: null, address: null }
+                    : null,
+            bankDetails: emp.bankDetails ?? null,
+            address: emp.address ?? null,
+            emergencyContact: emp.emergencyContact ?? null,
+            qualifications: emp.qualifications ?? null,
+            notes: emp.notes ?? null,
+            documents: employeeDocuments,
+            uploads: buildUploads(emp.profilePhoto, emp.documents),
+            score: currentScore,
+        });
+    } catch (e) {
+        console.error('Employee details error:', e);
+        return errorResponse(res, e.message);
+    }
+};
+
+const getEmployeeCurrentScore = async (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        const score = await prisma.scoreCard.findFirst({
+            where: {
+                entityType: 'employee',
+                entityId: id,
+            },
+            orderBy: { createdAt: 'desc' },
+        });
+        return successResponse(res, score || null);
+    } catch (e) {
+        console.error('Get employee score error:', e);
+        return errorResponse(res, e.message);
+    }
+};
+
+const getEmployeeScoreHistory = async (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        const limitNum = Math.min(parseInt(req.query.limit, 10) || 10, 50);
+        const rows = await prisma.scoreCard.findMany({
+            where: {
+                entityType: 'employee',
+                entityId: id,
+            },
+            orderBy: { createdAt: 'desc' },
+            take: limitNum,
+        });
+        return successResponse(res, rows);
+    } catch (e) {
+        console.error('Get employee score history error:', e);
+        return errorResponse(res, e.message);
+    }
+};
+
+const upsertEmployeeScore = async (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        const { behavior, punctuality, taskQuality, remarks } = req.body;
+
+        const overall = overallFrom(behavior, punctuality, taskQuality);
+        const payload = {
+            entityType: 'employee',
+            entityId: id,
+            score: overall,
+            criteria: JSON.stringify({ behavior, punctuality, taskQuality }),
+            remarks: remarks || null,
+            recordedBy: req.user?.id || null,
+        };
+
+        const row = await prisma.scoreCard.create({ data: payload });
+        return successResponse(
+            res,
+            {
+                ...row,
+                behavior: clamp0to5(behavior),
+                punctuality: clamp0to5(punctuality),
+                taskQuality: clamp0to5(taskQuality),
+                overall,
+            },
+            'Employee score saved',
+        );
+    } catch (e) {
+        console.error('Upsert employee score error:', e);
+        return errorResponse(res, e.message);
+    }
+};
+
+module.exports = {
+    createEmployee,
+    getAllEmployees,
+    getEmployeeById,
+    getEmployeeByUserId,
+    updateEmployee,
+    updateEmployeeSalary,
+    updateEmployeeStatus,
+    deleteEmployee,
+    getEmployeeStatistics,
+    listEmployees,
+    employeeDetails,
+    getEmployeeCurrentScore,
+    getEmployeeScoreHistory,
+    upsertEmployeeScore,
 };
 

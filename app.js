@@ -39,6 +39,8 @@ const vendorsRoute = require("./routes/api/dashboard/vendors.route");
 const alertRoute = require("./routes/api/admin/alert.route");
 const adminVendorRoute = require("./routes/api/admin/vendor.route");
 const hostelRoute = require("./routes/api/admin/hostel.route");
+const roleRoute = require("./routes/api/admin/role.route");
+const permissionRoute = require("./routes/api/admin/permission.route");
 
 // Load environment variables
 dotenv.config();
@@ -86,7 +88,7 @@ app.use("/api", userTransactionRoute);
 app.use("/api/stripe", stripeRoute);
 
 // admin routes
-app.use("/api/admin", dashboardRoute);
+// app.use("/api/admin", dashboardRoute);
 app.use("/api/admin", overviewRoute);
 app.use("/api/admin", tableRoute);
 app.use("/api/admin", dashboardAlertRoute);
@@ -114,6 +116,8 @@ app.use("/api/admin", vendorsRoute);
 app.use("/api/admin", alertRoute);
 app.use("/api/admin", adminVendorRoute);
 app.use("/api/admin", hostelRoute);
+app.use("/api/admin", roleRoute);
+app.use("/api/admin", permissionRoute);
 
 // Start server
 const PORT = process.env.PORT || 3000;

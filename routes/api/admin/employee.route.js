@@ -1,6 +1,16 @@
 const express = require('express');
 const router = express.Router();
-const employeeController = require('../../../controllers/api/employee.controller');
+const {
+  createEmployee,
+  getAllEmployees,
+  getEmployeeById,
+  getEmployeeByUserId,
+  updateEmployee,
+  updateEmployeeSalary,
+  updateEmployeeStatus,
+  deleteEmployee,
+  getEmployeeStatistics,
+} = require('../../../controllers/api/employee.controller');
 const { authenticate, authorize } = require('../../../middleware/auth.middleware');
 
 // =================== EMPLOYEE ROUTES ===================
@@ -16,7 +26,7 @@ router.use(authorize('admin', 'manager'));
  * @access  Admin, Manager
  * @body    { name, email, phone, password, role, employeeCode, department, designation, salary, salaryType, joinDate, ... }
  */
-router.post('/employee',authenticate, authorize('admin'),  employeeController.createEmployee);
+router.post('/employee', authenticate, authorize('admin'), createEmployee);
 
 /**
  * @route   GET /api/admin/employees
@@ -24,14 +34,14 @@ router.post('/employee',authenticate, authorize('admin'),  employeeController.cr
  * @access  Admin, Manager
  * @query   status, role, department, hostelAssigned, search, page, limit
  */
-router.get('/employees', employeeController.getAllEmployees);
+router.get('/employees', getAllEmployees);
 
 /**
  * @route   GET /api/admin/employees/statistics
  * @desc    Get employee statistics
  * @access  Admin, Manager
  */
-router.get('/employees/statistics', employeeController.getEmployeeStatistics);
+router.get('/employees/statistics', getEmployeeStatistics);
 
 /**
  * @route   GET /api/admin/employees/:id
@@ -39,7 +49,7 @@ router.get('/employees/statistics', employeeController.getEmployeeStatistics);
  * @access  Admin, Manager
  * @params  id - Employee ID
  */
-router.get('/employee/:id', employeeController.getEmployeeById);
+router.get('/employee/:id', getEmployeeById);
 
 /**
  * @route   GET /api/admin/employees/user/:userId
@@ -47,7 +57,7 @@ router.get('/employee/:id', employeeController.getEmployeeById);
  * @access  Admin, Manager
  * @params  userId - User ID
  */
-router.get('/employees/user/:userId', employeeController.getEmployeeByUserId);
+router.get('/employees/user/:userId', getEmployeeByUserId);
 
 /**
  * @route   PUT /api/admin/employees/:id
@@ -56,7 +66,7 @@ router.get('/employees/user/:userId', employeeController.getEmployeeByUserId);
  * @params  id - Employee ID
  * @body    { name, email, phone, role, department, designation, salary, ... }
  */
-router.put('/employee/:id', employeeController.updateEmployee);
+router.put('/employee/:id', updateEmployee);
 
 /**
  * @route   PATCH /api/admin/employees/:id/salary
@@ -65,9 +75,10 @@ router.put('/employee/:id', employeeController.updateEmployee);
  * @params  id - Employee ID
  * @body    { salary, salaryType, effectiveDate, notes }
  */
-router.patch('/employees/:id/salary', 
-    authorize('admin'), // Only admin can update salary
-    employeeController.updateEmployeeSalary
+router.patch(
+  '/employees/:id/salary',
+  authorize('admin'), // Only admin can update salary
+  updateEmployeeSalary,
 );
 
 /**
@@ -77,7 +88,7 @@ router.patch('/employees/:id/salary',
  * @params  id - Employee ID
  * @body    { status, terminationDate, notes }
  */
-router.patch('/employee/:id/status', employeeController.updateEmployeeStatus);
+router.patch('/employee/:id/status', updateEmployeeStatus);
 
 /**
  * @route   DELETE /api/admin/employees/:id
@@ -85,9 +96,10 @@ router.patch('/employee/:id/status', employeeController.updateEmployeeStatus);
  * @access  Admin
  * @params  id - Employee ID
  */
-router.delete('/employee/:id',
-    authorize('admin'), // Only admin can delete
-    employeeController.deleteEmployee
+router.delete(
+  '/employee/:id',
+  authorize('admin'), // Only admin can delete
+  deleteEmployee,
 );
 
 module.exports = router;
