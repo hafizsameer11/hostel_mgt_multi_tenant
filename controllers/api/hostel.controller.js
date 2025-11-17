@@ -58,6 +58,96 @@ const sanitizeCategoryInput = (value) =>
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '_');
 
+/**
+ * Valid type values - must match HostelType enum in schema.prisma
+ * Enum: HostelType { boy, girl, family, mixed }
+ */
+const VALID_TYPES = ['boy', 'girl', 'family', 'mixed'];
+
+/**
+ * Valid category values - must match HostelCategory enum in schema.prisma
+ * Enum: HostelCategory { luxury, back_pack, home2 }
+ */
+const VALID_CATEGORIES = ['luxury', 'back_pack', 'home2'];
+// Category mapping: user input -> schema key
+const CATEGORY_MAPPING = {
+  'luxury': 'luxury_stage',
+  'luxury_stage': 'luxury_stage',
+  'back_pack': 'back_pack',
+  'backpack': 'back_pack',
+  'home2': 'home2',
+  'home_2': 'home2',
+};
+
+// Validate and normalize type array
+const validateAndNormalizeType = (typeInput) => {
+  if (!typeInput) return null;
+  
+  // Handle both array and single value
+  const types = Array.isArray(typeInput) ? typeInput : [typeInput];
+  
+  // Normalize and validate each type
+  const normalizedTypes = types
+    .map(t => {
+      if (!t) return null;
+      const normalized = t.toString().trim().toLowerCase();
+      return normalized;
+    })
+    .filter(t => t && VALID_TYPES.includes(t));
+  
+  // Remove duplicates
+  const uniqueTypes = [...new Set(normalizedTypes)];
+  
+  return uniqueTypes.length > 0 ? uniqueTypes : null;
+};
+
+// Validate and normalize category array
+const validateAndNormalizeCategory = (categoryInput) => {
+  if (!categoryInput) return null;
+  
+  // Handle both array and single value
+  const categories = Array.isArray(categoryInput) ? categoryInput : [categoryInput];
+  
+  // Normalize and validate each category
+  const normalizedCategories = categories
+    .map(c => {
+      if (!c) return null;
+      const sanitized = sanitizeCategoryInput(c);
+      
+      // Check aliases first
+      if (CATEGORY_ALIASES[sanitized]) {
+        const mappedKey = CATEGORY_ALIASES[sanitized];
+        // Map to user-facing category name
+        if (mappedKey === 'luxury_stage') return 'luxury';
+        if (mappedKey === 'back_pack') return 'back_pack';
+        if (mappedKey === 'home2') return 'home2';
+        return null;
+      }
+      
+      // Check direct match in config
+      if (HOSTEL_CATEGORY_CONFIG[sanitized]) {
+        // Map to user-facing category name
+        if (sanitized === 'luxury_stage') return 'luxury';
+        if (sanitized === 'back_pack') return 'back_pack';
+        if (sanitized === 'home2') return 'home2';
+        return null;
+      }
+      
+      // Check direct match in valid categories
+      if (VALID_CATEGORIES.includes(sanitized)) {
+        return sanitized;
+      }
+      
+      return null;
+    })
+    .filter(c => c && VALID_CATEGORIES.includes(c));
+  
+  // Remove duplicates
+  const uniqueCategories = [...new Set(normalizedCategories)];
+  
+  return uniqueCategories.length > 0 ? uniqueCategories : null;
+};
+
 const resolveCategoryKey = (value) => {
   if (value === undefined || value === null || value === '') return null;
   const sanitized = sanitizeCategoryInput(value);
@@ -70,15 +160,46 @@ const resolveCategoryKey = (value) => {
   return null;
 };
 
-const buildCategoryMeta = (key, currentMeta) => {
-  if (!key) return null;
-  const config = HOSTEL_CATEGORY_CONFIG[key];
-  if (!config) return currentMeta || null;
+const buildCategoryMeta = (categories, currentMeta) => {
+  // Handle both array and single value for backward compatibility
+  const categoryArray = Array.isArray(categories) ? categories : (categories ? [categories] : []);
+  
+  if (categoryArray.length === 0) return currentMeta || null;
+  
+  // Map user-facing category names to config keys
+  const categoryKeyMap = {
+    'luxury': 'luxury_stage',
+    'back_pack': 'back_pack',
+    'home2': 'home2',
+  };
+  
+  // Build meta for multiple categories
+  const metaSegments = [];
+  const metaLabels = [];
+  const metaDescriptions = [];
+  
+  categoryArray.forEach(userCategory => {
+    const configKey = categoryKeyMap[userCategory];
+    const config = configKey ? HOSTEL_CATEGORY_CONFIG[configKey] : null;
+    if (config) {
+      metaLabels.push(config.label);
+      metaDescriptions.push(config.description);
+      if (Array.isArray(config.segments)) {
+        metaSegments.push(...config.segments);
+      }
+    }
+  });
+  
+  // Remove duplicate segments
+  const uniqueSegments = metaSegments.filter((segment, index, self) =>
+    index === self.findIndex(s => s.key === segment.key)
+  );
+  
   return {
-    key,
-    label: config.label,
-    description: config.description,
-    segments: config.segments,
+    keys: categoryArray,
+    labels: metaLabels,
+    descriptions: metaDescriptions,
+    segments: uniqueSegments,
   };
 };
 
@@ -191,7 +312,8 @@ const formatManager = (manager) => {
   if (!manager) return null;
   return {
     id: manager.id,
-    name: manager.name,
+    name: manager.username || manager.email || 'N/A',
+    username: manager.username,
     email: manager.email,
     phone: manager.phone,
   };
@@ -212,7 +334,7 @@ const formatHostelListItem = (hostel, ownerDirectory) => {
     city: address?.city || null,
     floors: totalFloors,
     roomsPerFloor,
-    manager: hostel.manager?.name || null,
+    manager: hostel.manager?.username || hostel.manager?.email || null,
     managerId: hostel.manager?.id || null,
     owner,
     ownerId: owner?.userId || null,
@@ -455,6 +577,19 @@ const getHostelArchitecture = async (req, res) => {
 
 const createHostel = async (req, res) => {
   try {
+    // Check if user is admin or owner - only these roles can create hostels
+    const userRoleName = req.userRole?.roleName?.toLowerCase();
+    const isAdmin = req.isAdmin === true;
+    const isOwner = userRoleName === 'owner';
+
+    if (!isAdmin && !isOwner) {
+      return errorResponse(
+        res,
+        'Access denied. Only admin and owner roles can create hostels.',
+        403
+      );
+    }
+
     const {
       name,
       address,
@@ -462,10 +597,31 @@ const createHostel = async (req, res) => {
       amenities,
       contactInfo,
       operatingHours,
-      images,
-      ownerId,
+      images, // Can be JSON array or will be built from uploaded files
+      ownerId, // This is optional - will be auto-set from auth if owner
+      type,
       category,
     } = req.body;
+
+    // Handle uploaded image files
+    let imagesArray = [];
+    if (req.files && req.files.length > 0) {
+      imagesArray = req.files.map(file => ({
+        url: `/uploads/hostels/${file.filename}`,
+        caption: file.originalname || null
+      }));
+    } else if (images) {
+      // If images provided as JSON string or array
+      if (typeof images === 'string') {
+        try {
+          imagesArray = JSON.parse(images);
+        } catch {
+          imagesArray = Array.isArray(images) ? images : [];
+        }
+      } else if (Array.isArray(images)) {
+        imagesArray = images;
+      }
+    }
 
     if (!name || !address?.city || !address?.country) {
       return errorResponse(res, 'Name, city, and country are required', 400);
@@ -479,37 +635,89 @@ const createHostel = async (req, res) => {
       return errorResponse(res, 'Hostel already exists', 400);
     }
 
-    const categoryKey = resolveCategoryKey(category);
-    if (category && !categoryKey) {
+    // Validate and normalize type
+    const normalizedType = validateAndNormalizeType(type);
+    if (type && !normalizedType) {
       return errorResponse(
         res,
-        'Invalid category supplied. Allowed categories: home2, back pack, luxury stage',
+        'Invalid type supplied. Allowed types: boy, girl, family, mixed',
+        400,
+      );
+    }
+
+    // Validate and normalize category
+    const normalizedCategory = validateAndNormalizeCategory(category);
+    if (category && !normalizedCategory) {
+      return errorResponse(
+        res,
+        'Invalid category supplied. Allowed categories: luxury, back_pack, home2',
         400,
       );
     }
 
     let ownerIdToUse = null;
-    if (req.userRole === 'owner') {
-      ownerIdToUse = req.userId;
-    } else if (ownerId !== undefined && ownerId !== null && ownerId !== '') {
+    let managedByUserId = null;
+
+    // If logged-in user is owner, automatically use their ownerId
+    if (isOwner) {
+      // Find the Owner record by userId
+      let ownerProfile = await prisma.owner.findFirst({
+        where: { userId: req.userId },
+        select: { id: true },
+      });
+
+      // If owner profile doesn't exist, create it automatically
+      if (!ownerProfile) {
+        const user = await prisma.user.findUnique({
+          where: { id: req.userId },
+          select: { username: true, email: true, phone: true },
+        });
+
+        if (user) {
+          ownerProfile = await prisma.owner.create({
+            data: {
+              userId: req.userId,
+              name: user.username || 'Owner',
+              status: 'active',
+            },
+            select: { id: true },
+          });
+        }
+      }
+
+      if (ownerProfile) {
+        ownerIdToUse = ownerProfile.id;
+      } else {
+        return errorResponse(res, 'Owner profile not found. Please contact support.', 404);
+      }
+    }
+    // If admin is creating and ownerId is provided in request, use it
+    else if (isAdmin && ownerId !== undefined && ownerId !== null && ownerId !== '') {
       const numericOwnerId = Number(ownerId);
       if (!Number.isFinite(numericOwnerId)) {
         return errorResponse(res, 'Invalid owner id', 400);
       }
-      const ownerUser = await prisma.user.findUnique({
+      
+      // Verify the owner exists
+      const ownerProfile = await prisma.owner.findUnique({
         where: { id: numericOwnerId },
-        select: { id: true, role: true },
+        select: { id: true },
       });
-      if (!ownerUser) {
+      
+      if (!ownerProfile) {
         return errorResponse(res, 'Owner not found', 404);
       }
-      if (ownerUser.role !== 'owner') {
-        return errorResponse(res, 'Provided user is not registered as an owner', 400);
-      }
-      ownerIdToUse = ownerUser.id;
+      
+      ownerIdToUse = ownerProfile.id;
+      // Admin creating hostel - set managedBy to admin's userId
+      managedByUserId = req.userId;
+    }
+    // If admin is creating without ownerId, set managedBy to admin's userId
+    else if (isAdmin) {
+      managedByUserId = req.userId;
     }
 
-    const categoryMeta = buildCategoryMeta(categoryKey);
+    const categoryMeta = buildCategoryMeta(normalizedCategory);
 
     const hostel = await prisma.hostel.create({
       data: {
@@ -522,6 +730,7 @@ const createHostel = async (req, res) => {
           zipCode: address.zipCode || null,
         },
         description: description || null,
+        type: normalizedType,
         amenities: amenities || [],
         contactInfo: contactInfo
           ? {
@@ -536,14 +745,14 @@ const createHostel = async (req, res) => {
               checkOut: operatingHours.checkOut || '11:00 AM',
             }
           : null,
-        images: images || [],
-        managedBy: req.userRole === 'manager' ? req.userId : null,
+        images: imagesArray,
+        managedBy: managedByUserId,
         ownerId: ownerIdToUse,
-        category: categoryKey,
+        category: normalizedCategory,
         categoryMeta: categoryMeta,
       },
       include: {
-        manager: { select: { id: true, name: true, email: true, phone: true } },
+        manager: { select: { id: true, username: true, email: true, phone: true } },
       },
     });
 
@@ -641,7 +850,7 @@ const getHostelById = async (req, res) => {
     const hostel = await prisma.hostel.findFirst({
       where: { id: hostelId, ...buildHostelAccessFilter(req) },
       include: {
-        manager: { select: { id: true, name: true, email: true, phone: true } },
+        manager: { select: { id: true, username: true, email: true, phone: true } },
       },
     });
 
@@ -707,19 +916,91 @@ const updateHostel = async (req, res) => {
         checkOut: updates.operatingHours.checkOut || null,
       };
     }
-    if (updates.images) updateData.images = updates.images;
+    // Handle images update - support both file uploads and JSON array
+    if (updates.images !== undefined || (req.files && req.files.length > 0)) {
+      let imagesArray = [];
+      
+      // Get existing images from database if we need to merge
+      const existingHostel = await prisma.hostel.findUnique({
+        where: { id: hostelId },
+        select: { images: true }
+      });
+      const existingImages = existingHostel?.images 
+        ? (Array.isArray(existingHostel.images) ? existingHostel.images : [])
+        : [];
+      
+      // Process uploaded files first
+      if (req.files && req.files.length > 0) {
+        const uploadedImages = req.files.map(file => ({
+          url: `/uploads/hostels/${file.filename}`,
+          caption: file.originalname || null
+        }));
+        imagesArray = uploadedImages;
+      }
+      
+      // If images provided in body, handle accordingly
+      if (updates.images !== undefined) {
+        if (updates.images === null || updates.images === '') {
+          // Explicitly set to empty array (clear all images)
+          imagesArray = [];
+        } else if (typeof updates.images === 'string') {
+          try {
+            const parsedImages = JSON.parse(updates.images);
+            if (Array.isArray(parsedImages)) {
+              // If files uploaded, merge uploaded with parsed; otherwise use parsed (replaces existing)
+              imagesArray = req.files && req.files.length > 0 
+                ? [...imagesArray, ...parsedImages] 
+                : parsedImages;
+            }
+          } catch {
+            // Invalid JSON, use uploaded files only
+            if (!req.files || req.files.length === 0) {
+              // No files and invalid JSON - don't update images
+              return errorResponse(res, 'Invalid images format. Expected JSON array or file uploads.', 400);
+            }
+          }
+        } else if (Array.isArray(updates.images)) {
+          // If files uploaded, merge uploaded with body array; otherwise use body array (replaces existing)
+          imagesArray = req.files && req.files.length > 0 
+            ? [...imagesArray, ...updates.images] 
+            : updates.images;
+        }
+      } else if (req.files && req.files.length > 0) {
+        // Only files uploaded, no body images - merge with existing images
+        imagesArray = [...existingImages, ...imagesArray];
+      }
+      
+      // Only update if we have a valid images array or explicit empty array
+      if (updates.images !== undefined || (req.files && req.files.length > 0)) {
+        updateData.images = imagesArray;
+      }
+    }
 
-    if (updates.category !== undefined) {
-      const categoryKey = resolveCategoryKey(updates.category);
-      if (updates.category && !categoryKey) {
+    // Validate and normalize type
+    if (updates.type !== undefined) {
+      const normalizedType = validateAndNormalizeType(updates.type);
+      if (updates.type && !normalizedType) {
         return errorResponse(
           res,
-          'Invalid category supplied. Allowed categories: home2, back pack, luxury stage',
+          'Invalid type supplied. Allowed types: boy, girl, family, mixed',
           400,
         );
       }
-      updateData.category = categoryKey;
-      updateData.categoryMeta = buildCategoryMeta(categoryKey, parseJsonField(updates.categoryMeta));
+      updateData.type = normalizedType;
+    }
+
+    // Validate and normalize category
+    if (updates.category !== undefined) {
+      const normalizedCategory = validateAndNormalizeCategory(updates.category);
+      if (updates.category && !normalizedCategory) {
+        return errorResponse(
+          res,
+          'Invalid category supplied. Allowed categories: luxury, back_pack, home2',
+          400,
+        );
+      }
+      updateData.category = normalizedCategory;
+      updateData.categoryMeta = buildCategoryMeta(normalizedCategory, parseJsonField(updates.categoryMeta));
     }
 
     if (req.userRole !== 'owner' && updates.ownerId !== undefined) {
@@ -748,7 +1029,7 @@ const updateHostel = async (req, res) => {
       where: { id: hostelId },
       data: updateData,
       include: {
-        manager: { select: { id: true, name: true, email: true, phone: true } },
+        manager: { select: { id: true, username: true, email: true, phone: true } },
       },
     });
 
@@ -908,6 +1189,29 @@ const getHostelStats = async (req, res) => {
   }
 };
 
+// ===================================
+// GET HOSTEL CATEGORIES
+// ===================================
+const getHostelCategories = async (req, res) => {
+  try {
+    // Return the available hostel categories with their configurations
+    const categories = Object.keys(HOSTEL_CATEGORY_CONFIG).map(key => {
+      const config = HOSTEL_CATEGORY_CONFIG[key];
+      return {
+        key: key === 'luxury_stage' ? 'luxury' : key,
+        label: config.label,
+        description: config.description,
+        segments: config.segments
+      };
+    });
+
+    return successResponse(res, categories, 'Hostel categories retrieved successfully');
+  } catch (err) {
+    console.error('Get Hostel Categories Error:', err);
+    return errorResponse(res, err.message || 'Failed to retrieve hostel categories', 500);
+  }
+};
+
 module.exports = {
   createHostel,
   getAllHostels,
@@ -916,4 +1220,5 @@ module.exports = {
   deleteHostel,
   getHostelStats,
   getHostelArchitecture,
+  getHostelCategories,
 };

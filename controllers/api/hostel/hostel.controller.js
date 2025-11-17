@@ -75,7 +75,7 @@ const getAllHostels = async (req, res) => {
           manager: {
             select: {
               id: true,
-              name: true,
+              username: true,
               email: true,
               phone: true,
             },
@@ -116,7 +116,7 @@ const getAllHostels = async (req, res) => {
         city: address?.city || null,
         floors: totalFloors,
         roomsPerFloor: roomsPerFloor,
-        manager: hostel.manager?.name || null,
+        manager: hostel.manager?.username || hostel.manager?.email || null,
         managerId: hostel.manager?.id || null,
         phone: phone,
         status: hostel.status,
@@ -174,7 +174,7 @@ const getHostelById = async (req, res) => {
         manager: {
           select: {
             id: true,
-            name: true,
+            username: true,
             email: true,
             phone: true,
           },
@@ -219,11 +219,11 @@ const getHostelById = async (req, res) => {
       city: address?.city || null,
       manager: hostel.manager ? {
         id: hostel.manager.id,
-        name: hostel.manager.name,
+        username: hostel.manager.username,
         email: hostel.manager.email,
         phone: hostel.manager.phone,
       } : null,
-      managerName: hostel.manager?.name || null,
+      managerName: hostel.manager?.username || hostel.manager?.email || null,
       managerPhone: phone,
       totalFloors: totalFloors,
       roomsPerFloor: roomsPerFloor,
@@ -449,14 +449,14 @@ const createHostel = async (req, res) => {
         manager: {
           select: {
             id: true,
-            name: true,
+            username: true,
             email: true,
           },
         },
         owner: {
           select: {
             id: true,
-            name: true,
+            username: true,
             email: true,
           },
         },
@@ -553,13 +553,13 @@ const updateHostel = async (req, res) => {
       include: {
         manager: {
           select: {
-            name: true,
+            username: true,
             email: true,
           },
         },
         owner: {
           select: {
-            name: true,
+            username: true,
             email: true,
           },
         },

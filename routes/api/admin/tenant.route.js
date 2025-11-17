@@ -16,7 +16,12 @@ const {
     deleteTenant,
     getTenantPaymentHistory,
     getTenantFinancialSummary,
-    getActiveTenants
+    getActiveTenants,
+    listTenants,
+    tenantDetails,
+    getTenantCurrentScore,
+    getTenantScoreHistory,
+    upsertTenantScore
 } = require('../../../controllers/api/tenant.controller');
 
 const { authenticate, authorize } = require('../../../middleware/auth.middleware');
@@ -74,6 +79,9 @@ router.post(
 // Get all tenants (paginated + filter)
 router.get('/tenant', authenticate, authorize('admin', 'manager', 'owner'), getAllTenants);
 
+// List tenants (alternative endpoint)
+router.get('/tenants', authenticate, authorize('admin', 'manager', 'owner'), listTenants);
+
 // Get active tenants
 router.get('/tenants/active', authenticate, authorize('admin', 'manager', 'owner'), getActiveTenants);
 
@@ -82,6 +90,15 @@ router.get('/tenant/:id/payments', authenticate, authorize('admin', 'manager', '
 
 // Get tenant financial summary
 router.get('/tenant/:id/financial-summary', authenticate, authorize('admin', 'manager', 'owner'), getTenantFinancialSummary);
+
+// Get tenant current score
+router.get('/tenant/:id/score', authenticate, authorize('admin', 'manager', 'owner'), getTenantCurrentScore);
+
+// Get tenant score history
+router.get('/tenant/:id/score/history', authenticate, authorize('admin', 'manager', 'owner'), getTenantScoreHistory);
+
+// Get tenant details (alternative endpoint)
+router.get('/tenant/:id/details', authenticate, authorize('admin', 'manager', 'owner'), tenantDetails);
 
 // Get tenant by ID
 router.get('/tenant/:id', authenticate, authorize('admin', 'manager', 'owner'), getTenantById);
@@ -97,6 +114,9 @@ router.put(
   ]),
   updateTenant
 );
+
+// Upsert tenant score
+router.post('/tenant/:id/score', authenticate, authorize('admin', 'manager', 'owner'), upsertTenantScore);
 
 // Delete tenant
 router.delete('/tenant/:id', authenticate, authorize('admin', 'owner'), deleteTenant);

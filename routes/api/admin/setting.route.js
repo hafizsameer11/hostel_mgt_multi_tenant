@@ -7,6 +7,12 @@ const {
 } = require("../../../middleware/auth.middleware");
 
 // ----- PROFILE (self) -----
+router.get(
+  "/settings/profile/personal-info",
+  authenticate,
+  authorize("admin", "manager"),
+  ctrl.getPersonalInfo
+);
 router.put(
   "/settings/profile/name-email",
   authenticate,
@@ -20,6 +26,28 @@ router.put(
   ctrl.changePassword
 );
 
+// ----- CONTACT INFO -----
+router.put(
+  "/settings/profile/contact",
+  authenticate,
+  authorize("admin", "manager"),
+  ctrl.updateContactInfo
+);
+
+// ----- ADDRESS -----
+router.get(
+  "/settings/profile/address",
+  authenticate,
+  authorize("admin", "manager"),
+  ctrl.getAddress
+);
+router.put(
+  "/settings/profile/address",
+  authenticate,
+  authorize("admin", "manager"),
+  ctrl.updateAddress
+);
+
 // ----- KEY–VALUE SETTINGS -----
 router.get(
   "/settings",
@@ -29,7 +57,47 @@ router.get(
 );
 router.put("/settings", authenticate, authorize("admin"), ctrl.upsertSettings);
 
-// ----- MANAGERS -----
+// ----- HOSTEL INFO -----
+router.get(
+  "/settings/hostel-info",
+  authenticate,
+  authorize("admin", "manager"),
+  ctrl.getHostelInfo
+);
+router.put(
+  "/settings/hostel-info",
+  authenticate,
+  authorize("admin"),
+  ctrl.updateHostelInfo
+);
+
+// ----- USERS MANAGEMENT -----
+router.get(
+  "/settings/users",
+  authenticate,
+  authorize("admin", "manager"),
+  ctrl.listUsers
+);
+router.post(
+  "/settings/users",
+  authenticate,
+  authorize("admin"),
+  ctrl.createUser
+);
+router.put(
+  "/settings/users/:id",
+  authenticate,
+  authorize("admin"),
+  ctrl.updateUser
+);
+router.delete(
+  "/settings/users/:id",
+  authenticate,
+  authorize("admin"),
+  ctrl.deleteUser
+);
+
+// ----- MANAGERS (Legacy - for backward compatibility) -----
 router.post(
   "/settings/manager",
   authenticate,

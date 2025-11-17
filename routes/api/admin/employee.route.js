@@ -1,103 +1,121 @@
+// ===============================
+// Employee Routes (Admin)
+// ===============================
+
 const express = require('express');
+const multer = require("multer");
+const path = require("path");
+const fs = require("fs");
 const router = express.Router();
+
 const {
-  createEmployee,
-  getAllEmployees,
-  getEmployeeById,
-  getEmployeeByUserId,
-  updateEmployee,
-  updateEmployeeSalary,
-  updateEmployeeStatus,
-  deleteEmployee,
-  getEmployeeStatistics,
+    createEmployee,
+    getAllEmployees,
+    getEmployeeById,
+    getEmployeeByUserId,
+    updateEmployee,
+    updateEmployeeSalary,
+    updateEmployeeStatus,
+    deleteEmployee,
+    getEmployeeStatistics,
 } = require('../../../controllers/api/employee.controller');
+
 const { authenticate, authorize } = require('../../../middleware/auth.middleware');
 
-// =================== EMPLOYEE ROUTES ===================
+// ===============================
+// ✅ MULTER CONFIG (profile + multiple documents)
+// ===============================
+const uploadsDir = path.join(__dirname, '../../../uploads/employees');
 
-// All routes require authentication and admin/manager access
-// Apply middleware to all routes
-router.use(authenticate);
-router.use(authorize('admin', 'manager'));
+// Ensure uploads directory exists
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
 
-/**
- * @route   POST /api/admin/employees
- * @desc    Create new employee
- * @access  Admin, Manager
- * @body    { name, email, phone, password, role, employeeCode, department, designation, salary, salaryType, joinDate, ... }
- */
-router.post('/employee', authenticate, authorize('admin'), createEmployee);
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    const base = file.fieldname + '-' + Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, base + ext);
+  }
+});
 
-/**
- * @route   GET /api/admin/employees
- * @desc    Get all employees with filters and pagination
- * @access  Admin, Manager
- * @query   status, role, department, hostelAssigned, search, page, limit
- */
-router.get('/employees', getAllEmployees);
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+  fileFilter: (req, file, cb) => {
+    const allowed = [
+      'image/jpeg', 'image/png', 'image/jpg', 'image/webp',
+      'application/pdf', 'image/heic'
+    ];
+    if (allowed.includes(file.mimetype)) cb(null, true);
+    else cb(new Error('Invalid file type. Allowed: JPG, PNG, WEBP, PDF'));
+  }
+});
 
-/**
- * @route   GET /api/admin/employees/statistics
- * @desc    Get employee statistics
- * @access  Admin, Manager
- */
-router.get('/employees/statistics', getEmployeeStatistics);
+// ===============================
+// ✅ ROUTES (All protected)
+// ===============================
 
-/**
- * @route   GET /api/admin/employees/:id
- * @desc    Get employee by ID
- * @access  Admin, Manager
- * @params  id - Employee ID
- */
-router.get('/employee/:id', getEmployeeById);
+// Create new employee (allow profilePhoto + multiple documents)
+router.post(
+  '/employee',
+  authenticate,
+  authorize('admin'),
+  upload.fields([
+    { name: 'profilePhoto', maxCount: 1 },
+    { name: 'documents', maxCount: 10 }
+  ]),
+  createEmployee
+);
 
-/**
- * @route   GET /api/admin/employees/user/:userId
- * @desc    Get employee by User ID
- * @access  Admin, Manager
- * @params  userId - User ID
- */
-router.get('/employees/user/:userId', getEmployeeByUserId);
+// Get all employees (paginated + filter)
+router.get('/employees', authenticate, authorize('admin', 'manager'), getAllEmployees);
 
-/**
- * @route   PUT /api/admin/employees/:id
- * @desc    Update employee details
- * @access  Admin, Manager
- * @params  id - Employee ID
- * @body    { name, email, phone, role, department, designation, salary, ... }
- */
-router.put('/employee/:id', updateEmployee);
+// Get employee statistics
+router.get('/employees/statistics', authenticate, authorize('admin', 'manager'), getEmployeeStatistics);
 
-/**
- * @route   PATCH /api/admin/employees/:id/salary
- * @desc    Update employee salary
- * @access  Admin
- * @params  id - Employee ID
- * @body    { salary, salaryType, effectiveDate, notes }
- */
+// Get employee by User ID
+router.get('/employees/user/:userId', authenticate, authorize('admin', 'manager'), getEmployeeByUserId);
+
+// Get employee by ID
+router.get('/employee/:id', authenticate, authorize('admin', 'manager'), getEmployeeById);
+
+// Update employee (profile + documents)
+router.put(
+  '/employee/:id',
+  authenticate,
+  authorize('admin', 'manager'),
+  upload.fields([
+    { name: 'profilePhoto', maxCount: 1 },
+    { name: 'documents', maxCount: 10 }
+  ]),
+  updateEmployee
+);
+
+// Update employee salary
 router.patch(
   '/employees/:id/salary',
+  authenticate,
   authorize('admin'), // Only admin can update salary
   updateEmployeeSalary,
 );
 
-/**
- * @route   PATCH /api/admin/employees/:id/status
- * @desc    Update employee status (active, inactive, on_leave, terminated)
- * @access  Admin, Manager
- * @params  id - Employee ID
- * @body    { status, terminationDate, notes }
- */
-router.patch('/employee/:id/status', updateEmployeeStatus);
+// Update employee status (active, inactive, on_leave, terminated)
+router.patch(
+  '/employee/:id/status',
+  authenticate,
+  authorize('admin', 'manager'),
+  updateEmployeeStatus
+);
 
-/**
- * @route   DELETE /api/admin/employees/:id
- * @desc    Delete employee (and associated user)
- * @access  Admin
- * @params  id - Employee ID
- */
+// Delete employee
 router.delete(
   '/employee/:id',
+  authenticate,
   authorize('admin'), // Only admin can delete
   deleteEmployee,
 );

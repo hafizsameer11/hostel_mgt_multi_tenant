@@ -198,6 +198,19 @@ enum CampaignStatus {
   replied
 }
 
+enum HostelType {
+  boys
+  girls
+  family
+  mixed
+}
+
+enum HostelCategory {
+  luxury
+  back_pack
+  home2
+}
+
 // =================== MODELS ===================
 
 model User {
@@ -241,7 +254,8 @@ model Hostel {
   name           String?      @unique @db.VarChar(255)
   address        Json? // { street, city, state, country, zipCode }
   description    String?      @db.Text
-  category       String?      @db.VarChar(100)
+  type           Json? // Array of HostelType enum values: ["boy", "girl", "family", "mixed"]
+  category       Json? // Array of HostelCategory enum values: ["luxury", "back_pack", "home2"]
   categoryMeta   Json? // { label, description, segments }
   totalFloors    Int?         @default(0)
   totalRooms     Int?         @default(0)

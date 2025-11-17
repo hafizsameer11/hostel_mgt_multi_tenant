@@ -1,7 +1,8 @@
 const { prisma } = require('../../../config/db');
 const { successResponse, errorResponse } = require('../../../Helper/helper');
 
-// ---- lightweight cache (uses utils/cache if you added it; otherwise in-memory) ----
+// =================== CACHE HELPERS ===================
+// Lightweight in-memory cache (optional external cache can be wired in)
 let memoryCache = {};
 let setCache = async (k, v, ttl = 600) => (memoryCache[k] = { v, exp: Date.now() + ttl * 1000 });
 let getCache = async (k) => {
@@ -11,22 +12,27 @@ let getCache = async (k) => {
   return hit.v;
 };
 let delCache = async (k) => { delete memoryCache[k]; };
+
+// Try to use external cache if available
 try {
-  // if you created utils/cache.js earlier, we'll use it automatically
-  const wired = require('../../utils/cache'); // { setCache, getCache }
+  const wired = require('../../utils/cache');
   setCache = wired.setCache || setCache;
   getCache = wired.getCache || getCache;
   delCache = wired.delCache || delCache;
-} catch(_) {}
+} catch (_) {
+  // Use in-memory cache if external cache not available
+}
 
+// =================== DATE HELPERS ===================
 const startOfMonth = (y, m) => new Date(y, m - 1, 1, 0, 0, 0, 0);
 const startOfNextMonth = (y, m) => (m === 12 ? new Date(y + 1, 0, 1) : new Date(y, m, 1));
 const prevMonthPair = (y, m) => (m === 1 ? [y - 1, 12] : [y, m - 1]);
 
+// =================== FORMATTING HELPERS ===================
 const DASHBOARD_CURRENCY = process.env.DASHBOARD_CURRENCY || 'USD';
 
 const safeCurrencyFormat = (value) => {
-  if (value === null || value === undefined || Number.isNaN(value)) return '0';
+  if (value === null || value === undefined || Number.isNaN(value)) return '0.00';
   try {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -35,7 +41,6 @@ const safeCurrencyFormat = (value) => {
       maximumFractionDigits: 2
     }).format(Number(value));
   } catch (err) {
-    // Fallback to plain number formatting if currency code is invalid
     return Number(value).toFixed(2);
   }
 };
@@ -75,61 +80,95 @@ const toTitleCase = (value) => {
     .join(' ');
 };
 
-// Invalidate from other controllers when payments/allocations/tenants/vendors change
+// =================== CACHE INVALIDATION ===================
+// Call this from other controllers when payments/allocations/tenants/vendors change
 const invalidateDashboardCache = async (hostelId) => {
   const key = `dash_overview_${hostelId || 'all'}`;
   await delCache(key);
 };
 
+// =================== GET DASHBOARD OVERVIEW ===================
+/**
+ * @route   GET /api/admin/dashboard/overview
+ * @desc    Get comprehensive dashboard overview with statistics
+ * @access  Admin, Manager
+ * @query   hostelId (optional) - Filter by specific hostel
+ * @returns Dashboard data with all statistics from database
+ */
 const getDashboardOverview = async (req, res) => {
   try {
-    const now = new Date();
-    const month = now.getMonth() + 1;
-    const year  = now.getFullYear();
-    const { hostelId } = req.query;               // optional filter
+    // Extract query parameters
+    const { hostelId } = req.query;
     const hostelIdNum = hostelId ? Number(hostelId) : null;
     const cacheKey = `dash_overview_${hostelIdNum || 'all'}`;
 
+    // Check cache first
     const cached = await getCache(cacheKey);
-    if (cached) return successResponse(res, cached, 'Dashboard data (cached)');
+    if (cached) {
+      return successResponse(res, cached, 'Dashboard data (cached)', 200);
+    }
 
+    // Calculate date ranges for current and previous month
+    const now = new Date();
+    const month = now.getMonth() + 1;
+    const year = now.getFullYear();
     const currFrom = startOfMonth(year, month);
-    const currTo   = startOfNextMonth(year, month);
+    const currTo = startOfNextMonth(year, month);
     const [py, pm] = prevMonthPair(year, month);
     const prevFrom = startOfMonth(py, pm);
-    const prevTo   = startOfNextMonth(py, pm);
+    const prevTo = startOfNextMonth(py, pm);
 
-    // ---------- Filters ----------
-    const hostelf = hostelIdNum ? { hostelId: hostelIdNum } : {};
+    // Build hostel filter if provided
+    const hostelFilter = hostelIdNum ? { hostelId: hostelIdNum } : {};
 
-    // 1) OCCUPANCY (prefer Beds; fallback Rooms)
-    const totalUnits = prisma.bed?.count
-      ? await prisma.bed.count(hostelIdNum ? { where: hostelf } : {})
-      : await prisma.room.count(hostelIdNum ? { where: hostelf } : {});
+    // 1) OCCUPANCY RATE - Calculate from database
+    // Count beds through Room -> Hostel relationship (Bed doesn't have direct hostelId)
+    const bedCountWhere = hostelIdNum 
+      ? { room: { hostelId: hostelIdNum } }
+      : {};
+    const roomCountWhere = hostelIdNum 
+      ? { hostelId: hostelIdNum }
+      : {};
+    
+    const [totalBeds, totalRooms] = await Promise.all([
+      prisma.bed.count({ where: bedCountWhere }),
+      prisma.room.count({ where: roomCountWhere })
+    ]);
+    
+    // Prefer Beds count, fallback to Rooms count
+    const totalUnits = totalBeds > 0 ? totalBeds : totalRooms;
 
     const occupiedUnits = await prisma.allocation.count({
-      where: { status: 'active', ...(hostelIdNum && hostelf) }
+      where: { status: 'active', ...(hostelIdNum && hostelFilter) }
     });
 
     const occupancyRate = totalUnits ? (occupiedUnits / totalUnits) * 100 : 0;
 
-    // last month occupancy proxy = new active allocations created last month / totalUnits
+    // Calculate last month occupancy (proxy: new active allocations created last month)
     const lastMonthAllocs = await prisma.allocation.count({
-      where: { createdAt: { gte: prevFrom, lt: prevTo }, ...(hostelIdNum && hostelf) }
+      where: { createdAt: { gte: prevFrom, lt: prevTo }, ...(hostelIdNum && hostelFilter) }
     });
     const lastMonthOcc = totalUnits ? (lastMonthAllocs / totalUnits) * 100 : 0;
     const occGrowth = lastMonthOcc > 0 ? ((occupancyRate - lastMonthOcc) / lastMonthOcc) * 100
                                        : (occupancyRate > 0 ? 100 : 0);
 
-    // 2) MONTHLY REVENUE (current vs last month)
+    // 2) MONTHLY REVENUE - Fetch from Payment table (current vs last month)
     const [currentRevenue, lastRevenue] = await Promise.all([
       prisma.payment.aggregate({
         _sum: { amount: true },
-        where: { status: 'paid', paymentDate: { gte: currFrom, lt: currTo }, ...(hostelIdNum && hostelf) }
+        where: { 
+          status: 'paid', 
+          paymentDate: { gte: currFrom, lt: currTo }, 
+          ...(hostelIdNum && hostelFilter) 
+        }
       }),
       prisma.payment.aggregate({
         _sum: { amount: true },
-        where: { status: 'paid', paymentDate: { gte: prevFrom, lt: prevTo }, ...(hostelIdNum && hostelf) }
+        where: { 
+          status: 'paid', 
+          paymentDate: { gte: prevFrom, lt: prevTo }, 
+          ...(hostelIdNum && hostelFilter) 
+        }
       })
     ]);
     const currRev = currentRevenue._sum.amount || 0;
@@ -167,22 +206,27 @@ const getDashboardOverview = async (req, res) => {
       prisma.alert.count({ 
         where: { 
           status: { in: ['pending', 'in_progress'] },
-          ...(hostelIdNum && hostelf) 
+          ...(hostelIdNum && hostelFilter) 
         } 
       }),
       prisma.alert.count({
         where: {
           status: { in: ['pending', 'in_progress'] },
           createdAt: { lt: currFrom },
-          ...(hostelIdNum && hostelf)
+          ...(hostelIdNum && hostelFilter)
         }
       }),
-      prisma.payment.count({ where: { status: 'pending', ...(hostelIdNum && hostelf) } }),
+      prisma.payment.count({ 
+        where: { 
+          status: 'pending', 
+          ...(hostelIdNum && hostelFilter) 
+        } 
+      }),
       prisma.payment.count({
         where: {
           status: 'pending',
           createdAt: { lt: currFrom },
-          ...(hostelIdNum && hostelf)
+          ...(hostelIdNum && hostelFilter)
         }
       })
     ]);
@@ -193,14 +237,13 @@ const getDashboardOverview = async (req, res) => {
     const alertGrowth   = growth(openAlerts,     lastAlerts);
     const pendingGrowth = growth(pendingPayments, lastPendingPayments);
 
-    // 4) PROFIT & LOSS (last 3 months from Transaction and Payment records)
+    // 4) PROFIT & LOSS - Fetch from Transaction, Payment, and Expense tables (last 3 months)
     const threeMonthsAgo = new Date(now);
     threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
     threeMonthsAgo.setDate(1);
     threeMonthsAgo.setHours(0, 0, 0, 0);
 
-    // Get all transactions and payments for last 3 months
-    // Use both Transaction and Payment tables to ensure we get data
+    // Fetch revenue and expense data from multiple sources
     const [revenueTransactions, revenuePayments, expenseTransactions, expensePayments, expenseRecords] = await Promise.all([
       // Revenue: Rent + Deposit transactions (status = completed)
       prisma.transaction.findMany({
@@ -208,7 +251,7 @@ const getDashboardOverview = async (req, res) => {
           status: 'completed',
           transactionType: { in: ['rent', 'deposit', 'rent_received', 'deposit_received'] },
           createdAt: { gte: threeMonthsAgo },
-          ...(hostelIdNum && hostelf)
+          ...(hostelIdNum && hostelFilter)
         },
         select: {
           amount: true,
@@ -221,7 +264,7 @@ const getDashboardOverview = async (req, res) => {
           status: 'paid',
           paymentType: { in: ['rent', 'deposit'] },
           paymentDate: { gte: threeMonthsAgo },
-          ...(hostelIdNum && hostelf)
+          ...(hostelIdNum && hostelFilter)
         },
         select: {
           amount: true,
@@ -236,7 +279,7 @@ const getDashboardOverview = async (req, res) => {
             in: ['expense', 'maintenance', 'electricity', 'water', 'other', 'expense_paid'] 
           },
           createdAt: { gte: threeMonthsAgo },
-          ...(hostelIdNum && hostelf)
+          ...(hostelIdNum && hostelFilter)
         },
         select: {
           amount: true,
@@ -249,7 +292,7 @@ const getDashboardOverview = async (req, res) => {
           status: 'paid',
           paymentType: { in: ['maintenance', 'electricity', 'water', 'other'] },
           paymentDate: { gte: threeMonthsAgo },
-          ...(hostelIdNum && hostelf)
+          ...(hostelIdNum && hostelFilter)
         },
         select: {
           amount: true,
@@ -260,7 +303,7 @@ const getDashboardOverview = async (req, res) => {
       prisma.expense.findMany({
         where: {
           date: { gte: threeMonthsAgo },
-          ...(hostelIdNum && hostelf)
+          ...(hostelIdNum && hostelFilter)
         },
         select: {
           amount: true,
@@ -345,7 +388,7 @@ const getDashboardOverview = async (req, res) => {
 
     const totalNetIncome = profitLossSeries.reduce((a, r) => a + r.netIncome, 0);
 
-    // 5) EMPLOYEE/USER ACTIVITY LOG (latest 10)
+    // 5) EMPLOYEE/USER ACTIVITY LOG - Fetch latest 10 activities from database
     const activityLog = await prisma.activityLog.findMany({
       take: 10,
       orderBy: { createdAt: 'desc' },
@@ -380,20 +423,27 @@ const getDashboardOverview = async (req, res) => {
       }
     });
 
-    const formattedActivityLog = activityLog.map((entry) => ({
-      id: entry.id,
-      employeeName: entry.user?.username || entry.user?.email || 'System',
-      employeeRole: entry.user?.employeeProfile?.designation
+    // Format activity log entries according to schema
+    const formattedActivityLog = activityLog.map((entry) => {
+      const userName = entry.user?.username || entry.user?.email || 'System';
+      const userRole = entry.user?.employeeProfile?.designation
         || (entry.user?.userRole ? toTitleCase(entry.user.userRole.roleName) : null)
-        || 'Staff',
-      action: entry.action,
-      description: entry.description,
-      hostelName: entry.user?.managedHostels?.[0]?.name || null,
-      timestamp: entry.createdAt
-    }));
+        || 'Staff';
+      const hostelName = entry.user?.managedHostels?.[0]?.name || null;
 
-    // 6) PAYABLE (all paid transactions) & RECEIVABLE (paid Rent/Deposit) payment snapshots
-    // Using Payment table since it has status='paid' and paymentType
+      return {
+        id: entry.id,
+        employeeName: userName,
+        employeeRole: userRole,
+        action: entry.action,
+        description: entry.description || entry.module || null,
+        hostelName: hostelName,
+        timestamp: entry.createdAt
+      };
+    });
+
+    // 6) PAYABLE & RECEIVABLE PAYMENTS - Fetch from Payment table
+    // Payable: All paid transactions | Receivable: Paid Rent/Deposit only
     const [payablePaymentsRaw, receivablePaymentsRaw] = await Promise.all([
       // Payable: All paid transactions (5 most recent) - includes Rent, Deposit, Expense
       prisma.payment.findMany({
@@ -402,7 +452,7 @@ const getDashboardOverview = async (req, res) => {
         where: { 
           status: 'paid',
           paymentType: { in: ['rent', 'deposit', 'maintenance', 'electricity', 'water', 'other'] },
-          ...(hostelIdNum && hostelf) 
+          ...(hostelIdNum && hostelFilter) 
         },
         include: {
           tenant: { select: { id: true, name: true } },
@@ -428,7 +478,7 @@ const getDashboardOverview = async (req, res) => {
         where: { 
           status: 'paid',
           paymentType: { in: ['rent', 'deposit'] },
-          ...(hostelIdNum && hostelf) 
+          ...(hostelIdNum && hostelFilter) 
         },
         include: {
           tenant: { select: { id: true, name: true } },
@@ -458,9 +508,11 @@ const getDashboardOverview = async (req, res) => {
       return {
         id: payment.id,
         date: baseDate,
+        dateFormatted: relativeTimeFromNow(baseDate),
         ref: payment.receiptNumber || `PAY-${String(payment.id).padStart(4, '0')}`,
         type: payment.paymentType || 'rent',
         amount: Number(payment.amount || 0),
+        amountFormatted: safeCurrencyFormat(payment.amount || 0),
         status: payment.status,
         tenantName: payment.tenant?.name || 'N/A',
         hostelName: payment.hostel?.name || null,
@@ -472,8 +524,7 @@ const getDashboardOverview = async (req, res) => {
     const payablePayments = payablePaymentsRaw.map(mapPaymentRow);
     const receivablePayments = receivablePaymentsRaw.map(mapPaymentRow);
 
-    // 7) RECENT BILLS (Expense/Refund with Pending/Overdue status)
-    // Get Expense payments and Refund transactions
+    // 7) RECENT BILLS - Fetch Expense payments and Refund transactions with Pending/Overdue status
     const [expenseBillsRaw, refundBillsRaw] = await Promise.all([
       // Expense payments with Pending/Overdue status
       prisma.payment.findMany({
@@ -482,7 +533,7 @@ const getDashboardOverview = async (req, res) => {
         where: {
           paymentType: { in: ['maintenance', 'electricity', 'water', 'other'] },
           status: { in: ['pending', 'overdue'] },
-          ...(hostelIdNum && hostelf)
+          ...(hostelIdNum && hostelFilter)
         },
         include: {
           tenant: { select: { id: true, name: true } },
@@ -508,7 +559,7 @@ const getDashboardOverview = async (req, res) => {
         where: {
           transactionType: { contains: 'refund' },
           status: { in: ['pending', 'processing'] },
-          ...(hostelIdNum && hostelf)
+          ...(hostelIdNum && hostelFilter)
         },
         include: {
           tenant: { select: { id: true, name: true } },
@@ -539,16 +590,20 @@ const getDashboardOverview = async (req, res) => {
         payment?.allocation?.room?.roomNumber ||
         payment?.booking?.room?.roomNumber ||
         null;
+      const baseDate = payment.paymentDate || payment.createdAt;
       return {
         id: payment.id,
-        date: payment.paymentDate || payment.createdAt,
+        date: baseDate,
+        dateFormatted: relativeTimeFromNow(baseDate),
         ref: payment.receiptNumber || `PAY-${String(payment.id).padStart(4, '0')}`,
         type: payment.paymentType || 'expense',
         amount: Number(payment.amount || 0),
+        amountFormatted: safeCurrencyFormat(payment.amount || 0),
         status: payment.status,
         tenantName: payment.tenant?.name || 'N/A',
         hostelName: payment.hostel?.name || null,
-        description: payment.remarks || null
+        description: payment.remarks || null,
+        property: roomNumber || null
       };
     });
 
@@ -558,16 +613,20 @@ const getDashboardOverview = async (req, res) => {
         transaction?.payment?.allocation?.room?.roomNumber ||
         transaction?.payment?.booking?.room?.roomNumber ||
         null;
+      const baseDate = transaction.createdAt;
       return {
         id: transaction.id,
-        date: transaction.createdAt,
+        date: baseDate,
+        dateFormatted: relativeTimeFromNow(baseDate),
         ref: transaction.orderId || transaction.merchantTxnId || `TXN-${String(transaction.id).padStart(4, '0')}`,
         type: 'refund',
         amount: Number(transaction.amount || 0),
+        amountFormatted: safeCurrencyFormat(transaction.amount || 0),
         status: transaction.status === 'pending' ? 'pending' : transaction.status === 'processing' ? 'pending' : 'overdue',
         tenantName: transaction.tenant?.name || 'N/A',
         hostelName: transaction.hostel?.name || null,
-        description: transaction.responseMessage || null
+        description: transaction.responseMessage || null,
+        property: roomNumber || null
       };
     });
 
@@ -576,13 +635,13 @@ const getDashboardOverview = async (req, res) => {
       .sort((a, b) => new Date(b.date) - new Date(a.date))
       .slice(0, 5);
 
-    // 8) RECENT MAINTENANCE (maintenance alerts/requests)
+    // 8) RECENT MAINTENANCE - Fetch maintenance alerts/requests from Alert table
     const recentMaintenanceRaw = await prisma.alert.findMany({
       take: 5,
       orderBy: { createdAt: 'desc' },
       where: {
         maintenanceType: { not: null },
-        ...(hostelIdNum && hostelf)
+        ...(hostelIdNum && hostelFilter)
       },
       include: {
         tenant: { select: { id: true, name: true } },
@@ -598,16 +657,17 @@ const getDashboardOverview = async (req, res) => {
       unit: alert.room?.roomNumber || null,
       status: alert.status,
       createdAt: alert.createdAt,
+      createdAtFormatted: relativeTimeFromNow(alert.createdAt),
       tenantName: alert.tenant?.name || null,
       hostelName: alert.hostel?.name || null
     }));
 
-    // 9) UNPAID RENT (Rent payments with Pending/Overdue status)
+    // 9) UNPAID RENT - Fetch rent payments with Pending/Overdue status and calculate aging
     const unpaidRentRaw = await prisma.payment.findMany({
       where: {
         paymentType: 'rent',
         status: { in: ['pending', 'overdue'] },
-        ...(hostelIdNum && hostelf)
+        ...(hostelIdNum && hostelFilter)
       },
       include: {
         tenant: { select: { id: true, name: true } },
@@ -649,13 +709,16 @@ const getDashboardOverview = async (req, res) => {
         agingBuckets['91+'].count += 1;
       }
 
+      const baseDate = payment.paymentDate || payment.createdAt;
       return {
         id: payment.id,
         tenantName: payment.tenant?.name || 'N/A',
         amount: amount,
+        amountFormatted: safeCurrencyFormat(amount),
         daysOld: daysOld,
         status: payment.status,
-        date: payment.paymentDate || payment.createdAt,
+        date: baseDate,
+        dateFormatted: relativeTimeFromNow(baseDate),
         hostelName: payment.hostel?.name || null,
         property: payment.allocation?.room?.roomNumber || null
       };
@@ -668,7 +731,7 @@ const getDashboardOverview = async (req, res) => {
       where: {
         paymentType: 'rent',
         status: 'paid',
-        ...(hostelIdNum && hostelf)
+        ...(hostelIdNum && hostelFilter)
       }
     });
 
@@ -687,7 +750,7 @@ const getDashboardOverview = async (req, res) => {
       }
     };
 
-    // 10) CHECK-IN / CHECK-OUT (from Allocation table)
+    // 10) CHECK-IN / CHECK-OUT - Fetch from Allocation table
     const thirtyDaysAgo = new Date(now);
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const thirtyDaysFromNow = new Date(now);
@@ -698,7 +761,7 @@ const getDashboardOverview = async (req, res) => {
       prisma.allocation.count({
         where: {
           checkInDate: { gte: thirtyDaysAgo, lte: now },
-          ...(hostelIdNum && hostelf)
+          ...(hostelIdNum && hostelFilter)
         }
       }),
       // Check-outs in next 30 days
@@ -706,7 +769,7 @@ const getDashboardOverview = async (req, res) => {
         where: {
           expectedCheckOutDate: { gte: now, lte: thirtyDaysFromNow },
           status: 'active',
-          ...(hostelIdNum && hostelf)
+          ...(hostelIdNum && hostelFilter)
         }
       })
     ]);
@@ -839,11 +902,13 @@ const getDashboardOverview = async (req, res) => {
       }
     };
 
-    await setCache(cacheKey, dashboard, 600);  // 10 min
-    return successResponse(res, dashboard, 'Dashboard data fetched successfully');
+    // Cache the result for 10 minutes
+    await setCache(cacheKey, dashboard, 600);
+
+    return successResponse(res, dashboard, 'Dashboard data fetched successfully', 200);
   } catch (err) {
-    console.error('Dashboard Error:', err);
-    return errorResponse(res, err.message);
+    console.error('Dashboard Overview Error:', err);
+    return errorResponse(res, err.message || 'Failed to fetch dashboard data', 500);
   }
 };
 

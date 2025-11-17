@@ -1,6 +1,5 @@
-const { PrismaClient } = require('@prisma/client');
+const { prisma } = require('../../config/db');
 const { successResponse, errorResponse } = require('../../Helper/helper');
-const prisma = new PrismaClient();
 
 /**
  * =====================================================
@@ -19,6 +18,59 @@ const prisma = new PrismaClient();
  * - repairs
  * - purchase_demand
  */
+
+// Helper function to format date as "Mon Day, Year"
+const formatDate = (date) => {
+    if (!date) return null;
+    const d = new Date(date);
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+};
+
+// Helper function to map priority to severity (for frontend display)
+const getSeverity = (priority) => {
+    const priorityMap = {
+        'urgent': 'DANGER',
+        'high': 'WARN',
+        'medium': 'INFO',
+        'low': 'INFO'
+    };
+    return priorityMap[priority] || 'INFO';
+};
+
+// Helper function to map status to display format (open/closed)
+const getStatusDisplay = (status) => {
+    const statusMap = {
+        'pending': 'open',
+        'in_progress': 'open',
+        'resolved': 'closed',
+        'dismissed': 'closed'
+    };
+    return statusMap[status] || 'open';
+};
+
+// Helper function to get user display name
+const getUserDisplayName = (user) => {
+    if (!user) return 'Unassigned';
+    // Use username as display name (can be enhanced to use employee profile name if available)
+    return user.username || user.email || 'Unassigned';
+};
+
+// Helper function to build search clause
+const buildSearchClause = (searchTerm) => {
+    if (!searchTerm) return null;
+    const value = searchTerm.trim();
+    if (!value) return null;
+
+    return {
+        OR: [
+            { title: { contains: value, mode: 'insensitive' } },
+            { description: { contains: value, mode: 'insensitive' } },
+            { tenant: { name: { contains: value, mode: 'insensitive' } } },
+            { tenant: { email: { contains: value, mode: 'insensitive' } } },
+        ],
+    };
+};
 
 /**
  * @route   POST /api/admin/alerts
@@ -99,12 +151,33 @@ const createAlert = async (req, res) => {
                 hostel: { select: { id: true, name: true } },
                 room: { select: { id: true, roomNumber: true } },
                 tenant: { select: { id: true, name: true, phone: true } },
-                assignedUser: { select: { id: true, name: true, email: true } },
-                creator: { select: { id: true, name: true } }
+                assignedUser: { select: { id: true, username: true, email: true } },
+                creator: { select: { id: true, username: true } }
             }
         });
 
-        return successResponse(res, alert, 'Alert created successfully', 201);
+        // Format alert for response
+        const formattedAlert = {
+            id: alert.id,
+            type: alert.type,
+            priority: alert.priority || 'medium',
+            severity: getSeverity(alert.priority || 'medium'),
+            title: alert.title,
+            description: alert.description || '',
+            status: getStatusDisplay(alert.status || 'pending'),
+            rawStatus: alert.status || 'pending',
+            maintenanceType: alert.maintenanceType || null,
+            assignedTo: getUserDisplayName(alert.assignedUser),
+            created: formatDate(alert.createdAt),
+            createdAt: alert.createdAt,
+            hostel: alert.hostel?.name || null,
+            room: alert.room?.roomNumber || null,
+            tenant: alert.tenant?.name || null,
+            amount: alert.amount || null,
+            dueDate: alert.dueDate ? formatDate(alert.dueDate) : null
+        };
+
+        return successResponse(res, formattedAlert, 'Alert created successfully', 201);
 
     } catch (error) {
         console.error('Create Alert Error:', error);
@@ -116,6 +189,22 @@ const createAlert = async (req, res) => {
  * @route   GET /api/admin/alerts
  * @desc    Get all alerts with filters
  * @access  Admin/Manager
+ * 
+ * Query params:
+ * - type: bill|maintenance|rent|payable|receivable (bill includes bill, rent, payable, receivable)
+ * - status: pending|in_progress|resolved|dismissed|open|closed
+ * - priority: low|medium|high|urgent
+ * - severity: DANGER|WARN|INFO (maps to priority)
+ * - hostelId: number
+ * - roomId: number
+ * - tenantId: number
+ * - assignedTo: number (user ID)
+ * - maintenanceType: room_cleaning|repairs|purchase_demand
+ * - search: string (searches title, description, tenant name/email)
+ * - page: number (default: 1)
+ * - limit: number (default: 50)
+ * - sortBy: string (default: createdAt)
+ * - sortOrder: asc|desc (default: desc)
  */
 const getAllAlerts = async (req, res) => {
     try {
@@ -123,11 +212,13 @@ const getAllAlerts = async (req, res) => {
             type,
             status,
             priority,
+            severity,
             hostelId,
             roomId,
             tenantId,
             assignedTo,
             maintenanceType,
+            search,
             page = 1,
             limit = 50,
             sortBy = 'createdAt',
@@ -137,14 +228,63 @@ const getAllAlerts = async (req, res) => {
         // Build filter object
         const where = {};
 
-        if (type) where.type = type;
-        if (status) where.status = status;
-        if (priority) where.priority = priority;
+        // Handle type filter - 'bill' includes bill, rent, payable, receivable
+        if (type) {
+            if (type === 'bill') {
+                where.type = { in: ['bill', 'rent', 'payable', 'receivable'] };
+            } else if (type === 'maintenance') {
+                where.type = 'maintenance';
+            } else {
+                where.type = type;
+            }
+        }
+
+        // Handle status filter - support both raw status and display status (open/closed)
+        if (status) {
+            if (status === 'open') {
+                where.status = { in: ['pending', 'in_progress'] };
+            } else if (status === 'closed') {
+                where.status = { in: ['resolved', 'dismissed'] };
+            } else {
+                where.status = status;
+            }
+        }
+
+        // Handle priority filter
+        if (priority) {
+            where.priority = priority;
+        }
+
+        // Handle severity filter (map to priority)
+        if (severity) {
+            const severityToPriority = {
+                'DANGER': 'urgent',
+                'WARN': 'high',
+                'INFO': ['medium', 'low']
+            };
+            const priorityValue = severityToPriority[severity];
+            if (priorityValue) {
+                if (Array.isArray(priorityValue)) {
+                    where.priority = { in: priorityValue };
+                } else {
+                    where.priority = priorityValue;
+                }
+            }
+        }
+
+        // Other filters
         if (hostelId) where.hostelId = parseInt(hostelId);
         if (roomId) where.roomId = parseInt(roomId);
         if (tenantId) where.tenantId = parseInt(tenantId);
         if (assignedTo) where.assignedTo = parseInt(assignedTo);
         if (maintenanceType) where.maintenanceType = maintenanceType;
+
+        // Add search clause
+        const searchClause = buildSearchClause(search);
+        if (searchClause) {
+            where.AND = where.AND || [];
+            where.AND.push(searchClause);
+        }
 
         // Pagination
         const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -167,14 +307,53 @@ const getAllAlerts = async (req, res) => {
                 tenant: { select: { id: true, name: true, phone: true, email: true } },
                 allocation: { select: { id: true } },
                 payment: { select: { id: true, amount: true, paymentType: true } },
-                assignedUser: { select: { id: true, name: true, email: true, role: true } },
-                creator: { select: { id: true, name: true } },
-                resolver: { select: { id: true, name: true } }
+                assignedUser: { select: { id: true, username: true, email: true } },
+                creator: { select: { id: true, username: true } },
+                resolver: { select: { id: true, username: true } }
             }
         });
 
+        // Format alerts for frontend
+        const formattedAlerts = alerts.map(alert => ({
+            id: alert.id,
+            severity: getSeverity(alert.priority || 'medium'),
+            title: alert.title,
+            description: alert.description || '',
+            assignedTo: getUserDisplayName(alert.assignedUser),
+            created: formatDate(alert.createdAt),
+            status: getStatusDisplay(alert.status || 'pending'),
+            rawStatus: alert.status || 'pending',
+            priority: alert.priority || 'medium',
+            type: alert.type,
+            maintenanceType: alert.maintenanceType || null,
+            hostel: alert.hostel?.name || null,
+            room: alert.room?.roomNumber || null,
+            tenant: alert.tenant?.name || null,
+            amount: alert.amount || null,
+            dueDate: alert.dueDate ? formatDate(alert.dueDate) : null,
+            createdAt: alert.createdAt,
+            updatedAt: alert.updatedAt,
+            // Include full relations for detailed view
+            assignedUser: alert.assignedUser ? {
+                id: alert.assignedUser.id,
+                name: getUserDisplayName(alert.assignedUser),
+                username: alert.assignedUser.username,
+                email: alert.assignedUser.email
+            } : null,
+            creator: alert.creator ? {
+                id: alert.creator.id,
+                name: getUserDisplayName(alert.creator),
+                username: alert.creator.username
+            } : null,
+            resolver: alert.resolver ? {
+                id: alert.resolver.id,
+                name: getUserDisplayName(alert.resolver),
+                username: alert.resolver.username
+            } : null
+        }));
+
         return successResponse(res, {
-            alerts,
+            alerts: formattedAlerts,
             pagination: {
                 total,
                 page: parseInt(page),
@@ -201,12 +380,12 @@ const getAlertById = async (req, res) => {
         const alert = await prisma.alert.findUnique({
             where: { id: parseInt(id) },
             include: {
-                hostel: true,
-                room: true,
-                tenant: true,
-                allocation: true,
-                payment: true,
-                assignedUser: { select: { id: true, name: true, email: true, phone: true, role: true } },
+                hostel: { select: { id: true, name: true } },
+                room: { select: { id: true, roomNumber: true } },
+                tenant: { select: { id: true, name: true, email: true, phone: true } },
+                allocation: { select: { id: true } },
+                payment: { select: { id: true, amount: true, paymentType: true } },
+                assignedUser: { select: { id: true, name: true, email: true } },
                 creator: { select: { id: true, name: true, email: true } },
                 resolver: { select: { id: true, name: true, email: true } }
             }
@@ -216,7 +395,61 @@ const getAlertById = async (req, res) => {
             return errorResponse(res, 'Alert not found', 404);
         }
 
-        return successResponse(res, alert, 'Alert fetched successfully', 200);
+        // Format alert for frontend
+        const formattedAlert = {
+            id: alert.id,
+            type: alert.type,
+            priority: alert.priority || 'medium',
+            severity: getSeverity(alert.priority || 'medium'),
+            title: alert.title,
+            description: alert.description || '',
+            status: getStatusDisplay(alert.status || 'pending'),
+            rawStatus: alert.status || 'pending',
+            maintenanceType: alert.maintenanceType || null,
+            assignedTo: alert.assignedUser ? {
+                id: alert.assignedUser.id,
+                name: getUserDisplayName(alert.assignedUser),
+                username: alert.assignedUser.username,
+                email: alert.assignedUser.email
+            } : null,
+            created: formatDate(alert.createdAt),
+            createdAt: alert.createdAt,
+            updatedAt: alert.updatedAt,
+            hostel: alert.hostel ? {
+                id: alert.hostel.id,
+                name: alert.hostel.name
+            } : null,
+            room: alert.room ? {
+                id: alert.room.id,
+                roomNumber: alert.room.roomNumber
+            } : null,
+            tenant: alert.tenant ? {
+                id: alert.tenant.id,
+                name: alert.tenant.name,
+                email: alert.tenant.email,
+                phone: alert.tenant.phone
+            } : null,
+            creator: alert.creator ? {
+                id: alert.creator.id,
+                name: getUserDisplayName(alert.creator),
+                username: alert.creator.username,
+                email: alert.creator.email
+            } : null,
+            resolver: alert.resolver ? {
+                id: alert.resolver.id,
+                name: getUserDisplayName(alert.resolver),
+                username: alert.resolver.username,
+                email: alert.resolver.email
+            } : null,
+            amount: alert.amount || null,
+            dueDate: alert.dueDate ? formatDate(alert.dueDate) : null,
+            resolvedAt: alert.resolvedAt ? formatDate(alert.resolvedAt) : null,
+            remarks: alert.remarks || null,
+            metadata: alert.metadata || null,
+            attachments: alert.attachments || null
+        };
+
+        return successResponse(res, formattedAlert, 'Alert fetched successfully', 200);
 
     } catch (error) {
         console.error('Get Alert By ID Error:', error);
@@ -290,13 +523,35 @@ const updateAlert = async (req, res) => {
                 hostel: { select: { id: true, name: true } },
                 room: { select: { id: true, roomNumber: true } },
                 tenant: { select: { id: true, name: true, phone: true } },
-                assignedUser: { select: { id: true, name: true, email: true } },
-                creator: { select: { id: true, name: true } },
-                resolver: { select: { id: true, name: true } }
+                assignedUser: { select: { id: true, username: true, email: true } },
+                creator: { select: { id: true, username: true } },
+                resolver: { select: { id: true, username: true } }
             }
         });
 
-        return successResponse(res, alert, 'Alert updated successfully', 200);
+        // Format alert for response
+        const formattedAlert = {
+            id: alert.id,
+            type: alert.type,
+            priority: alert.priority || 'medium',
+            severity: getSeverity(alert.priority || 'medium'),
+            title: alert.title,
+            description: alert.description || '',
+            status: getStatusDisplay(alert.status || 'pending'),
+            rawStatus: alert.status || 'pending',
+            maintenanceType: alert.maintenanceType || null,
+            assignedTo: getUserDisplayName(alert.assignedUser),
+            created: formatDate(alert.createdAt),
+            createdAt: alert.createdAt,
+            updatedAt: alert.updatedAt,
+            hostel: alert.hostel?.name || null,
+            room: alert.room?.roomNumber || null,
+            tenant: alert.tenant?.name || null,
+            amount: alert.amount || null,
+            dueDate: alert.dueDate ? formatDate(alert.dueDate) : null
+        };
+
+        return successResponse(res, formattedAlert, 'Alert updated successfully', 200);
 
     } catch (error) {
         console.error('Update Alert Error:', error);
@@ -359,7 +614,23 @@ const updateAlertStatus = async (req, res) => {
             }
         });
 
-        return successResponse(res, alert, `Alert status updated to ${status}`, 200);
+        // Format alert for response
+        const formattedAlert = {
+            id: alert.id,
+            type: alert.type,
+            priority: alert.priority || 'medium',
+            severity: getSeverity(alert.priority || 'medium'),
+            title: alert.title,
+            description: alert.description || '',
+            status: getStatusDisplay(alert.status || 'pending'),
+            rawStatus: alert.status || 'pending',
+            assignedTo: getUserDisplayName(alert.assignedUser),
+            created: formatDate(alert.createdAt),
+            createdAt: alert.createdAt,
+            updatedAt: alert.updatedAt
+        };
+
+        return successResponse(res, formattedAlert, `Alert status updated to ${status}`, 200);
 
     } catch (error) {
         console.error('Update Alert Status Error:', error);
@@ -407,13 +678,29 @@ const assignAlert = async (req, res) => {
                 status: existingAlert.status === 'pending' ? 'in_progress' : existingAlert.status
             },
             include: {
-                assignedUser: { select: { id: true, name: true, email: true, role: true } },
+                assignedUser: { select: { id: true, username: true, email: true } },
                 hostel: { select: { id: true, name: true } },
                 room: { select: { id: true, roomNumber: true } }
             }
         });
 
-        return successResponse(res, alert, `Alert assigned to ${user.name}`, 200);
+        // Format alert for response
+        const formattedAlert = {
+            id: alert.id,
+            type: alert.type,
+            priority: alert.priority || 'medium',
+            severity: getSeverity(alert.priority || 'medium'),
+            title: alert.title,
+            description: alert.description || '',
+            status: getStatusDisplay(alert.status || 'pending'),
+            rawStatus: alert.status || 'pending',
+            assignedTo: getUserDisplayName(alert.assignedUser),
+            created: formatDate(alert.createdAt),
+            createdAt: alert.createdAt,
+            updatedAt: alert.updatedAt
+        };
+
+        return successResponse(res, formattedAlert, `Alert assigned to ${getUserDisplayName(user)}`, 200);
 
     } catch (error) {
         console.error('Assign Alert Error:', error);
@@ -456,13 +743,47 @@ const deleteAlert = async (req, res) => {
  * @route   GET /api/admin/alerts/stats
  * @desc    Get alert statistics
  * @access  Admin/Manager
+ * 
+ * Query params:
+ * - hostelId: number (optional)
+ * - type: bill|maintenance (optional, filters by type before counting)
  */
 const getAlertStats = async (req, res) => {
     try {
-        const { hostelId } = req.query;
+        const { hostelId, type } = req.query;
 
         // Build filter
-        const where = hostelId ? { hostelId: parseInt(hostelId) } : {};
+        const where = {};
+        if (hostelId) where.hostelId = parseInt(hostelId);
+        
+        // Handle type filter for summary
+        if (type) {
+            if (type === 'bill') {
+                where.type = { in: ['bill', 'rent', 'payable', 'receivable'] };
+            } else if (type === 'maintenance') {
+                where.type = 'maintenance';
+            } else {
+                where.type = type;
+            }
+        }
+
+        // Get all alerts for counting by priority
+        const alerts = await prisma.alert.findMany({
+            where,
+            select: { priority: true, type: true, status: true }
+        });
+
+        // Count by severity (priority-based)
+        let danger = 0; // urgent
+        let warning = 0; // high
+        let info = 0; // medium + low
+
+        alerts.forEach(alert => {
+            const priority = alert.priority || 'medium';
+            if (priority === 'urgent') danger++;
+            else if (priority === 'high') warning++;
+            else info++;
+        });
 
         // Get counts by type
         const typeStats = await prisma.alert.groupBy({
@@ -507,7 +828,32 @@ const getAlertStats = async (req, res) => {
             }
         });
 
+        // Count bills and maintenance for tabs
+        const billsCount = await prisma.alert.count({
+            where: {
+                ...where,
+                type: { in: ['bill', 'rent', 'payable', 'receivable'] }
+            }
+        });
+
+        const maintenanceCount = await prisma.alert.count({
+            where: {
+                ...where,
+                type: 'maintenance'
+            }
+        });
+
         return successResponse(res, {
+            // Summary cards (Danger, Warning, Info)
+            danger,
+            warning,
+            info,
+            // Tab counts
+            tabs: {
+                bills: billsCount,
+                maintenance: maintenanceCount
+            },
+            // Detailed stats
             total: totalAlerts,
             pending: pendingAlerts,
             overdue: overdueAlerts,
@@ -573,8 +919,27 @@ const getOverdueAlerts = async (req, res) => {
             }
         });
 
+        // Format alerts for frontend
+        const formattedAlerts = alerts.map(alert => ({
+            id: alert.id,
+            severity: getSeverity(alert.priority || 'medium'),
+            title: alert.title,
+            description: alert.description || '',
+            assignedTo: getUserDisplayName(alert.assignedUser),
+            created: formatDate(alert.createdAt),
+            status: getStatusDisplay(alert.status || 'pending'),
+            rawStatus: alert.status || 'pending',
+            priority: alert.priority || 'medium',
+            type: alert.type,
+            hostel: alert.hostel?.name || null,
+            room: alert.room?.roomNumber || null,
+            tenant: alert.tenant?.name || null,
+            amount: alert.amount || null,
+            dueDate: alert.dueDate ? formatDate(alert.dueDate) : null
+        }));
+
         return successResponse(res, {
-            alerts,
+            alerts: formattedAlerts,
             pagination: {
                 total,
                 page: parseInt(page),

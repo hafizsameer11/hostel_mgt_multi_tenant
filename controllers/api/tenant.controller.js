@@ -856,6 +856,7 @@ const getAllTenants = async (req, res) => {
       where.OR = [
         { firstName: { contains: search, mode: 'insensitive' } },
         { lastName: { contains: search, mode: 'insensitive' } },
+        { name: { contains: search, mode: 'insensitive' } },
         { email: { contains: search, mode: 'insensitive' } },
         { phone: { contains: search, mode: 'insensitive' } },
         { cnicNumber: { contains: search, mode: 'insensitive' } },
@@ -865,17 +866,7 @@ const getAllTenants = async (req, res) => {
     const [tenants, total] = await Promise.all([
       prisma.tenant.findMany({
         where,
-        include: {
-          allocations: {
-            where: { status: 'active' },
-            include: {
-              bed: { select: { bedNumber: true } },
-              room: { select: { roomNumber: true } },
-              hostel: { select: { id: true, name: true } },
-            },
-          },
-          _count: { select: { payments: true, allocations: true } },
-        },
+        include: tenantCardInclude,
         orderBy: { createdAt: 'desc' },
         take: limitNum,
         skip,
@@ -883,10 +874,12 @@ const getAllTenants = async (req, res) => {
       prisma.tenant.count({ where }),
     ]);
 
+    const formattedTenants = tenants.map(formatTenantForResponse);
+
     return successResponse(
       res,
       {
-        tenants,
+        tenants: formattedTenants,
         pagination: {
           total,
           page: pageNum,
@@ -953,50 +946,24 @@ const getTenantById = async (req, res) => {
         id: tenantId,
         ...buildTenantAccessFilter(req),
       },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            phone: true,
-            role: true
-          }
-        },
-        allocations: {
-          orderBy: { createdAt: 'desc' },
-          include: {
-            hostel: { select: { id: true, name: true, address: true } },
-            creator: { select: { id: true, name: true } }
-          }
-        },
-        payments: {
-          orderBy: { createdAt: 'desc' },
-          take: 5,
-          include: {
-            hostel: { select: { id: true, name: true } },
-            collector: { select: { id: true, name: true } }
-          }
-        },
-        alerts: {
-          orderBy: { createdAt: 'desc' },
-          take: 5,
-          select: {
-            id: true,
-            title: true,
-            status: true,
-            createdAt: true,
-            updatedAt: true
-          }
-        }
-      }
+      include: tenantProfileInclude
     });
 
     if (!tenant) {
       return errorResponse(res, "Tenant not found", 404);
     }
 
-    return successResponse(res, tenant, "Tenant retrieved successfully");
+    const formattedTenant = formatTenantForResponse(tenant);
+    
+    // Add additional profile data
+    const response = {
+      ...formattedTenant,
+      user: tenant.user || null,
+      recentPayments: tenant.payments || [],
+      recentAlerts: tenant.alerts || []
+    };
+
+    return successResponse(res, response, "Tenant retrieved successfully");
   } catch (err) {
     console.error("Get Tenant By ID Error:", err);
     return errorResponse(res, err.message);
@@ -1180,6 +1147,8 @@ const getActiveTenants = async (req, res) => {
     if (search) {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
+        { firstName: { contains: search, mode: 'insensitive' } },
+        { lastName: { contains: search, mode: 'insensitive' } },
         { email: { contains: search, mode: 'insensitive' } },
         { phone: { contains: search, mode: 'insensitive' } }
       ];
@@ -1189,19 +1158,12 @@ const getActiveTenants = async (req, res) => {
       where,
       orderBy: { createdAt: 'desc' },
       take: limitNum,
-      include: {
-        _count: { select: { allocations: true, payments: true } },
-        allocations: {
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-          include: {
-            hostel: { select: { id: true, name: true } }
-          }
-        }
-      }
+      include: tenantCardInclude
     });
 
-    return successResponse(res, tenants, "Active tenants retrieved successfully");
+    const formattedTenants = tenants.map(formatTenantForResponse);
+
+    return successResponse(res, formattedTenants, "Active tenants retrieved successfully");
   } catch (err) {
     console.error("Get Active Tenants Error:", err);
     return errorResponse(res, err.message);

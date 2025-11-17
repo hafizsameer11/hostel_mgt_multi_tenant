@@ -1,5 +1,4 @@
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const { prisma } = require('../../config/db');
 const bcrypt = require('bcrypt');
 const { successResponse, errorResponse } = require('../../Helper/helper');
 
@@ -62,25 +61,39 @@ const createEmployee = async (req, res) => {
             address,
             emergencyContact,
             qualifications,
-            profilePhoto,
-            documents,
             notes
         } = req.body;
-        console.log(req.user.role);
+
+        // Handle uploaded files
+        const profilePhoto = req.files?.profilePhoto?.[0]
+            ? `/uploads/employees/${req.files.profilePhoto[0].filename}`
+            : null;
+
+        // Handle document uploads
+        const uploadedDocs = req.files?.documents || [];
+        const providedDocuments = req.body.documents 
+            ? (Array.isArray(req.body.documents) ? req.body.documents : parseDocumentsList(req.body.documents))
+            : [];
+        const fileDocuments = uploadedDocs.map(file => ({
+            url: `/uploads/employees/${file.filename}`,
+            filename: file.filename,
+            originalName: file.originalname,
+            mimetype: file.mimetype,
+            size: file.size,
+            uploadedAt: new Date().toISOString(),
+        }));
+        const allDocuments = providedDocuments.length || fileDocuments.length 
+            ? [...providedDocuments, ...fileDocuments] 
+            : null;
+
         // Validation
         const userName = username || name; // Support both name and username for backward compatibility
         if (!userName || !email || !phone || !password) {
-            return res.status(400).json({
-                success: false,
-                message: 'Username (or name), email, phone, and password are required'
-            });
+            return errorResponse(res, 'Username (or name), email, phone, and password are required', 400);
         }
 
         if (!salary || !joinDate) {
-            return res.status(400).json({
-                success: false,
-                message: 'Salary and join date are required'
-            });
+            return errorResponse(res, 'Salary and join date are required', 400);
         }
 
         // Check if email already exists
@@ -89,10 +102,7 @@ const createEmployee = async (req, res) => {
         });
 
         if (existingUser) {
-            return res.status(400).json({
-                success: false,
-                message: 'Email already exists'
-            });
+            return errorResponse(res, 'Email already exists', 400);
         }
 
         // Hash password
@@ -129,8 +139,8 @@ const createEmployee = async (req, res) => {
                     address,
                     emergencyContact,
                     qualifications,
-                    profilePhoto,
-                    documents,
+                    profilePhoto: profilePhoto || null,
+                    documents: allDocuments,
                     notes,
                     status: 'active'
                 }
@@ -139,28 +149,20 @@ const createEmployee = async (req, res) => {
             return { user, employee };
         });
 
-        res.status(201).json({
-            success: true,
-            message: 'Employee created successfully',
-            data: {
-                user: {
-                    id: result.user.id,
-                    username: result.user.username,
-                    email: result.user.email,
-                    phone: result.user.phone,
-                    role: result.user.role
-                },
-                employee: result.employee
-            }
-        });
+        return successResponse(res, {
+            user: {
+                id: result.user.id,
+                username: result.user.username,
+                email: result.user.email,
+                phone: result.user.phone,
+                role: result.user.role
+            },
+            employee: result.employee
+        }, 'Employee created successfully', 201);
 
     } catch (error) {
         console.error('Create employee error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to create employee',
-            error: error.message
-        });
+        return errorResponse(res, error.message);
     }
 };
 
@@ -191,11 +193,12 @@ const getAllEmployees = async (req, res) => {
         const searchConditions = [];
         if (search) {
             searchConditions.push(
-                { user: { username: { contains: search } } },
-                { user: { email: { contains: search } } },
+                { user: { username: { contains: search, mode: 'insensitive' } } },
+                { user: { email: { contains: search, mode: 'insensitive' } } },
                 { user: { phone: { contains: search } } },
-                { employeeCode: { contains: search } },
-                { designation: { contains: search } }
+                { employeeCode: { contains: search, mode: 'insensitive' } },
+                { designation: { contains: search, mode: 'insensitive' } },
+                { department: { contains: search, mode: 'insensitive' } }
             );
         }
 
@@ -227,25 +230,17 @@ const getAllEmployees = async (req, res) => {
             prisma.employee.count({ where })
         ]);
 
-        res.status(200).json({
-            success: true,
-            message: 'Employees fetched successfully',
-            data: employees,
-            pagination: {
-                total,
-                page: parseInt(page),
-                limit: parseInt(limit),
-                totalPages: Math.ceil(total / parseInt(limit))
-            }
-        });
+        return successResponse(res, {
+            items: employees,
+            total,
+            page: parseInt(page),
+            limit: parseInt(limit),
+            totalPages: Math.ceil(total / parseInt(limit))
+        }, 'Employees fetched successfully');
 
     } catch (error) {
         console.error('Get employees error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to fetch employees',
-            error: error.message
-        });
+        return errorResponse(res, error.message);
     }
 };
 
@@ -272,25 +267,14 @@ const getEmployeeById = async (req, res) => {
         });
 
         if (!employee) {
-            return res.status(404).json({
-                success: false,
-                message: 'Employee not found'
-            });
+            return errorResponse(res, 'Employee not found', 404);
         }
 
-        res.status(200).json({
-            success: true,
-            message: 'Employee fetched successfully',
-            data: employee
-        });
+        return successResponse(res, employee, 'Employee fetched successfully');
 
     } catch (error) {
         console.error('Get employee error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to fetch employee',
-            error: error.message
-        });
+        return errorResponse(res, error.message);
     }
 };
 
@@ -316,25 +300,14 @@ const getEmployeeByUserId = async (req, res) => {
         });
 
         if (!employee) {
-            return res.status(404).json({
-                success: false,
-                message: 'Employee not found for this user'
-            });
+            return errorResponse(res, 'Employee not found for this user', 404);
         }
 
-        res.status(200).json({
-            success: true,
-            message: 'Employee fetched successfully',
-            data: employee
-        });
+        return successResponse(res, employee, 'Employee fetched successfully');
 
     } catch (error) {
         console.error('Get employee by user ID error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to fetch employee',
-            error: error.message
-        });
+        return errorResponse(res, error.message);
     }
 };
 
@@ -366,8 +339,6 @@ const updateEmployee = async (req, res) => {
             address,
             emergencyContact,
             qualifications,
-            profilePhoto,
-            documents,
             notes
         } = req.body;
 
@@ -378,10 +349,32 @@ const updateEmployee = async (req, res) => {
         });
 
         if (!existingEmployee) {
-            return res.status(404).json({
-                success: false,
-                message: 'Employee not found'
-            });
+            return errorResponse(res, 'Employee not found', 404);
+        }
+
+        // Handle uploaded files
+        const profilePhoto = req.files?.profilePhoto?.[0]
+            ? `/uploads/employees/${req.files.profilePhoto[0].filename}`
+            : undefined;
+
+        // Handle document uploads
+        const uploadedDocs = req.files?.documents || [];
+        const existingDocuments = existingEmployee.documents ? parseDocumentsList(existingEmployee.documents) : [];
+        
+        let allDocuments = undefined;
+        if (uploadedDocs.length > 0 || req.body.documents !== undefined) {
+            const providedDocuments = req.body.documents 
+                ? (Array.isArray(req.body.documents) ? req.body.documents : parseDocumentsList(req.body.documents))
+                : existingDocuments;
+            const fileDocuments = uploadedDocs.map(file => ({
+                url: `/uploads/employees/${file.filename}`,
+                filename: file.filename,
+                originalName: file.originalname,
+                mimetype: file.mimetype,
+                size: file.size,
+                uploadedAt: new Date().toISOString(),
+            }));
+            allDocuments = [...providedDocuments, ...fileDocuments];
         }
 
         // Update in transaction
@@ -419,8 +412,8 @@ const updateEmployee = async (req, res) => {
             if (address !== undefined) employeeUpdateData.address = address;
             if (emergencyContact !== undefined) employeeUpdateData.emergencyContact = emergencyContact;
             if (qualifications !== undefined) employeeUpdateData.qualifications = qualifications;
-            if (profilePhoto !== undefined) employeeUpdateData.profilePhoto = profilePhoto;
-            if (documents !== undefined) employeeUpdateData.documents = documents;
+            if (profilePhoto !== undefined) employeeUpdateData.profilePhoto = profilePhoto || existingEmployee.profilePhoto;
+            if (allDocuments !== undefined) employeeUpdateData.documents = allDocuments;
             if (notes !== undefined) employeeUpdateData.notes = notes;
 
             const updatedEmployee = await tx.employee.update({
@@ -431,28 +424,20 @@ const updateEmployee = async (req, res) => {
             return { user: updatedUser, employee: updatedEmployee };
         });
 
-        res.status(200).json({
-            success: true,
-            message: 'Employee updated successfully',
-            data: {
-                user: {
-                    id: result.user.id,
-                    username: result.user.username,
-                    email: result.user.email,
-                    phone: result.user.phone,
-                    role: result.user.role
-                },
-                employee: result.employee
-            }
-        });
+        return successResponse(res, {
+            user: {
+                id: result.user.id,
+                username: result.user.username,
+                email: result.user.email,
+                phone: result.user.phone,
+                role: result.user.role
+            },
+            employee: result.employee
+        }, 'Employee updated successfully');
 
     } catch (error) {
         console.error('Update employee error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to update employee',
-            error: error.message
-        });
+        return errorResponse(res, error.message);
     }
 };
 
@@ -463,10 +448,7 @@ const updateEmployeeSalary = async (req, res) => {
         const { salary, salaryType, effectiveDate, notes } = req.body;
 
         if (!salary) {
-            return res.status(400).json({
-                success: false,
-                message: 'Salary is required'
-            });
+            return errorResponse(res, 'Salary is required', 400);
         }
 
         const employee = await prisma.employee.update({
@@ -488,19 +470,11 @@ const updateEmployeeSalary = async (req, res) => {
             }
         });
 
-        res.status(200).json({
-            success: true,
-            message: 'Employee salary updated successfully',
-            data: employee
-        });
+        return successResponse(res, employee, 'Employee salary updated successfully');
 
     } catch (error) {
         console.error('Update salary error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to update salary',
-            error: error.message
-        });
+        return errorResponse(res, error.message);
     }
 };
 
@@ -511,10 +485,7 @@ const updateEmployeeStatus = async (req, res) => {
         const { status, terminationDate, notes } = req.body;
 
         if (!status) {
-            return res.status(400).json({
-                success: false,
-                message: 'Status is required'
-            });
+            return errorResponse(res, 'Status is required', 400);
         }
 
         const updateData = { status };
@@ -546,19 +517,11 @@ const updateEmployeeStatus = async (req, res) => {
             });
         }
 
-        res.status(200).json({
-            success: true,
-            message: 'Employee status updated successfully',
-            data: employee
-        });
+        return successResponse(res, employee, 'Employee status updated successfully');
 
     } catch (error) {
         console.error('Update status error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to update status',
-            error: error.message
-        });
+        return errorResponse(res, error.message);
     }
 };
 
@@ -574,10 +537,7 @@ const deleteEmployee = async (req, res) => {
         });
 
         if (!employee) {
-            return res.status(404).json({
-                success: false,
-                message: 'Employee not found'
-            });
+            return errorResponse(res, 'Employee not found', 404);
         }
 
         // Delete employee and user in transaction
@@ -593,18 +553,11 @@ const deleteEmployee = async (req, res) => {
             });
         });
 
-        res.status(200).json({
-            success: true,
-            message: 'Employee deleted successfully'
-        });
+        return successResponse(res, null, 'Employee deleted successfully');
 
     } catch (error) {
         console.error('Delete employee error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to delete employee',
-            error: error.message
-        });
+        return errorResponse(res, error.message);
     }
 };
 
@@ -647,33 +600,25 @@ const getEmployeeStatistics = async (req, res) => {
             _avg: { salary: true }
         });
 
-        res.status(200).json({
-            success: true,
-            message: 'Employee statistics fetched successfully',
-            data: {
-                totalEmployees,
-                statusBreakdown: {
-                    active: activeEmployees,
-                    inactive: inactiveEmployees,
-                    on_leave: onLeaveEmployees,
-                    terminated: terminatedEmployees
-                },
-                employeesByRole,
-                employeesByDepartment,
-                salaryStatistics: {
-                    totalMonthlySalaryExpense: salaryData._sum.salary || 0,
-                    averageSalary: salaryData._avg.salary || 0
-                }
+        return successResponse(res, {
+            totalEmployees,
+            statusBreakdown: {
+                active: activeEmployees,
+                inactive: inactiveEmployees,
+                on_leave: onLeaveEmployees,
+                terminated: terminatedEmployees
+            },
+            employeesByRole,
+            employeesByDepartment,
+            salaryStatistics: {
+                totalMonthlySalaryExpense: salaryData._sum.salary || 0,
+                averageSalary: salaryData._avg.salary || 0
             }
-        });
+        }, 'Employee statistics fetched successfully');
 
     } catch (error) {
         console.error('Get statistics error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to fetch statistics',
-            error: error.message
-        });
+        return errorResponse(res, error.message);
     }
 };
 
@@ -687,7 +632,6 @@ const listEmployees = async (req, res) => {
             ...(search
                 ? {
                     OR: [
-                        { user: { name: { contains: search, mode: 'insensitive' } } },
                         { user: { username: { contains: search, mode: 'insensitive' } } },
                         { user: { email: { contains: search, mode: 'insensitive' } } },
                         { user: { phone: { contains: search } } },
@@ -710,7 +654,6 @@ const listEmployees = async (req, res) => {
                         select: {
                             id: true,
                             username: true,
-                            name: true,
                             email: true,
                             phone: true,
                             role: true,
@@ -748,7 +691,6 @@ const listEmployees = async (req, res) => {
             return {
                 id: e.id,
                 userId: e.user?.id ?? null,
-                name: e.user?.name ?? null,
                 username: e.user?.username ?? null,
                 email: e.user?.email ?? null,
                 phone: e.user?.phone ?? null,
@@ -785,7 +727,6 @@ const employeeDetails = async (req, res) => {
                     select: {
                         id: true,
                         username: true,
-                        name: true,
                         email: true,
                         phone: true,
                         role: true,
@@ -830,7 +771,6 @@ const employeeDetails = async (req, res) => {
         return successResponse(res, {
             id: emp.id,
             userId: emp.userId,
-            name: emp.user?.name ?? null,
             username: emp.user?.username ?? null,
             email: emp.user?.email ?? null,
             phone: emp.user?.phone ?? null,

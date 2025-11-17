@@ -412,7 +412,7 @@ const getFinancialSummary = async (req, res) => {
         totalReceivable: formatAmount(pendingTotal),
         totalReceived: formatAmount(receivedTotal),
         isProfit: profitLoss >= 0,
-        receivablesBreakdown,
+        receivablesBreakdown: receivableBreakdown,
         meta: {
           hostelId: parsedHostelId,
           startDate: startDate || null,
@@ -461,21 +461,32 @@ const getPayables = async (req, res) => {
         prisma.vendor.count({ where: vendorFilter }),
       ]);
 
-      payables = vendors.map((vendor) => ({
-        id: vendor.id,
-        reference: `VENDOR-${vendor.id}`,
-        type: 'vendor',
-        title: vendor.name,
-        companyName: vendor.companyName,
-        category: vendor.category || 'vendor',
-        amount: formatAmount(vendor.totalPayable || 0),
-        balance: formatAmount(vendor.balance || 0),
-        totalPaid: formatAmount(vendor.totalPaid || 0),
-        date: vendor.createdAt,
-        hostel: vendor.hostel?.name || null,
-        description: vendor.paymentTerms ? `Terms: ${vendor.paymentTerms}` : `Payable to ${vendor.name}`,
-        paymentTerms: vendor.paymentTerms,
-      }));
+      payables = vendors.map((vendor) => {
+        // Determine status based on balance
+        let status = 'Paid';
+        if (vendor.balance > 0) {
+          status = 'Pending';
+        } else if (vendor.totalPayable > 0 && vendor.totalPaid === 0) {
+          status = 'Pending';
+        }
+
+        return {
+          id: vendor.id,
+          reference: `VENDOR-${String(vendor.id).padStart(4, '0')}`,
+          type: 'vendor',
+          title: vendor.name,
+          companyName: vendor.companyName,
+          category: vendor.category || 'vendor',
+          amount: formatAmount(vendor.totalPayable || 0),
+          balance: formatAmount(vendor.balance || 0),
+          totalPaid: formatAmount(vendor.totalPaid || 0),
+          date: vendor.createdAt,
+          hostel: vendor.hostel?.name || null,
+          description: vendor.paymentTerms ? `Terms: ${vendor.paymentTerms}` : `Payable to ${vendor.name}`,
+          paymentTerms: vendor.paymentTerms,
+          status,
+        };
+      });
 
       total = vendorsCount;
       totalAmount = payables.reduce((sum, vendor) => sum + (vendor.amount || 0), 0);
@@ -497,14 +508,15 @@ const getPayables = async (req, res) => {
 
       payables = laundryExpenses.map((expense) => ({
         id: expense.id,
-        reference: `LAUNDRY-${expense.id}`,
+        reference: `LAUNDRY-${String(expense.id).padStart(4, '0')}`,
         type: 'laundry',
         title: expense.title,
         category: expense.category,
         amount: formatAmount(expense.amount),
         date: expense.date,
         hostel: expense.hostel?.name || null,
-        description: expense.title,
+        description: expense.title || expense.category,
+        status: 'Paid', // Laundry expenses are considered paid when created
       }));
 
       total = laundryCount;
@@ -537,28 +549,41 @@ const getPayables = async (req, res) => {
 
       const formattedBills = expenses.map((bill) => ({
         id: bill.id,
-        reference: `EXP-${bill.id}`,
+        reference: `EXP-${String(bill.id).padStart(4, '0')}`,
         type: 'expense',
         title: bill.title,
         category: bill.category,
         amount: formatAmount(bill.amount),
         date: bill.date,
         hostel: bill.hostel?.name || null,
-        description: bill.title,
+        description: bill.title || bill.category,
+        status: 'Paid', // Expenses are considered paid when created
       }));
 
-      const formattedAlerts = billAlerts.map((alert) => ({
-        id: alert.id,
-        reference: `ALERT-${alert.id}`,
-        type: 'alert',
-        title: alert.title,
-        category: 'bill',
-        amount: formatAmount(alert.amount || 0),
-        date: alert.createdAt,
-        hostel: alert.hostel?.name || null,
-        tenant: alert.tenant?.name || null,
-        description: alert.description,
-      }));
+      const formattedAlerts = billAlerts.map((alert) => {
+        // Map alert status to payment status format
+        const statusMap = {
+          pending: 'Pending',
+          in_progress: 'Pending',
+          resolved: 'Paid',
+          dismissed: 'Paid',
+        };
+        const status = statusMap[alert.status] || 'Pending';
+
+        return {
+          id: alert.id,
+          reference: `ALERT-${String(alert.id).padStart(4, '0')}`,
+          type: 'alert',
+          title: alert.title,
+          category: 'bill',
+          amount: formatAmount(alert.amount || 0),
+          date: alert.createdAt,
+          hostel: alert.hostel?.name || null,
+          tenant: alert.tenant?.name || null,
+          description: alert.description || alert.title,
+          status,
+        };
+      });
 
       payables = [...formattedBills, ...formattedAlerts];
       total = expenseCount + billAlerts.length;
@@ -712,6 +737,7 @@ const getReceivables = async (req, res) => {
     const generateReference = (payment) => {
       if (payment.receiptNumber) return payment.receiptNumber;
       const typeLabel = (payment.paymentType || 'rent').toUpperCase();
+      // Format: RENT-1001, DEPOSIT-2001, etc.
       return `${typeLabel}-${String(payment.id).padStart(4, '0')}`;
     };
 
@@ -720,10 +746,14 @@ const getReceivables = async (req, res) => {
       const statusLabel =
         RECEIVABLE_STATUS_LABELS[statusKey] || RECEIVABLE_STATUS_LABELS.pending;
 
+      // Capitalize payment type for display
+      const paymentType = payment.paymentType || 'rent';
+      const capitalizedType = paymentType.charAt(0).toUpperCase() + paymentType.slice(1);
+
       return {
         id: payment.id,
         reference: generateReference(payment),
-        type: payment.paymentType || 'Rent',
+        type: capitalizedType,
         amount: formatAmount(payment.amount),
         date: payment.paymentDate || payment.createdAt,
         tenant: payment.tenant
