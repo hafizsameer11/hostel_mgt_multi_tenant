@@ -18,6 +18,7 @@ const {
     updateEmployeeStatus,
     deleteEmployee,
     getEmployeeStatistics,
+    getEmployeesByHostelId,
 } = require('../../../controllers/api/employee.controller');
 
 const { authenticate, authorize } = require('../../../middleware/auth.middleware');
@@ -80,6 +81,9 @@ router.get('/employees/statistics', authenticate, authorize('admin', 'manager'),
 
 // Get employee by User ID
 router.get('/employees/user/:userId', authenticate, authorize('admin', 'manager'), getEmployeeByUserId);
+
+// Get employees by Hostel ID (with filtering and pagination)
+router.get('/employees/hostel/:hostelId', authenticate, authorize('admin', 'manager'), getEmployeesByHostelId);
 
 // Get employee by ID
 router.get('/employee/:id', authenticate, authorize('admin', 'manager'), getEmployeeById);

@@ -21,7 +21,8 @@ const {
     tenantDetails,
     getTenantCurrentScore,
     getTenantScoreHistory,
-    upsertTenantScore
+    upsertTenantScore,
+    getTenantsByHostelId
 } = require('../../../controllers/api/tenant.controller');
 
 const { authenticate, authorize } = require('../../../middleware/auth.middleware');
@@ -84,6 +85,9 @@ router.get('/tenants', authenticate, authorize('admin', 'manager', 'owner'), lis
 
 // Get active tenants
 router.get('/tenants/active', authenticate, authorize('admin', 'manager', 'owner'), getActiveTenants);
+
+// Get tenants by hostel ID
+router.get('/tenants/hostel/:hostelId', authenticate, authorize('admin', 'owner'), getTenantsByHostelId);
 
 // Get tenant payment history
 router.get('/tenant/:id/payments', authenticate, authorize('admin', 'manager', 'owner'), getTenantPaymentHistory);

@@ -266,7 +266,19 @@ const buildOwnerDirectory = async (ownerIds = []) => {
   const [users, ownerProfiles] = await Promise.all([
     prisma.user.findMany({
       where: { id: { in: uniqueIds } },
-      select: { id: true, name: true, email: true, phone: true, role: true },
+      select: { 
+        id: true, 
+        username: true, 
+        email: true, 
+        phone: true, 
+        userRole: {
+          select: {
+            id: true,
+            roleName: true,
+            description: true
+          }
+        }
+      },
     }),
     prisma.owner.findMany({
       where: { userId: { in: uniqueIds } },
@@ -283,10 +295,10 @@ const buildOwnerDirectory = async (ownerIds = []) => {
       userId: user.id,
       ownerProfileId: profile?.id || null,
       ownerCode: profile?.ownerCode || null,
-      name: profile?.name || user.name,
+      name: profile?.name || user.username || user.email || 'Unknown',
       email: user.email,
       phone: user.phone || null,
-      role: user.role,
+      role: user.userRole?.roleName || null,
     });
   });
 
@@ -786,7 +798,7 @@ const getAllHostels = async (req, res) => {
       prisma.hostel.findMany({
         where,
         include: {
-          manager: { select: { id: true, name: true, email: true, phone: true } },
+          manager: { select: { id: true, username: true, email: true, phone: true } },
           floors: { select: { id: true } },
           rooms: { select: { id: true } },
         },
@@ -1013,12 +1025,20 @@ const updateHostel = async (req, res) => {
         }
         const ownerUser = await prisma.user.findUnique({
           where: { id: numericOwnerId },
-          select: { id: true, role: true },
+          select: { 
+            id: true, 
+            userRole: {
+              select: {
+                id: true,
+                roleName: true
+              }
+            }
+          },
         });
         if (!ownerUser) {
           return errorResponse(res, 'Owner not found', 404);
         }
-        if (ownerUser.role !== 'owner') {
+        if (ownerUser.userRole?.roleName !== 'owner') {
           return errorResponse(res, 'Provided user is not registered as an owner', 400);
         }
         updateData.ownerId = ownerUser.id;

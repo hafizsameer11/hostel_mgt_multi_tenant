@@ -1,10 +1,44 @@
 const express = require("express");
+const multer = require("multer");
+const path = require("path");
+const fs = require("fs");
 const router = express.Router();
 const ctrl = require("../../../controllers/api/setting.controller");
 const {
   authenticate,
   authorize,
 } = require("../../../middleware/auth.middleware");
+
+// ===============================
+// MULTER CONFIG for profile photo
+// ===============================
+const uploadsDir = path.join(__dirname, '../../../uploads/profiles');
+
+// Ensure uploads directory exists
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    const base = 'profile-' + Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, base + ext);
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+  fileFilter: (req, file, cb) => {
+    const allowed = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
+    if (allowed.includes(file.mimetype)) cb(null, true);
+    else cb(new Error('Invalid file type. Allowed: JPG, PNG, WEBP'));
+  }
+});
 
 // ----- PROFILE (self) -----
 router.get(
@@ -14,11 +48,21 @@ router.get(
   ctrl.getPersonalInfo
 );
 router.put(
-  "/settings/profile/name-email",
+  "/settings/profile-info",
   authenticate,
   authorize("admin", "manager"),
+  upload.single('profilePhoto'),
   ctrl.updateNameEmail
 );
+// Get password status
+router.get(
+  "/settings/profile/password",
+  authenticate,
+  authorize("admin", "manager"),
+  ctrl.getPasswordStatus
+);
+
+// Update password
 router.put(
   "/settings/profile/password",
   authenticate,

@@ -121,7 +121,7 @@ const createBed = async (req, res) => {
             bedType,
             position
         } = req.body;
-
+        
         const roomId = parseInt(room, 10);
 
         // Validation
@@ -167,8 +167,6 @@ const createBed = async (req, res) => {
         const bed = await prisma.bed.create({
             data: {
                 roomId: roomId,
-                floorId: roomExists.floorId,
-                hostelId: roomExists.hostelId,
                 bedNumber,
                 bedType: bedType || 'single',
                 position: position ? {
@@ -239,8 +237,6 @@ const createMultipleBeds = async (req, res) => {
         for (let i = 0; i < parsedNumberOfBeds; i++) {
             bedsData.push({
                 roomId: parsedRoomId,
-                floorId: room.floorId,
-                hostelId: room.hostelId,
                 bedNumber: `${room.roomNumber}-B${startNumber + i}`,
                 bedType: bedType || 'single'
             });
@@ -316,8 +312,8 @@ const getAllBeds = async (req, res) => {
                         }
                     }
                 },
-                currentUser: {
-                    select: { name: true, email: true, phone: true }
+                currentTenant: {
+                    select: { username: true, email: true, phone: true }
                 }
             },
             orderBy: [
@@ -359,8 +355,8 @@ const getBedsByRoom = async (req, res) => {
         const beds = await prisma.bed.findMany({
             where: { roomId: convertRoomId },
             include: {
-                currentUser: {
-                    select: { name: true, email: true, phone: true }
+                currentTenant: {
+                    select: { username: true, email: true, phone: true }
                 }
             },
             orderBy: { bedNumber: 'asc' }
@@ -407,11 +403,11 @@ const getBedById = async (req, res) => {
                         }
                     }
                 },
-                currentUser: {
-                    select: { name: true, email: true, phone: true }
+                currentTenant: {
+                    select: { username: true, email: true, phone: true }
                 },
-                reservedUser: {
-                    select: { name: true, email: true, phone: true }
+                reservedBy: {
+                    select: { username: true, email: true, phone: true }
                 }
             }
         });
@@ -491,8 +487,8 @@ const updateBed = async (req, res) => {
                 room: {
                     select: { roomNumber: true, roomType: true }
                 },
-                currentUser: {
-                    select: { name: true, email: true }
+                currentTenant: {
+                    select: { username: true, email: true }
                 }
             }
         });
@@ -573,7 +569,7 @@ const deleteBed = async (req, res) => {
         }
 
         // Check if bed is occupied
-        if (bed.status === 'occupied' || bed.currentUserId) {
+        if (bed.status === 'occupied' || bed.currentTenantId) {
             return errorResponse(res, "Cannot delete occupied bed. Please deallocate tenant first.", 400);
         }
 

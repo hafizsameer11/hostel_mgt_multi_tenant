@@ -775,6 +775,78 @@ const deleteOwner = async (req, res) => {
   }
 };
 
+// ===================================
+// GET OWNER BY HOSTEL ID
+// ===================================
+const getOwnerByHostelId = async (req, res) => {
+  try {
+    const { hostelId } = req.params;
+    const convertHostelId = parseInt(hostelId, 10);
+
+    if (Number.isNaN(convertHostelId)) {
+      return errorResponse(res, 'Invalid hostel id', 400);
+    }
+
+    // Verify hostel exists and get ownerId
+    const hostel = await prisma.hostel.findUnique({
+      where: { id: convertHostelId },
+      select: {
+        id: true,
+        name: true,
+        ownerId: true,
+      },
+    });
+
+    if (!hostel) {
+      return errorResponse(res, 'Hostel not found', 404);
+    }
+
+    if (!hostel.ownerId) {
+      return errorResponse(res, 'This hostel does not have an owner assigned', 404);
+    }
+
+    // Check authorization - if user is owner, they can only view their own profile
+    if (req.userRole === 'owner') {
+      const ownerProfile = await prisma.owner.findFirst({
+        where: { userId: req.userId },
+        select: { id: true },
+      });
+      if (ownerProfile && ownerProfile.id !== hostel.ownerId) {
+        return errorResponse(res, 'Unauthorized to view this owner', 403);
+      }
+    }
+
+    // Get owner details
+    const owner = await prisma.owner.findUnique({
+      where: { id: hostel.ownerId },
+      select: OWNER_SELECT_FIELDS,
+    });
+
+    if (!owner) {
+      return errorResponse(res, 'Owner not found', 404);
+    }
+
+    // Build owner snapshot (includes hostels info)
+    const snapshot = await buildOwnerSnapshot(hostel.ownerId);
+
+    return successResponse(
+      res,
+      {
+        hostel: {
+          id: hostel.id,
+          name: hostel.name,
+        },
+        owner,
+        ...snapshot,
+      },
+      'Owner retrieved successfully'
+    );
+  } catch (error) {
+    console.error('Get owner by hostel error:', error);
+    return errorResponse(res, error.message);
+  }
+};
+
 module.exports = {
   createOwner,
   listOwners,
@@ -783,5 +855,6 @@ module.exports = {
   getOwnerDashboard,
   updateOwner,
   deleteOwner,
+  getOwnerByHostelId,
 };
 

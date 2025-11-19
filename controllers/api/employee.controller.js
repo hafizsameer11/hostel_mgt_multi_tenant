@@ -46,7 +46,7 @@ const createEmployee = async (req, res) => {
             email,
             phone,
             password,
-            role: userRole, // User role (staff, manager, etc)
+            userRoleId, // User role ID (foreign key to Role table)
             
             // Employee data
             role: employeeRole, // Employee role (staff, manager, supervisor, etc)
@@ -56,7 +56,7 @@ const createEmployee = async (req, res) => {
             salaryType,
             joinDate,
             workingHours,
-            hostelAssigned,
+            hostelId,
             bankDetails,
             address,
             emergencyContact,
@@ -117,7 +117,7 @@ const createEmployee = async (req, res) => {
                     email,
                     phone,
                     password: hashedPassword,
-                    role: userRole || 'staff', // Default to staff if not provided
+                    userRoleId: userRoleId ? parseInt(userRoleId) : null,
                     status: 'active'
                 }
             });
@@ -134,7 +134,7 @@ const createEmployee = async (req, res) => {
                     salaryType: salaryType || 'monthly',
                     joinDate: new Date(joinDate),
                     workingHours,
-                    hostelAssigned: hostelAssigned ? parseInt(hostelAssigned) : null,
+                    hostelId: hostelId ? parseInt(hostelId) : null,
                     bankDetails,
                     address,
                     emergencyContact,
@@ -155,7 +155,7 @@ const createEmployee = async (req, res) => {
                 username: result.user.username,
                 email: result.user.email,
                 phone: result.user.phone,
-                role: result.user.role
+                userRoleId: result.user.userRoleId
             },
             employee: result.employee
         }, 'Employee created successfully', 201);
@@ -173,7 +173,7 @@ const getAllEmployees = async (req, res) => {
             status,
             role,
             department,
-            hostelAssigned,
+            hostelId,
             search,
             page = 1,
             limit = 10
@@ -187,7 +187,7 @@ const getAllEmployees = async (req, res) => {
         if (status) filters.status = status;
         if (role) filters.role = role;
         if (department) filters.department = department;
-        if (hostelAssigned) filters.hostelAssigned = parseInt(hostelAssigned);
+        if (hostelId) filters.hostelId = parseInt(hostelId);
 
         // Build search conditions
         const searchConditions = [];
@@ -207,7 +207,7 @@ const getAllEmployees = async (req, res) => {
             ...(searchConditions.length > 0 ? { OR: searchConditions } : {})
         };
 
-        // Get employees with user data
+        // Get employees with user data and hostel info
         const [employees, total] = await Promise.all([
             prisma.employee.findMany({
                 where,
@@ -218,8 +218,20 @@ const getAllEmployees = async (req, res) => {
                             username: true,
                             email: true,
                             phone: true,
-                            role: true,
+                            userRole: {
+                                select: {
+                                    id: true,
+                                    roleName: true,
+                                },
+                            },
                             status: true
+                        }
+                    },
+                    hostel: {
+                        select: {
+                            id: true,
+                            name: true,
+                            address: true
                         }
                     }
                 },
@@ -258,9 +270,21 @@ const getEmployeeById = async (req, res) => {
                         username: true,
                         email: true,
                         phone: true,
-                        role: true,
+                        userRole: {
+                            select: {
+                                id: true,
+                                roleName: true,
+                            },
+                        },
                         status: true,
                         createdAt: true
+                    }
+                },
+                hostel: {
+                    select: {
+                        id: true,
+                        name: true,
+                        address: true
                     }
                 }
             }
@@ -292,8 +316,20 @@ const getEmployeeByUserId = async (req, res) => {
                         username: true,
                         email: true,
                         phone: true,
-                        role: true,
+                        userRole: {
+                            select: {
+                                id: true,
+                                roleName: true,
+                            },
+                        },
                         status: true
+                    }
+                },
+                hostel: {
+                    select: {
+                        id: true,
+                        name: true,
+                        address: true
                     }
                 }
             }
@@ -321,7 +357,7 @@ const updateEmployee = async (req, res) => {
             username,
             email,
             phone,
-            role: userRole,
+            userRoleId,
             
             // Employee data
             employeeCode,
@@ -334,7 +370,7 @@ const updateEmployee = async (req, res) => {
             terminationDate,
             status,
             workingHours,
-            hostelAssigned,
+            hostelId,
             bankDetails,
             address,
             emergencyContact,
@@ -385,7 +421,7 @@ const updateEmployee = async (req, res) => {
             if (userName) userUpdateData.username = userName;
             if (email) userUpdateData.email = email;
             if (phone) userUpdateData.phone = phone;
-            if (userRole) userUpdateData.role = userRole;
+            if (userRoleId !== undefined) userUpdateData.userRoleId = userRoleId ? parseInt(userRoleId) : null;
 
             let updatedUser = existingEmployee.user;
             if (Object.keys(userUpdateData).length > 0) {
@@ -407,7 +443,7 @@ const updateEmployee = async (req, res) => {
             if (terminationDate !== undefined) employeeUpdateData.terminationDate = terminationDate ? new Date(terminationDate) : null;
             if (status !== undefined) employeeUpdateData.status = status;
             if (workingHours !== undefined) employeeUpdateData.workingHours = workingHours;
-            if (hostelAssigned !== undefined) employeeUpdateData.hostelAssigned = hostelAssigned ? parseInt(hostelAssigned) : null;
+            if (hostelId !== undefined) employeeUpdateData.hostelId = hostelId ? parseInt(hostelId) : null;
             if (bankDetails !== undefined) employeeUpdateData.bankDetails = bankDetails;
             if (address !== undefined) employeeUpdateData.address = address;
             if (emergencyContact !== undefined) employeeUpdateData.emergencyContact = emergencyContact;
@@ -430,7 +466,7 @@ const updateEmployee = async (req, res) => {
                 username: result.user.username,
                 email: result.user.email,
                 phone: result.user.phone,
-                role: result.user.role
+                userRoleId: result.user.userRoleId
             },
             employee: result.employee
         }, 'Employee updated successfully');
@@ -656,7 +692,12 @@ const listEmployees = async (req, res) => {
                             username: true,
                             email: true,
                             phone: true,
-                            role: true,
+                            userRole: {
+                                select: {
+                                    id: true,
+                                    roleName: true,
+                                },
+                            },
                             status: true,
                         },
                     },
@@ -668,7 +709,7 @@ const listEmployees = async (req, res) => {
         const hostelIds = Array.from(
             new Set(
                 rows
-                    .map((emp) => emp.hostelAssigned)
+                    .map((emp) => emp.hostelId)
                     .filter((id) => typeof id === 'number' && !Number.isNaN(id)),
             ),
         );
@@ -685,7 +726,7 @@ const listEmployees = async (req, res) => {
         }, {});
 
         const cards = rows.map((e) => {
-            const hostelId = e.hostelAssigned ?? null;
+            const hostelId = e.hostelId ?? null;
             const hostelName = hostelId ? hostelMap[hostelId] ?? null : null;
 
             return {
@@ -695,7 +736,8 @@ const listEmployees = async (req, res) => {
                 email: e.user?.email ?? null,
                 phone: e.user?.phone ?? null,
                 role: e.role,
-                userRole: e.user?.role ?? null,
+                userRole: e.user?.userRole?.roleName ?? null,
+                userRoleId: e.user?.userRoleId ?? null,
                 status: e.status === 'active' ? 'Active' : e.status === 'inactive' ? 'Inactive' : e.status,
                 avatar: e.profilePhoto ?? null,
                 joinedAt: e.joinDate ? e.joinDate.toISOString().split('T')[0] : null,
@@ -729,21 +771,27 @@ const employeeDetails = async (req, res) => {
                         username: true,
                         email: true,
                         phone: true,
-                        role: true,
+                        userRole: {
+                            select: {
+                                id: true,
+                                roleName: true,
+                            },
+                        },
                         status: true,
                     },
                 },
+                hostel: {
+                    select: {
+                        id: true,
+                        name: true,
+                        address: true
+                    }
+                }
             },
         });
         if (!emp) return errorResponse(res, 'Employee not found', 404);
 
-        let hostel = null;
-        if (emp.hostelAssigned) {
-            hostel = await prisma.hostel.findUnique({
-                where: { id: emp.hostelAssigned },
-                select: { id: true, name: true, address: true },
-            });
-        }
+        const hostel = emp.hostel;
 
         const employeeDocuments = parseDocumentsList(emp.documents);
 
@@ -775,7 +823,8 @@ const employeeDetails = async (req, res) => {
             email: emp.user?.email ?? null,
             phone: emp.user?.phone ?? null,
             role: emp.role,
-            userRole: emp.user?.role ?? null,
+            userRole: emp.user?.userRole?.roleName ?? null,
+            userRoleId: emp.user?.userRoleId ?? null,
             status: formattedStatus,
             profilePhoto: emp.profilePhoto ?? null,
             avatar: emp.profilePhoto ?? null,
@@ -795,9 +844,7 @@ const employeeDetails = async (req, res) => {
                     name: hostel.name,
                     address: hostel.address ?? null,
                 }
-                : emp.hostelAssigned
-                    ? { id: emp.hostelAssigned, name: null, address: null }
-                    : null,
+                : null,
             bankDetails: emp.bankDetails ?? null,
             address: emp.address ?? null,
             emergencyContact: emp.emergencyContact ?? null,
@@ -882,6 +929,98 @@ const upsertEmployeeScore = async (req, res) => {
     }
 };
 
+// =================== GET EMPLOYEES BY HOSTEL ID ===================
+const getEmployeesByHostelId = async (req, res) => {
+    try {
+        const { hostelId } = req.params;
+        const {
+            status,
+            role,
+            department,
+            search,
+            page = 1,
+            limit = 10
+        } = req.query;
+
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+
+        // Build filters
+        const filters = {
+            hostelId: parseInt(hostelId)
+        };
+
+        if (status) filters.status = status;
+        if (role) filters.role = role;
+        if (department) filters.department = department;
+
+        // Build search conditions
+        const searchConditions = [];
+        if (search) {
+            searchConditions.push(
+                { user: { username: { contains: search, mode: 'insensitive' } } },
+                { user: { email: { contains: search, mode: 'insensitive' } } },
+                { user: { phone: { contains: search } } },
+                { employeeCode: { contains: search, mode: 'insensitive' } },
+                { designation: { contains: search, mode: 'insensitive' } },
+                { department: { contains: search, mode: 'insensitive' } }
+            );
+        }
+
+        const where = {
+            ...filters,
+            ...(searchConditions.length > 0 ? { OR: searchConditions } : {})
+        };
+
+        // Get employees with user data and hostel info
+        const [employees, total] = await Promise.all([
+            prisma.employee.findMany({
+                where,
+                include: {
+                    user: {
+                        select: {
+                            id: true,
+                            username: true,
+                            email: true,
+                            phone: true,
+                            userRole: {
+                                select: {
+                                    id: true,
+                                    roleName: true,
+                                },
+                            },
+                            status: true
+                        }
+                    },
+                    hostel: {
+                        select: {
+                            id: true,
+                            name: true,
+                            address: true
+                        }
+                    }
+                },
+                skip,
+                take: parseInt(limit),
+                orderBy: { createdAt: 'desc' }
+            }),
+            prisma.employee.count({ where })
+        ]);
+
+        return successResponse(res, {
+            items: employees,
+            total,
+            page: parseInt(page),
+            limit: parseInt(limit),
+            totalPages: Math.ceil(total / parseInt(limit)),
+            hostelId: parseInt(hostelId)
+        }, 'Employees fetched successfully for hostel');
+
+    } catch (error) {
+        console.error('Get employees by hostel ID error:', error);
+        return errorResponse(res, error.message);
+    }
+};
+
 module.exports = {
     createEmployee,
     getAllEmployees,
@@ -897,5 +1036,6 @@ module.exports = {
     getEmployeeCurrentScore,
     getEmployeeScoreHistory,
     upsertEmployeeScore,
+    getEmployeesByHostelId,
 };
 

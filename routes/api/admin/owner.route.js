@@ -16,6 +16,7 @@ const {
   getOwnerDashboard,
   updateOwner,
   deleteOwner,
+  getOwnerByHostelId,
 } = require('../../../controllers/api/owner.controller');
 const { authenticate, authorize } = require('../../../middleware/auth.middleware');
 
@@ -90,6 +91,9 @@ router.get(
 
 // Admin operations - List all owners
 router.get('/owners', authenticate, authorize('admin'), listOwners);
+
+// Get owner by hostel ID
+router.get('/owners/hostel/:hostelId', authenticate, authorize('admin', 'owner'), getOwnerByHostelId);
 
 // Admin operations - Get/Update/Delete specific owner by ID
 router.get('/owners/:id', authenticate, authorize('admin', 'owner'), getOwnerById);

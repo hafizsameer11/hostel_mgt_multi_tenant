@@ -287,10 +287,15 @@ const tenantProfileInclude = {
   user: {
     select: {
       id: true,
-      name: true,
+      username: true,
       email: true,
       phone: true,
-      role: true,
+      userRole: {
+        select: {
+          id: true,
+          roleName: true,
+        },
+      },
     },
   },
   payments: {
@@ -298,7 +303,13 @@ const tenantProfileInclude = {
     take: 5,
     include: {
       hostel: { select: { id: true, name: true } },
-      collector: { select: { id: true, name: true } },
+      collector: {
+        select: {
+          id: true,
+          username: true,
+          email: true,
+        },
+      },
     },
   },
   alerts: {
@@ -1012,7 +1023,13 @@ const getTenantPaymentHistory = async (req, res) => {
         take: limitNum,
         include: {
           hostel: { select: { id: true, name: true } },
-          collector: { select: { id: true, name: true } }
+          collector: {
+            select: {
+              id: true,
+              username: true,
+              email: true,
+            },
+          }
         }
       }),
       prisma.payment.count({ where })
@@ -1506,6 +1523,83 @@ const upsertTenantScore = async (req, res) => {
   }
 };
 
+// ===================================
+// GET TENANTS BY HOSTEL ID
+// ===================================
+const getTenantsByHostelId = async (req, res) => {
+  try {
+    const { hostelId } = req.params;
+    const convertHostelId = parseInt(hostelId, 10);
+
+    if (Number.isNaN(convertHostelId)) {
+      return errorResponse(res, "Invalid hostel id", 400);
+    }
+
+    // Verify hostel exists
+    const hostel = await prisma.hostel.findUnique({
+      where: { id: convertHostelId },
+      select: { id: true, name: true },
+    });
+
+    if (!hostel) {
+      return errorResponse(res, "Hostel not found", 404);
+    }
+
+    // Build access filter based on user role
+    const accessFilter = buildTenantAccessFilter(req);
+
+    // Build where clause to find tenants with allocations in this hostel
+    const where = {
+      ...accessFilter,
+      allocations: {
+        some: {
+          hostelId: convertHostelId,
+        },
+      },
+    };
+
+    const tenants = await prisma.tenant.findMany({
+      where,
+      include: {
+        allocations: {
+          where: {
+            hostelId: convertHostelId,
+          },
+          include: allocationLocationInclude,
+          orderBy: { createdAt: 'desc' },
+        },
+        _count: {
+          select: {
+            payments: true,
+            allocations: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Format tenants for response
+    const formattedTenants = tenants.map((tenant) => formatTenantForResponse(tenant));
+
+    return successResponse(
+      res,
+      {
+        hostel: {
+          id: hostel.id,
+          name: hostel.name,
+        },
+        tenants: formattedTenants,
+        count: formattedTenants.length,
+      },
+      "Tenants retrieved successfully",
+      200
+    );
+  } catch (err) {
+    console.error("Get Tenants By Hostel Error:", err);
+    return errorResponse(res, err.message || "Error retrieving tenants", 500);
+  }
+};
+
 module.exports = {
   createTenant,
   updateTenant,
@@ -1520,4 +1614,5 @@ module.exports = {
   getTenantCurrentScore,
   getTenantScoreHistory,
   upsertTenantScore,
+  getTenantsByHostelId,
 };

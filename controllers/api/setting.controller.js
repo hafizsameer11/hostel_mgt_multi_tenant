@@ -7,34 +7,192 @@ const { writeLog } = require("../../Helper/audit.helper");
 // ========== PROFILE (logged-in admin/manager) ==========
 exports.updateNameEmail = async (req, res) => {
   try {
-    const { username, email, firstName, lastName, company, jobTitle } = req.body;
-    const data = {};
+    const { username, email, phone, name, address } = req.body;
     
-    // Update username if provided (User model field)
-    if (username) data.username = username;
-    
-    // Update email if provided
-    if (email) {
-      const exists = await prisma.user.findUnique({ where: { email } });
-      if (exists && exists.id !== req.userId)
-        return errorResponse(res, "Email already in use", 400);
-      data.email = email;
-    }
-    
-    // Update user
-    const user = await prisma.user.update({
+    // Get current user to check profile type and admin status
+    const currentUser = await prisma.user.findUnique({
       where: { id: req.userId },
-      data,
-      select: {
-        id: true,
-        username: true,
-        email: true,
-        phone: true,
-        status: true,
-        isAdmin: true,
-        userRoleId: true,
-        createdAt: true,
-        updatedAt: true,
+      include: {
+        employeeProfile: true,
+        ownerProfile: true,
+        tenantProfile: true
+      }
+    });
+
+    if (!currentUser) {
+      return errorResponse(res, "User not found", 404);
+    }
+
+    // Check if user is admin (isAdmin = true)
+    const isAdmin = currentUser.isAdmin;
+    
+    // Admin can only update username and email
+    if (isAdmin) {
+      const userData = {};
+      if (username !== undefined) userData.username = username;
+      if (email !== undefined) {
+        // Check if email is already in use by another user
+        const exists = await prisma.user.findUnique({ where: { email } });
+        if (exists && exists.id !== req.userId) {
+          return errorResponse(res, "Email already in use", 400);
+        }
+        userData.email = email;
+      }
+
+      if (Object.keys(userData).length > 0) {
+        await prisma.user.update({
+          where: { id: req.userId },
+          data: userData
+        });
+      }
+
+      await writeLog({
+        userId: req.userId,
+        action: "update",
+        module: "profile",
+        description: "Updated username/email (admin)",
+      });
+
+      const updatedUser = await prisma.user.findUnique({
+        where: { id: req.userId },
+        select: {
+          id: true,
+          username: true,
+          email: true,
+          phone: true,
+          status: true,
+          isAdmin: true,
+          userRoleId: true,
+          createdAt: true,
+          updatedAt: true,
+          userRole: {
+            select: {
+              id: true,
+              roleName: true,
+              description: true
+            }
+          }
+        }
+      });
+
+      return successResponse(res, updatedUser, "Profile updated successfully");
+    }
+
+    // For non-admin users, update based on their profile type
+    const userData = {};
+    if (username !== undefined) userData.username = username;
+    if (email !== undefined) {
+      const exists = await prisma.user.findUnique({ where: { email } });
+      if (exists && exists.id !== req.userId) {
+        return errorResponse(res, "Email already in use", 400);
+      }
+      userData.email = email;
+    }
+    if (phone !== undefined) userData.phone = phone;
+
+    // Handle profile photo upload
+    let profilePhotoPath = null;
+    if (req.file) {
+      profilePhotoPath = `/uploads/profiles/${req.file.filename}`;
+    }
+
+    // Update in transaction
+    await prisma.$transaction(async (tx) => {
+      // Update User table
+      if (Object.keys(userData).length > 0) {
+        await tx.user.update({
+          where: { id: req.userId },
+          data: userData
+        });
+      }
+
+      // Check profile type and update accordingly
+      if (currentUser.employeeProfile) {
+        // Employee profile
+        const employeeData = {};
+        if (name !== undefined) {
+          // Employee doesn't have a name field, but we can update it in User if needed
+          // Actually, Employee doesn't have name, so we skip it
+        }
+        if (profilePhotoPath) employeeData.profilePhoto = profilePhotoPath;
+        if (address !== undefined) {
+          // Parse address if it's a string, otherwise use as is
+          employeeData.address = typeof address === 'string' ? JSON.parse(address) : address;
+        }
+
+        if (Object.keys(employeeData).length > 0) {
+          await tx.employee.update({
+            where: { id: currentUser.employeeProfile.id },
+            data: employeeData
+          });
+        }
+      } else if (currentUser.ownerProfile) {
+        // Owner profile
+        const ownerData = {};
+        if (name !== undefined) ownerData.name = name;
+        if (profilePhotoPath) ownerData.profilePhoto = profilePhotoPath;
+        if (address !== undefined) {
+          ownerData.address = typeof address === 'string' ? JSON.parse(address) : address;
+        }
+
+        if (Object.keys(ownerData).length > 0) {
+          await tx.owner.update({
+            where: { id: currentUser.ownerProfile.id },
+            data: ownerData
+          });
+        }
+      } else if (currentUser.tenantProfile) {
+        // Tenant profile
+        const tenantData = {};
+        if (name !== undefined) tenantData.name = name;
+        if (profilePhotoPath) tenantData.profilePhoto = profilePhotoPath;
+        if (address !== undefined) {
+          tenantData.address = typeof address === 'string' ? JSON.parse(address) : address;
+        }
+
+        if (Object.keys(tenantData).length > 0) {
+          await tx.tenant.update({
+            where: { id: currentUser.tenantProfile.id },
+            data: tenantData
+          });
+        }
+      }
+    });
+
+    await writeLog({
+      userId: req.userId,
+      action: "update",
+      module: "profile",
+      description: "Updated profile information",
+    });
+
+    // Fetch updated user with profile info
+    const updatedUser = await prisma.user.findUnique({
+      where: { id: req.userId },
+      include: {
+        employeeProfile: {
+          select: {
+            id: true,
+            profilePhoto: true,
+            address: true
+          }
+        },
+        ownerProfile: {
+          select: {
+            id: true,
+            name: true,
+            profilePhoto: true,
+            address: true
+          }
+        },
+        tenantProfile: {
+          select: {
+            id: true,
+            name: true,
+            profilePhoto: true,
+            address: true
+          }
+        },
         userRole: {
           select: {
             id: true,
@@ -44,48 +202,73 @@ exports.updateNameEmail = async (req, res) => {
         }
       }
     });
-    
-    // Check if user has linked Tenant or Employee profile for personal info
-    const tenant = await prisma.tenant.findUnique({ where: { userId: req.userId } });
-    const employee = await prisma.employee.findUnique({ where: { userId: req.userId } });
-    
-    // Update Tenant personal info if tenant exists
-    if (tenant && (firstName || lastName || company || jobTitle)) {
-      const tenantData = {};
-      if (firstName) tenantData.firstName = firstName;
-      if (lastName) tenantData.lastName = lastName;
-      if (company) tenantData.companyName = company;
-      if (jobTitle) tenantData.designation = jobTitle;
-      
-      await prisma.tenant.update({
-        where: { id: tenant.id },
-        data: tenantData
-      });
+
+    // Format response
+    const response = {
+      id: updatedUser.id,
+      username: updatedUser.username,
+      email: updatedUser.email,
+      phone: updatedUser.phone,
+      status: updatedUser.status,
+      isAdmin: updatedUser.isAdmin,
+      userRoleId: updatedUser.userRoleId,
+      createdAt: updatedUser.createdAt,
+      updatedAt: updatedUser.updatedAt,
+      userRole: updatedUser.userRole,
+      profile: null
+    };
+
+    if (updatedUser.employeeProfile) {
+      response.profile = {
+        type: 'employee',
+        profilePhoto: updatedUser.employeeProfile.profilePhoto,
+        address: updatedUser.employeeProfile.address
+      };
+    } else if (updatedUser.ownerProfile) {
+      response.profile = {
+        type: 'owner',
+        name: updatedUser.ownerProfile.name,
+        profilePhoto: updatedUser.ownerProfile.profilePhoto,
+        address: updatedUser.ownerProfile.address
+      };
+    } else if (updatedUser.tenantProfile) {
+      response.profile = {
+        type: 'tenant',
+        name: updatedUser.tenantProfile.name,
+        profilePhoto: updatedUser.tenantProfile.profilePhoto,
+        address: updatedUser.tenantProfile.address
+      };
     }
-    
-    // Update Employee personal info if employee exists
-    if (employee && (firstName || lastName || company || jobTitle)) {
-      const employeeData = {};
-      if (firstName) employeeData.firstName = firstName;
-      if (lastName) employeeData.lastName = lastName;
-      if (company) employeeData.companyName = company;
-      if (jobTitle) employeeData.designation = jobTitle;
-      
-      await prisma.employee.update({
-        where: { id: employee.id },
-        data: employeeData
-      });
-    }
-    
-    await writeLog({
-      userId: req.userId,
-      action: "update",
-      module: "profile",
-      description: "Updated name/email/personal info",
-    });
-    
-    return successResponse(res, user, "Profile updated");
+
+    return successResponse(res, response, "Profile updated successfully");
   } catch (e) {
+    console.error('Update name/email error:', e);
+    return errorResponse(res, e.message);
+  }
+};
+
+// ========== GET PASSWORD STATUS ==========
+exports.getPasswordStatus = async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId },
+      select: {
+        id: true,
+        password: true
+      }
+    });
+
+    if (!user) {
+      return errorResponse(res, "User not found", 404);
+    }
+
+    // Return password status (whether password exists, not the actual password)
+    return successResponse(res, {
+      hasPassword: !!user.password,
+      canChangePassword: true
+    }, "Password status retrieved successfully");
+  } catch (e) {
+    console.error('Get password status error:', e);
     return errorResponse(res, e.message);
   }
 };
@@ -94,40 +277,61 @@ exports.changePassword = async (req, res) => {
   try {
     const { currentPassword, newPassword, confirmPassword } = req.body;
     
+    // Validation: newPassword is required
     if (!newPassword) {
       return errorResponse(res, "New password is required", 400);
     }
     
-    if (newPassword.length < 8) {
-      return errorResponse(res, "Password must be at least 8 characters long", 400);
+    // Validation: confirmPassword is required
+    if (!confirmPassword) {
+      return errorResponse(res, "Confirm password is required", 400);
     }
     
-    if (confirmPassword && newPassword !== confirmPassword) {
-      return errorResponse(res, "Passwords do not match", 400);
+    // Validation: passwords must match
+    if (newPassword !== confirmPassword) {
+      return errorResponse(res, "New password and confirm password do not match", 400);
+    }
+    
+    // Validation: password length
+    if (newPassword.length < 5) {
+      return errorResponse(res, "Password must be at least 6 characters long", 400);
     }
     
     const user = await prisma.user.findUnique({ where: { id: req.userId } });
-    if (!user?.password) return errorResponse(res, "No password set", 400);
-
-    // If current password is provided, verify it
-    if (currentPassword) {
-      const ok = await bcrypt.compare(String(currentPassword || ""), user.password);
-      if (!ok) return errorResponse(res, "Current password is incorrect", 400);
+    if (!user) {
+      return errorResponse(res, "User not found", 404);
     }
 
+    // If user has a password, current password is required
+    if (user.password) {
+      if (!currentPassword) {
+        return errorResponse(res, "Current password is required", 400);
+      }
+      
+      // Verify current password
+      const isValid = await bcrypt.compare(String(currentPassword), user.password);
+      if (!isValid) {
+        return errorResponse(res, "Current password is incorrect", 400);
+      }
+    }
+
+    // Hash and update password
     const hashed = await bcrypt.hash(String(newPassword), 10);
     await prisma.user.update({
       where: { id: req.userId },
       data: { password: hashed },
     });
+    
     await writeLog({
       userId: req.userId,
       action: "update",
       module: "profile",
       description: "Changed password",
     });
+    
     return successResponse(res, null, "Password changed successfully");
   } catch (e) {
+    console.error('Change password error:', e);
     return errorResponse(res, e.message);
   }
 };

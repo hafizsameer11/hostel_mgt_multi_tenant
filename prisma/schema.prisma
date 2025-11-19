@@ -284,6 +284,7 @@ model Hostel {
   vendors      Vendor[]
   expenses     Expense[]
   fpas         FPA[]
+  employees    Employee[]    @relation("EmployeeHostel")
 
   @@index([name])
   @@index([status])
@@ -565,7 +566,7 @@ model Employee {
   
   // Work Information
   workingHours   Json? // { startTime, endTime, workingDays: ["monday", "tuesday", ...] }
-  hostelAssigned Int? // Hostel ID if assigned to specific hostel
+  hostelId       Int? // Hostel ID if assigned to specific hostel
   
   // Bank Details
   bankDetails Json? // { bankName, accountNumber, ifscCode, branch }
@@ -587,13 +588,14 @@ model Employee {
   updatedAt DateTime @updatedAt
   
   // Relations
-  user User @relation("EmployeeUser", fields: [userId], references: [id], onDelete: Cascade)
+  user   User    @relation("EmployeeUser", fields: [userId], references: [id], onDelete: Cascade)
+  hostel Hostel? @relation("EmployeeHostel", fields: [hostelId], references: [id], onDelete: SetNull)
   
   @@index([userId])
   @@index([employeeCode])
   @@index([role])
   @@index([status])
-  @@index([hostelAssigned])
+  @@index([hostelId])
 }
 
 model Owner {
