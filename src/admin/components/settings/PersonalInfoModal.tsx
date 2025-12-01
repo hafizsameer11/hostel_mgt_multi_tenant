@@ -3,29 +3,36 @@
  * Extracted from SettingsForm for reusability
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   UserCircleIcon,
   XMarkIcon,
   IdentificationIcon,
   MapPinIcon,
+  CameraIcon,
+  PhotoIcon,
 } from '@heroicons/react/24/outline';
 import type { PersonalInfoModalProps, PersonalInfoFormData } from '../../types/settings';
+import { getPersonalInfo, updateProfileInfo } from '../../services/settings.service';
+import { API_BASE_URL } from '../../../services/api.config';
 
 export const PersonalInfoModal: React.FC<PersonalInfoModalProps> = ({ isOpen, onClose }) => {
   const [activeTab, setActiveTab] = useState<'personal' | 'contact' | 'address'>('personal');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [loading, setLoading] = useState(false);
+  const [fetching, setFetching] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [formData, setFormData] = useState<PersonalInfoFormData>({
-    firstName: 'Darrel',
-    middleInitial: '',
-    lastName: 'Wilson',
-    company: 'Darrel Wilson',
-    jobTitle: 'Influencer',
-    joinReason: 'Other',
-    goals: 'Research',
-    accountingExperience: '5',
+    username: '',
+    email: '',
+    phone: '',
+    alternativePhone: '',
+    profilePicture: '',
+    profilePhotoFile: null,
     phones: [
-      { id: '1', type: 'Mobile', number: '(702) 630-0989' },
+      { id: '1', type: 'Mobile', number: '' },
     ],
     emails: [],
     street1: '',
@@ -36,7 +43,42 @@ export const PersonalInfoModal: React.FC<PersonalInfoModalProps> = ({ isOpen, on
     country: '',
   });
 
-  const handleSubmit = (e?: React.FormEvent) => {
+  // Fetch personal info when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      fetchPersonalInfo();
+    } else {
+      // Reset form when modal closes
+      setError(null);
+      setSuccess(null);
+    }
+  }, [isOpen]);
+
+  const fetchPersonalInfo = async () => {
+    setFetching(true);
+    setError(null);
+    try {
+      const data = await getPersonalInfo();
+      
+      // Map API response to form data
+      setFormData((prev) => ({
+        ...prev,
+        username: data.username || '',
+        email: data.email || '',
+        phone: data.phone || '',
+        phones: data.phone ? [{ id: '1', type: 'Mobile', number: data.phone }] : prev.phones,
+        // Note: API response doesn't include address or profilePhoto in GET request
+        // These will be populated from the update response if available
+      }));
+    } catch (err: any) {
+      console.error('Error fetching personal info:', err);
+      setError(err?.message || 'Failed to load personal information');
+    } finally {
+      setFetching(false);
+    }
+  };
+
+  const handleSubmit = async (e?: React.FormEvent) => {
     if (e) {
       e.preventDefault();
     }
@@ -45,11 +87,14 @@ export const PersonalInfoModal: React.FC<PersonalInfoModalProps> = ({ isOpen, on
     const errors: string[] = [];
     
     // Personal Info validation
-    if (!formData.firstName.trim()) {
-      errors.push('First Name is required');
+    if (!formData.username.trim()) {
+      errors.push('Username is required');
     }
-    if (!formData.lastName.trim()) {
-      errors.push('Last Name is required');
+    if (!formData.email.trim()) {
+      errors.push('Email is required');
+    }
+    if (!formData.phone.trim()) {
+      errors.push('Phone is required');
     }
     
     // Address validation
@@ -67,51 +112,95 @@ export const PersonalInfoModal: React.FC<PersonalInfoModalProps> = ({ isOpen, on
     }
     
     if (errors.length > 0) {
-      alert('Please fill in all required fields:\n' + errors.join('\n'));
+      setError('Please fill in all required fields:\n' + errors.join('\n'));
       return;
     }
     
-    // Prepare unified data object for single API call
-    const unifiedFormData = {
-      // Personal Information
-      personalInfo: {
-        firstName: formData.firstName,
-        middleInitial: formData.middleInitial,
-        lastName: formData.lastName,
-        company: formData.company,
-        jobTitle: formData.jobTitle,
-        profilePicture: formData.profilePicture,
-      },
-      // Contact Information
-      contactInfo: {
-        phones: formData.phones,
-        emails: formData.emails,
-      },
-      // Address Information
-      address: {
-        street1: formData.street1,
-        city: formData.city,
-        state: formData.state,
-        zipCode: formData.zipCode,
-        country: formData.country,
-      },
-    };
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
     
-    // Single API call to save all data
-    console.log('Submitting unified form data:', unifiedFormData);
-    
-    // For now, save to localStorage as backup
     try {
-      localStorage.setItem('personalInfoData', JSON.stringify(unifiedFormData));
-    } catch (error) {
-      console.error('Failed to save to localStorage:', error);
+      // Prepare data for API call
+      const updateData = {
+        username: formData.username,
+        email: formData.email,
+        phone: formData.phone,
+        profilePhoto: formData.profilePhotoFile || formData.profilePicture || undefined,
+        address: {
+          street1: formData.street1,
+          street2: formData.street2 || undefined,
+          city: formData.city,
+          state: formData.state || undefined,
+          zipCode: formData.zipCode,
+          country: formData.country,
+        },
+      };
+      
+      const response = await updateProfileInfo(updateData);
+      
+      // Update form with response data (especially profile photo and address)
+      if (response.profile) {
+        // Construct full URL for profile photo if it's a path
+        let profilePhotoUrl = response.profile.profilePhoto || '';
+        if (profilePhotoUrl && !profilePhotoUrl.startsWith('http') && !profilePhotoUrl.startsWith('data:')) {
+          profilePhotoUrl = `${API_BASE_URL.replace('/api', '')}${profilePhotoUrl}`;
+        }
+        
+        setFormData((prev) => ({
+          ...prev,
+          profilePicture: profilePhotoUrl || prev.profilePicture,
+          city: response.profile.address?.city || prev.city,
+          state: response.profile.address?.state || prev.state,
+        }));
+      }
+      
+      setSuccess('Personal information updated successfully!');
+      
+      // Close modal after a short delay
+      setTimeout(() => {
+        onClose();
+      }, 1500);
+    } catch (err: any) {
+      console.error('Error updating personal info:', err);
+      setError(err?.message || 'Failed to update personal information');
+    } finally {
+      setLoading(false);
     }
-    
-    onClose();
   };
 
   const handleInputChange = (field: keyof PersonalInfoFormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleProfilePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData((prev) => ({
+          ...prev,
+          profilePhotoFile: file,
+          profilePicture: reader.result as string,
+        }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveProfilePhoto = () => {
+    setFormData((prev) => ({
+      ...prev,
+      profilePhotoFile: null,
+      profilePicture: '',
+    }));
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handlePhotoClick = () => {
+    fileInputRef.current?.click();
   };
 
   const handlePhoneChange = (id: string, field: 'type' | 'number', value: string) => {
@@ -176,6 +265,16 @@ export const PersonalInfoModal: React.FC<PersonalInfoModalProps> = ({ isOpen, on
       document.body.style.overflow = 'unset';
     };
   }, [isOpen]);
+
+  // Clear success message after 3 seconds
+  useEffect(() => {
+    if (success) {
+      const timer = setTimeout(() => {
+        setSuccess(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [success]);
 
   return (
     <AnimatePresence>
@@ -254,13 +353,37 @@ export const PersonalInfoModal: React.FC<PersonalInfoModalProps> = ({ isOpen, on
 
                 {/* Form Content - All forms are part of one unified form */}
                 <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">
+                  {/* Error and Success Messages */}
+                  {(error || success) && (
+                    <div className="px-6 pt-4">
+                      {error && (
+                        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
+                          <p className="text-sm whitespace-pre-line">{error}</p>
+                        </div>
+                      )}
+                      {success && (
+                        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-4">
+                          <p className="text-sm">{success}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  {fetching ? (
+                    <div className="flex-1 flex items-center justify-center">
+                      <div className="text-center">
+                        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
+                        <p className="text-slate-600">Loading personal information...</p>
+                      </div>
+                    </div>
+                  ) : (
                   <div className="flex-1 overflow-y-auto p-6">
                   {activeTab === 'personal' && (
                     <div className="space-y-6">
-                      {/* Profile Picture */}
-                      <div className="flex items-start gap-6">
-                        <div className="relative">
-                          <div className="w-24 h-24 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden">
+                      {/* Profile Picture Section - Professional UI */}
+                      <div className="flex flex-col items-center gap-4 pb-6 border-b border-slate-200">
+                        <div className="relative group">
+                          <div className="w-32 h-32 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center overflow-hidden shadow-lg ring-4 ring-white ring-offset-2 ring-offset-slate-50">
                             {formData.profilePicture ? (
                               <img
                                 src={formData.profilePicture}
@@ -268,66 +391,89 @@ export const PersonalInfoModal: React.FC<PersonalInfoModalProps> = ({ isOpen, on
                                 className="w-full h-full object-cover"
                               />
                             ) : (
-                              <UserCircleIcon className="w-16 h-16 text-slate-400" />
+                              <UserCircleIcon className="w-20 h-20 text-white" />
                             )}
                           </div>
+                          {formData.profilePicture && (
+                            <button
+                              type="button"
+                              onClick={handleRemoveProfilePhoto}
+                              className="absolute -top-1 -right-1 w-8 h-8 bg-red-500 rounded-full flex items-center justify-center text-white text-sm hover:bg-red-600 transition-colors shadow-lg"
+                              title="Remove photo"
+                            >
+                              <XMarkIcon className="w-5 h-5" />
+                            </button>
+                          )}
+                          <div className="absolute inset-0 rounded-full bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center cursor-pointer" onClick={handlePhotoClick}>
+                            <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                              <div className="bg-white/90 backdrop-blur-sm rounded-full p-3 shadow-lg">
+                                <CameraIcon className="w-6 h-6 text-blue-600" />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-center">
                           <button
                             type="button"
-                            className="absolute -top-1 -right-1 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center text-white text-xs hover:bg-red-600"
+                            onClick={handlePhotoClick}
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
                           >
-                            <XMarkIcon className="w-4 h-4" />
+                            <PhotoIcon className="w-5 h-5" />
+                            <span className="font-medium">Change Profile Picture</span>
                           </button>
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*"
+                            onChange={handleProfilePhotoChange}
+                            className="hidden"
+                          />
+                          <p className="text-xs text-slate-500 mt-2">
+                            JPG, PNG or GIF. Max size 2MB
+                          </p>
                         </div>
                       </div>
 
-                      {/* Name Fields */}
-                      <div className="grid grid-cols-12 gap-4">
-                        <div className="col-span-6">
+                      {/* Username, Email, Phone Fields - Two per row */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
                           <label className="block text-sm font-medium text-slate-700 mb-2">
-                            First Name
+                            Username <span className="text-red-500">*</span>
                           </label>
                           <input
                             type="text"
-                            value={formData.firstName}
-                            onChange={(e) => handleInputChange('firstName', e.target.value)}
-                            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            value={formData.username}
+                            onChange={(e) => handleInputChange('username', e.target.value)}
+                            className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="Enter username"
+                            required
                           />
                         </div>
-                        <div className="col-span-6">
+                        <div>
                           <label className="block text-sm font-medium text-slate-700 mb-2">
-                            Last Name
+                            Email <span className="text-red-500">*</span>
                           </label>
                           <input
-                            type="text"
-                            value={formData.lastName}
-                            onChange={(e) => handleInputChange('lastName', e.target.value)}
-                            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            type="email"
+                            value={formData.email}
+                            onChange={(e) => handleInputChange('email', e.target.value)}
+                            className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="Enter email"
+                            required
                           />
                         </div>
-                      </div>
-                      {/* company and job info */}
-                      <div className="grid grid-cols-12 gap-4">
-                        <div className="col-span-6">
-                        <label className="block text-sm font-medium text-slate-700 mb-2">
-                          Company
-                        </label>
-                        <input
-                          type="text"
-                          value={formData.company}
-                          onChange={(e) => handleInputChange('company', e.target.value)}
-                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                        </div>
-                        <div className="col-span-6">
-                        <label className="block text-sm font-medium text-slate-700 mb-2">
-                          Job Title
-                        </label>
-                        <input
-                          type="text"
-                          value={formData.jobTitle}
-                          onChange={(e) => handleInputChange('jobTitle', e.target.value)}
-                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-2">
+                            Phone <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="tel"
+                            value={formData.phone}
+                            onChange={(e) => handleInputChange('phone', e.target.value)}
+                            className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="Enter phone number"
+                            required
+                          />
                         </div>
                       </div>
                     </div>
@@ -364,6 +510,23 @@ export const PersonalInfoModal: React.FC<PersonalInfoModalProps> = ({ isOpen, on
                               )}
                             </div>
                           ))}
+                        </div>
+                      </div>
+
+                      {/* Alternative Phone Section */}
+                      <div>
+                        <h4 className="text-lg font-semibold text-slate-900 mb-4">Alternative Phone</h4>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-2">
+                            Alternative Phone
+                          </label>
+                          <input
+                            type="tel"
+                            value={formData.alternativePhone}
+                            onChange={(e) => handleInputChange('alternativePhone', e.target.value)}
+                            placeholder="Enter alternative phone number"
+                            className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
                         </div>
                       </div>
                     </div>
@@ -452,21 +615,27 @@ export const PersonalInfoModal: React.FC<PersonalInfoModalProps> = ({ isOpen, on
 
                  
                   </div>
+                  )}
 
                   {/* Footer Buttons - Part of unified form */}
                   <div className="p-6 border-t border-slate-200 bg-white flex justify-end gap-3">
                     <button
                       type="button"
                       onClick={onClose}
-                      className="px-6 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
+                      disabled={loading}
+                      className="px-6 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="px-6 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors"
+                      disabled={loading || fetching}
+                      className="px-6 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                     >
-                      Save
+                      {loading && (
+                        <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      )}
+                      {loading ? 'Saving...' : 'Save'}
                     </button>
                   </div>
                 </form>

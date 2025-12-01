@@ -17,7 +17,8 @@ import {
   PaperAirplaneIcon,
   EyeIcon,
   CurrencyDollarIcon,
-  DocumentTextIcon
+  DocumentTextIcon,
+  MapPinIcon
 } from '@heroicons/react/24/outline';
 import { Button } from '../../components/Button';
 import { Modal } from '../../components/Modal';
@@ -27,12 +28,14 @@ import { Select } from '../../components/Select';
 import type { Tenant } from '../../types/people';
 import type { Employee } from '../../types/people';
 import type { Vendor } from '../../types/comms';
-import type { Hostel } from '../../types/hostel';
 import tenantsData from '../../mock/tenants.json';
 import employeesData from '../../mock/employees.json';
 import vendorsData from '../../mock/vendors.json';
 import accountsData from '../../mock/accounts.json';
 import * as hostelService from '../../services/hostel.service';
+import * as tenantService from '../../services/tenant.service';
+import * as employeeService from '../../services/employee.service';
+import { API_BASE_URL } from '../../../services/api.config';
 import { formatDate, formatCurrency } from '../../types/common';
 
 type ActiveTab = 'Tenants' | 'Employees' | 'Vendors';
@@ -60,7 +63,12 @@ const CommunicationBoard: React.FC = () => {
     }
   }, [location.pathname, navigate]);
   const [hostelFilter, setHostelFilter] = useState('');
-  const [hostels, setHostels] = useState<Hostel[]>([]);
+  const [hostels, setHostels] = useState<Array<{ id: number; name: string; city: string }>>([]);
+  const [hostelsLoading, setHostelsLoading] = useState<boolean>(true);
+  const [tenants, setTenants] = useState<any[]>([]);
+  const [tenantsLoading, setTenantsLoading] = useState<boolean>(false);
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [employeesLoading, setEmployeesLoading] = useState<boolean>(false);
   const [isEmailCampaignOpen, setIsEmailCampaignOpen] = useState(false);
   const [campaignForm, setCampaignForm] = useState({
     subject: '',
@@ -76,28 +84,102 @@ const CommunicationBoard: React.FC = () => {
     data: null,
   });
 
-  // Load hostels on component mount
+  // Fetch hostels from API on component mount
   useEffect(() => {
-    const allHostels = hostelService.getAllHostels();
-    setHostels(allHostels);
+    const fetchHostels = async () => {
+      try {
+        setHostelsLoading(true);
+        const hostelsData = await hostelService.getAllHostelsFromAPI();
+        setHostels(hostelsData);
+      } catch (err: any) {
+        console.error('Error fetching hostels:', err);
+        setHostels([]);
+      } finally {
+        setHostelsLoading(false);
+      }
+    };
+
+    fetchHostels();
   }, []);
 
-  // Filter data based on hostel
+  // Fetch tenants from API
+  useEffect(() => {
+    const fetchTenants = async () => {
+      if (activeTab === 'Tenants') {
+        try {
+          setTenantsLoading(true);
+          if (hostelFilter) {
+            // Fetch tenants by hostel
+            const tenantsData = await tenantService.getTenantsByHostel(Number(hostelFilter));
+            setTenants(tenantsData);
+          } else {
+            // Fetch all tenants
+            const tenantsData = await tenantService.getAllTenants();
+            setTenants(tenantsData);
+          }
+        } catch (error) {
+          console.error('Error fetching tenants:', error);
+          setTenants([]);
+        } finally {
+          setTenantsLoading(false);
+        }
+      }
+    };
+
+    fetchTenants();
+  }, [activeTab, hostelFilter]);
+
+  // Fetch employees from API
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      if (activeTab === 'Employees') {
+        try {
+          setEmployeesLoading(true);
+          if (hostelFilter) {
+            // Fetch employees by hostel using the API endpoint
+            const employeesData = await employeeService.getEmployeesByHostel(Number(hostelFilter));
+            setEmployees(employeesData);
+          } else {
+            // Fetch all employees
+            const employeesData = await employeeService.getAllEmployees();
+            setEmployees(employeesData);
+          }
+        } catch (error) {
+          console.error('Error fetching employees:', error);
+          setEmployees([]);
+        } finally {
+          setEmployeesLoading(false);
+        }
+      }
+    };
+
+    fetchEmployees();
+  }, [activeTab, hostelFilter]);
+
+  // Filter data based on hostel (for API data)
   const filteredTenants = useMemo(() => {
+    if (activeTab === 'Tenants') {
+      return tenants;
+    }
+    // Fallback to mock data for other tabs
     let data = tenantsData as Tenant[];
     if (hostelFilter) {
       data = data.filter((t) => String(t.hostelId) === hostelFilter);
     }
     return data;
-  }, [hostelFilter]);
+  }, [tenants, activeTab, hostelFilter]);
 
   const filteredEmployees = useMemo(() => {
+    if (activeTab === 'Employees') {
+      return employees;
+    }
+    // Fallback to mock data for other tabs
     let data = employeesData as Employee[];
     if (hostelFilter) {
       data = data.filter((e) => String(e.hostelId) === hostelFilter);
     }
     return data;
-  }, [hostelFilter]);
+  }, [employees, activeTab, hostelFilter]);
 
   const filteredVendors = useMemo(() => {
     let data = vendorsData as Vendor[];
@@ -109,15 +191,18 @@ const CommunicationBoard: React.FC = () => {
 
   // Prepare hostel options for dropdown
   const hostelOptions = useMemo(() => {
+    if (hostelsLoading) {
+      return [{ value: '', label: 'Loading hostels...' }];
+    }
     const options = [{ value: '', label: 'All Hostels' }];
     hostels.forEach((hostel) => {
       options.push({
         value: String(hostel.id),
-        label: hostel.name,
+        label: `${hostel.name} - ${hostel.city}`,
       });
     });
     return options;
-  }, [hostels]);
+  }, [hostels, hostelsLoading]);
 
   // Get selected hostel name for display
   const selectedHostelName = useMemo(() => {
@@ -126,12 +211,6 @@ const CommunicationBoard: React.FC = () => {
     return hostel?.name || null;
   }, [hostelFilter, hostels]);
 
-  // Tab counts (for reference, not used in UI anymore - navigation handled by second sidebar)
-  const tabCounts = useMemo(() => ({
-    Tenants: filteredTenants.length,
-    Employees: filteredEmployees.length,
-    Vendors: filteredVendors.length,
-  }), [filteredTenants, filteredEmployees, filteredVendors]);
 
   const handleEmailCampaign = () => {
     setIsEmailCampaignOpen(true);
@@ -157,8 +236,103 @@ const CommunicationBoard: React.FC = () => {
     setIsEmailCampaignOpen(false);
   };
 
-  const handleView = (type: 'Tenant' | 'Employee' | 'Vendor', data: any) => {
-    setViewModal({ isOpen: true, type, data });
+  const handleView = async (type: 'Tenant' | 'Employee' | 'Vendor', data: any) => {
+    if (type === 'Tenant') {
+      // Fetch full tenant details from API
+      try {
+        setTenantsLoading(true);
+        const tenantData = await tenantService.getTenantById(data.id);
+        if (tenantData) {
+          // Map API response to display format
+          const mappedData = {
+            id: tenantData.id,
+            name: tenantData.name,
+            firstName: tenantData.firstName,
+            lastName: tenantData.lastName,
+            email: tenantData.email,
+            phone: tenantData.phone,
+            alternatePhone: tenantData.alternatePhone,
+            gender: tenantData.gender,
+            dateOfBirth: tenantData.dateOfBirth,
+            status: tenantData.status,
+            profilePhoto: tenantData.profilePhoto,
+            monthlyRent: tenantData.monthlyRent,
+            securityDeposit: tenantData.securityDeposit,
+            leaseStartDate: tenantData.leaseStartDate,
+            leaseEndDate: tenantData.leaseEndDate,
+            notes: tenantData.notes,
+            rating: tenantData.rating,
+            documents: tenantData.documents,
+            room: tenantData.activeAllocation?.room?.number || 'N/A',
+            bed: tenantData.activeAllocation?.bed?.number || 'N/A',
+            floor: tenantData.activeAllocation?.floor?.name || 'N/A',
+            hostel: tenantData.activeAllocation?.hostel?.name || 'N/A',
+            leaseStart: tenantData.leaseStartDate,
+            leaseEnd: tenantData.leaseEndDate,
+            activeAllocation: tenantData.activeAllocation,
+            allocations: tenantData.allocations,
+          };
+          setViewModal({ isOpen: true, type, data: mappedData });
+        } else {
+          // Fallback to provided data if API fails
+          setViewModal({ isOpen: true, type, data });
+        }
+      } catch (error) {
+        console.error('Error fetching tenant details:', error);
+        // Fallback to provided data if API fails
+        setViewModal({ isOpen: true, type, data });
+      } finally {
+        setTenantsLoading(false);
+      }
+    } else if (type === 'Employee') {
+      // Fetch full employee details from API
+      try {
+        setEmployeesLoading(true);
+        const employeeData = await employeeService.getEmployeeById(data.id);
+        if (employeeData) {
+          // Map API response to display format
+          const mappedData = {
+            id: employeeData.id,
+            name: employeeData.user?.username || employeeData.user?.email || 'Unknown',
+            email: employeeData.user?.email || '',
+            phone: employeeData.user?.phone || '',
+            role: employeeData.role || '',
+            department: employeeData.department,
+            designation: employeeData.designation,
+            status: employeeData.status || 'active',
+            profilePhoto: employeeData.profilePhoto,
+            joinDate: employeeData.joinDate,
+            terminationDate: employeeData.terminationDate,
+            salary: employeeData.salary,
+            salaryType: employeeData.salaryType,
+            workingHours: employeeData.workingHours,
+            employeeCode: employeeData.employeeCode,
+            address: employeeData.address,
+            documents: employeeData.documents || [],
+            emergencyContact: employeeData.emergencyContact,
+            qualifications: employeeData.qualifications,
+            notes: employeeData.notes,
+            bankDetails: employeeData.bankDetails,
+            hostel: employeeData.hostel?.name || 'N/A',
+            hostelId: employeeData.hostelId,
+            user: employeeData.user,
+          };
+          setViewModal({ isOpen: true, type, data: mappedData });
+        } else {
+          // Fallback to provided data if API fails
+          setViewModal({ isOpen: true, type, data });
+        }
+      } catch (error) {
+        console.error('Error fetching employee details:', error);
+        // Fallback to provided data if API fails
+        setViewModal({ isOpen: true, type, data });
+      } finally {
+        setEmployeesLoading(false);
+      }
+    } else {
+      // For vendors, use provided data directly
+      setViewModal({ isOpen: true, type, data });
+    }
   };
 
   const handleViewClose = () => {
@@ -197,51 +371,49 @@ const CommunicationBoard: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      {/* Header with Hostel Filter */}
+      <div className="flex items-start justify-between gap-4 flex-col sm:flex-row">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Communication Directory</h1>
           <p className="text-slate-600 mt-1">
             View biodata and contact information for tenants, employees, and vendors
           </p>
         </div>
-        <Button
-          variant="primary"
-          onClick={handleEmailCampaign}
-          icon={PaperAirplaneIcon}
-        >
-          Email Campaign
-        </Button>
+        <div className="flex items-center gap-3 sm:mt-0 mt-2">
+          {/* Hostel Filter - Right side of heading */}
+          <label className="text-sm font-semibold text-slate-700 whitespace-nowrap">
+            Filter by Hostel:
+          </label>
+          <div className="w-64">
+            <Select
+              value={hostelFilter}
+              onChange={setHostelFilter}
+              options={hostelOptions}
+              placeholder={hostelsLoading ? "Loading hostels..." : "Select Hostel"}
+              disabled={hostelsLoading}
+            />
+          </div>
+          <Button
+            variant="primary"
+            onClick={handleEmailCampaign}
+            icon={PaperAirplaneIcon}
+          >
+            Email Campaign
+          </Button>
+        </div>
       </div>
 
-      {/* Hostel Filter - At the top */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="glass rounded-xl p-4 border border-white/20 shadow-lg"
-      >
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-semibold text-slate-700 whitespace-nowrap">
-              Filter by Hostel:
-            </label>
-            <div className="w-full sm:w-64">
-              <Select
-                value={hostelFilter}
-                onChange={setHostelFilter}
-                options={hostelOptions}
-                placeholder="Select Hostel"
-              />
-            </div>
-          </div>
-          {selectedHostelName && (
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-brand-100/50 rounded-lg border border-brand-200/50">
-              <span className="text-xs text-brand-700 font-medium">Showing:</span>
-              <span className="text-sm text-brand-900 font-semibold">{selectedHostelName}</span>
-            </div>
-          )}
-        </div>
-      </motion.div>
+      {/* Selected Hostel Badge - Below header */}
+      {selectedHostelName && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-center gap-2 px-3 py-1.5 bg-brand-100/50 rounded-lg border border-brand-200/50 w-fit"
+        >
+          <span className="text-xs text-brand-700 font-medium">Showing:</span>
+          <span className="text-sm text-brand-900 font-semibold">{selectedHostelName}</span>
+        </motion.div>
+      )}
 
       {/* Content - No tabs, navigation handled by second sidebar */}
       <div className="glass rounded-2xl border border-white/20 shadow-xl">
@@ -250,7 +422,12 @@ const CommunicationBoard: React.FC = () => {
           {/* Tenants */}
           {activeTab === 'Tenants' && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredTenants.length === 0 ? (
+              {tenantsLoading ? (
+                <div className="col-span-full text-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                  <p className="text-slate-500">Loading tenants...</p>
+                </div>
+              ) : filteredTenants.length === 0 ? (
                 <div className="col-span-full text-center py-12">
                   <p className="text-slate-500">No tenants found for the selected hostel.</p>
                 </div>
@@ -265,12 +442,38 @@ const CommunicationBoard: React.FC = () => {
                 >
                   {/* Profile Header */}
                   <div className="flex items-center gap-4 mb-4 pb-4 border-b border-gray-100">
-                    <div className="w-16 h-16 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-md">
-                      {tenant.name.charAt(0)}
-                    </div>
+                    {tenant.profilePhoto ? (
+                      <img 
+                        src={`${API_BASE_URL.replace('/api', '')}${tenant.profilePhoto}`} 
+                        alt={tenant.name}
+                        className="w-16 h-16 rounded-full object-cover border-2 border-gray-200 shadow-md"
+                        onError={(e) => {
+                          // Fallback to initials if image fails to load
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          const parent = target.parentElement;
+                          if (parent) {
+                            const fallback = document.createElement('div');
+                            fallback.className = 'w-16 h-16 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-md';
+                            const firstName = tenant.firstName || tenant.name?.split(' ')[0] || '';
+                            const lastName = tenant.lastName || tenant.name?.split(' ')[1] || '';
+                            fallback.textContent = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || tenant.name.charAt(0).toUpperCase();
+                            parent.insertBefore(fallback, target);
+                          }
+                        }}
+                      />
+                    ) : (
+                      <div className="w-16 h-16 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-md">
+                        {(() => {
+                          const firstName = tenant.firstName || tenant.name?.split(' ')[0] || '';
+                          const lastName = tenant.lastName || tenant.name?.split(' ')[1] || '';
+                          return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || tenant.name.charAt(0).toUpperCase();
+                        })()}
+                      </div>
+                    )}
                     <div className="flex-1">
                       <h3 className="font-bold text-lg text-gray-900">{tenant.name}</h3>
-                      <Badge variant={tenant.status === 'Active' ? 'success' : 'default'}>
+                      <Badge variant={tenant.status === 'active' || tenant.status === 'Active' ? 'success' : 'default'}>
                         {tenant.status}
                       </Badge>
                     </div>
@@ -286,18 +489,22 @@ const CommunicationBoard: React.FC = () => {
                       <PhoneIcon className="w-5 h-5 text-blue-500" />
                       <span className="text-sm">{tenant.phone}</span>
                     </div>
-                    <div className="flex items-center gap-3 text-gray-600">
-                      <HomeIcon className="w-5 h-5 text-blue-500" />
-                      <span className="text-sm font-medium">
-                        Room {tenant.room}-{tenant.bed}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3 text-gray-600">
-                      <CalendarIcon className="w-5 h-5 text-blue-500" />
-                      <span className="text-sm">
-                        {formatDate(tenant.leaseStart)} - {formatDate(tenant.leaseEnd)}
-                      </span>
-                    </div>
+                    {tenant.activeAllocation && (
+                      <div className="flex items-center gap-3 text-gray-600">
+                        <HomeIcon className="w-5 h-5 text-blue-500" />
+                        <span className="text-sm font-medium">
+                          Room {tenant.activeAllocation.room?.number || 'N/A'}-{tenant.activeAllocation.bed?.number || 'N/A'}
+                        </span>
+                      </div>
+                    )}
+                    {tenant.leaseStartDate && tenant.leaseEndDate && (
+                      <div className="flex items-center gap-3 text-gray-600">
+                        <CalendarIcon className="w-5 h-5 text-blue-500" />
+                        <span className="text-sm">
+                          {formatDate(tenant.leaseStartDate)} - {formatDate(tenant.leaseEndDate)}
+                        </span>
+                      </div>
+                    )}
                   </div>
                   {/* View Button */}
                   <div className="mt-4 pt-4 border-t border-gray-100">
@@ -319,7 +526,12 @@ const CommunicationBoard: React.FC = () => {
           {/* Employees */}
           {activeTab === 'Employees' && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredEmployees.length === 0 ? (
+              {employeesLoading ? (
+                <div className="col-span-full text-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
+                  <p className="text-slate-500">Loading employees...</p>
+                </div>
+              ) : filteredEmployees.length === 0 ? (
                 <div className="col-span-full text-center py-12">
                   <p className="text-slate-500">No employees found for the selected hostel.</p>
                 </div>
@@ -334,12 +546,40 @@ const CommunicationBoard: React.FC = () => {
                 >
                   {/* Profile Header */}
                   <div className="flex items-center gap-4 mb-4 pb-4 border-b border-gray-100">
-                    <div className="w-16 h-16 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-md">
-                      {employee.name.charAt(0)}
-                    </div>
+                    {employee.profilePhoto ? (
+                      <img 
+                        src={`${API_BASE_URL.replace('/api', '')}${employee.profilePhoto}`} 
+                        alt={employee.name}
+                        className="w-16 h-16 rounded-full object-cover border-2 border-gray-200 shadow-md"
+                        onError={(e) => {
+                          // Fallback to initials if image fails to load
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          const parent = target.parentElement;
+                          if (parent) {
+                            const fallback = document.createElement('div');
+                            fallback.className = 'w-16 h-16 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-md';
+                            const nameParts = employee.name?.split(' ') || [];
+                            const firstName = nameParts[0] || '';
+                            const lastName = nameParts[1] || '';
+                            fallback.textContent = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || employee.name.charAt(0).toUpperCase();
+                            parent.insertBefore(fallback, target);
+                          }
+                        }}
+                      />
+                    ) : (
+                      <div className="w-16 h-16 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-md">
+                        {(() => {
+                          const nameParts = employee.name?.split(' ') || [];
+                          const firstName = nameParts[0] || '';
+                          const lastName = nameParts[1] || '';
+                          return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || employee.name.charAt(0).toUpperCase();
+                        })()}
+                      </div>
+                    )}
                     <div className="flex-1">
                       <h3 className="font-bold text-lg text-gray-900">{employee.name}</h3>
-                      <Badge variant={employee.status === 'Active' ? 'success' : 'default'}>
+                      <Badge variant={employee.status === 'active' || employee.status === 'Active' ? 'success' : 'default'}>
                         {employee.status}
                       </Badge>
                     </div>
@@ -359,10 +599,12 @@ const CommunicationBoard: React.FC = () => {
                       <PhoneIcon className="w-5 h-5 text-green-500" />
                       <span className="text-sm">{employee.phone}</span>
                     </div>
-                    <div className="flex items-center gap-3 text-gray-600">
-                      <CalendarIcon className="w-5 h-5 text-green-500" />
-                      <span className="text-sm">Joined: {formatDate(employee.joinedAt)}</span>
-                    </div>
+                    {employee.joinDate && (
+                      <div className="flex items-center gap-3 text-gray-600">
+                        <CalendarIcon className="w-5 h-5 text-green-500" />
+                        <span className="text-sm">Joined: {formatDate(employee.joinDate)}</span>
+                      </div>
+                    )}
                   </div>
                   {/* View Button */}
                   <div className="mt-4 pt-4 border-t border-gray-100">
@@ -568,17 +810,75 @@ const CommunicationBoard: React.FC = () => {
           <div className="space-y-6">
             {/* Profile Header */}
             <div className="flex items-center gap-6 pb-6 border-b border-gray-200">
-              <div
-                className={`w-20 h-20 rounded-full flex items-center justify-center text-white font-bold text-2xl shadow-lg ${
-                  viewModal.type === 'Tenant'
-                    ? 'bg-gradient-to-br from-blue-400 to-blue-600'
-                    : viewModal.type === 'Employee'
-                    ? 'bg-gradient-to-br from-green-400 to-green-600'
-                    : 'bg-gradient-to-br from-purple-400 to-purple-600'
-                }`}
-              >
-                {viewModal.data.name.charAt(0)}
-              </div>
+              {viewModal.data.profilePhoto ? (
+                <img 
+                  src={`${API_BASE_URL.replace('/api', '')}${viewModal.data.profilePhoto}`} 
+                  alt={viewModal.data.name}
+                  className={`w-20 h-20 rounded-full object-cover border-4 shadow-lg ${
+                    viewModal.type === 'Tenant'
+                      ? 'border-blue-200'
+                      : viewModal.type === 'Employee'
+                      ? 'border-green-200'
+                      : 'border-purple-200'
+                  }`}
+                  onError={(e) => {
+                    // Fallback to initials if image fails to load
+                    const target = e.target as HTMLImageElement;
+                    target.style.display = 'none';
+                    const parent = target.parentElement;
+                    if (parent) {
+                      const fallback = document.createElement('div');
+                      fallback.className = `w-20 h-20 rounded-full flex items-center justify-center text-white font-bold text-2xl shadow-lg ${
+                        viewModal.type === 'Tenant'
+                          ? 'bg-gradient-to-br from-blue-400 to-blue-600'
+                          : viewModal.type === 'Employee'
+                          ? 'bg-gradient-to-br from-green-400 to-green-600'
+                          : 'bg-gradient-to-br from-purple-400 to-purple-600'
+                      }`;
+                      if (viewModal.type === 'Tenant') {
+                        const firstName = viewModal.data.firstName || viewModal.data.name?.split(' ')[0] || '';
+                        const lastName = viewModal.data.lastName || viewModal.data.name?.split(' ')[1] || '';
+                        fallback.textContent = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || viewModal.data.name.charAt(0).toUpperCase();
+                      } else if (viewModal.type === 'Employee') {
+                        const nameParts = viewModal.data.name?.split(' ') || [];
+                        const firstName = nameParts[0] || '';
+                        const lastName = nameParts[1] || '';
+                        fallback.textContent = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || viewModal.data.name.charAt(0).toUpperCase();
+                      } else {
+                        fallback.textContent = viewModal.data.name.charAt(0).toUpperCase();
+                      }
+                      parent.insertBefore(fallback, target);
+                    }
+                  }}
+                />
+              ) : (
+                <div
+                  className={`w-20 h-20 rounded-full flex items-center justify-center text-white font-bold text-2xl shadow-lg ${
+                    viewModal.type === 'Tenant'
+                      ? 'bg-gradient-to-br from-blue-400 to-blue-600'
+                      : viewModal.type === 'Employee'
+                      ? 'bg-gradient-to-br from-green-400 to-green-600'
+                      : 'bg-gradient-to-br from-purple-400 to-purple-600'
+                  }`}
+                >
+                  {viewModal.type === 'Tenant' ? (
+                    (() => {
+                      const firstName = viewModal.data.firstName || viewModal.data.name?.split(' ')[0] || '';
+                      const lastName = viewModal.data.lastName || viewModal.data.name?.split(' ')[1] || '';
+                      return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || viewModal.data.name.charAt(0).toUpperCase();
+                    })()
+                  ) : viewModal.type === 'Employee' ? (
+                    (() => {
+                      const nameParts = viewModal.data.name?.split(' ') || [];
+                      const firstName = nameParts[0] || '';
+                      const lastName = nameParts[1] || '';
+                      return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || viewModal.data.name.charAt(0).toUpperCase();
+                    })()
+                  ) : (
+                    viewModal.data.name.charAt(0).toUpperCase()
+                  )}
+                </div>
+              )}
               <div className="flex-1">
                 <h3 className="text-2xl font-bold text-gray-900 mb-2">
                   {viewModal.data.name}
@@ -603,17 +903,75 @@ const CommunicationBoard: React.FC = () => {
                   <>
                     <InfoField label="Email" value={viewModal.data.email} icon={EnvelopeIcon} />
                     <InfoField label="Phone" value={viewModal.data.phone} icon={PhoneIcon} />
-                    <InfoField label="Room" value={`${viewModal.data.room}-${viewModal.data.bed}`} icon={HomeIcon} />
-                    <InfoField label="Lease Start" value={formatDate(viewModal.data.leaseStart)} icon={CalendarIcon} />
-                    <InfoField label="Lease End" value={formatDate(viewModal.data.leaseEnd)} icon={CalendarIcon} />
+                    {viewModal.data.alternatePhone && <InfoField label="Alternate Phone" value={viewModal.data.alternatePhone} icon={PhoneIcon} />}
+                    {viewModal.data.activeAllocation && (
+                      <InfoField 
+                        label="Room" 
+                        value={`${viewModal.data.activeAllocation.room?.number || 'N/A'}-${viewModal.data.activeAllocation.bed?.number || 'N/A'}`} 
+                        icon={HomeIcon} 
+                      />
+                    )}
+                    {viewModal.data.leaseStartDate && (
+                      <InfoField label="Lease Start" value={formatDate(viewModal.data.leaseStartDate)} icon={CalendarIcon} />
+                    )}
+                    {viewModal.data.leaseEndDate && (
+                      <InfoField label="Lease End" value={formatDate(viewModal.data.leaseEndDate)} icon={CalendarIcon} />
+                    )}
+                    {viewModal.data.monthlyRent && (
+                      <InfoField label="Monthly Rent" value={formatCurrency(viewModal.data.monthlyRent)} icon={CurrencyDollarIcon} />
+                    )}
+                    {viewModal.data.securityDeposit && (
+                      <InfoField label="Security Deposit" value={formatCurrency(viewModal.data.securityDeposit)} icon={CurrencyDollarIcon} />
+                    )}
                   </>
                 )}
                 {viewModal.type === 'Employee' && (
                   <>
                     <InfoField label="Email" value={viewModal.data.email} icon={EnvelopeIcon} />
-                    <InfoField label="Phone" value={viewModal.data.phone} icon={PhoneIcon} />
+                    <InfoField label="Phone" value={viewModal.data.phone || 'N/A'} icon={PhoneIcon} />
                     <InfoField label="Role" value={viewModal.data.role} icon={BriefcaseIcon} />
-                    <InfoField label="Joined Date" value={formatDate(viewModal.data.joinedAt)} icon={CalendarIcon} />
+                    {viewModal.data.employeeCode && <InfoField label="Employee Code" value={viewModal.data.employeeCode} icon={BriefcaseIcon} />}
+                    {viewModal.data.department && <InfoField label="Department" value={viewModal.data.department} icon={BriefcaseIcon} />}
+                    {viewModal.data.designation && <InfoField label="Designation" value={viewModal.data.designation} icon={BriefcaseIcon} />}
+                    {viewModal.data.joinDate && (
+                      <InfoField label="Joined Date" value={formatDate(viewModal.data.joinDate)} icon={CalendarIcon} />
+                    )}
+                    {viewModal.data.terminationDate && (
+                      <InfoField label="Termination Date" value={formatDate(viewModal.data.terminationDate)} icon={CalendarIcon} />
+                    )}
+                    {viewModal.data.salary && (
+                      <InfoField label="Salary" value={`${formatCurrency(viewModal.data.salary)} ${viewModal.data.salaryType || '/month'}`} icon={CurrencyDollarIcon} />
+                    )}
+                    {viewModal.data.workingHours && (
+                      <InfoField label="Working Hours" value={viewModal.data.workingHours} icon={CalendarIcon} />
+                    )}
+                    {viewModal.data.hostel && viewModal.data.hostel !== 'N/A' && (
+                      <InfoField label="Hostel" value={viewModal.data.hostel} icon={HomeIcon} />
+                    )}
+                    {viewModal.data.address && (
+                      <InfoField 
+                        label="Address" 
+                        value={`${viewModal.data.address.street || ''}, ${viewModal.data.address.city || ''}, ${viewModal.data.address.country || ''}`.replace(/^,\s*|,\s*$/g, '')} 
+                        icon={MapPinIcon} 
+                      />
+                    )}
+                    {viewModal.data.emergencyContact && (
+                      <InfoField 
+                        label="Emergency Contact" 
+                        value={`${viewModal.data.emergencyContact.name || ''} (${viewModal.data.emergencyContact.relation || ''}) - ${viewModal.data.emergencyContact.phone || ''}`} 
+                        icon={PhoneIcon} 
+                      />
+                    )}
+                    {viewModal.data.qualifications && viewModal.data.qualifications.length > 0 && (
+                      <InfoField 
+                        label="Qualifications" 
+                        value={Array.isArray(viewModal.data.qualifications) ? viewModal.data.qualifications.join(', ') : viewModal.data.qualifications} 
+                        icon={DocumentTextIcon} 
+                      />
+                    )}
+                    {viewModal.data.notes && (
+                      <InfoField label="Notes" value={viewModal.data.notes} icon={DocumentTextIcon} />
+                    )}
                   </>
                 )}
                 {viewModal.type === 'Vendor' && (
@@ -627,6 +985,68 @@ const CommunicationBoard: React.FC = () => {
                 )}
               </div>
             </div>
+
+            {/* Documents Section - For Employees */}
+            {viewModal.type === 'Employee' && viewModal.data.documents && viewModal.data.documents.length > 0 && (
+              <div>
+                <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <DocumentTextIcon className="w-5 h-5" />
+                  Documents
+                  <span className="text-sm font-normal text-gray-500">
+                    ({viewModal.data.documents.length} document{viewModal.data.documents.length !== 1 ? 's' : ''})
+                  </span>
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {viewModal.data.documents.map((doc: any, index: number) => (
+                    <div
+                      key={index}
+                      className="bg-gray-50 p-4 rounded-lg border border-gray-200 hover:shadow-md transition-shadow"
+                    >
+                      <div className="flex items-start gap-3">
+                        {doc.mimetype && doc.mimetype.startsWith('image/') ? (
+                          <img
+                            src={`${API_BASE_URL.replace('/api', '')}${doc.url}`}
+                            alt={doc.originalName || 'Document'}
+                            className="w-16 h-16 object-cover rounded border border-gray-300"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <div className="w-16 h-16 bg-blue-100 rounded flex items-center justify-center">
+                            <DocumentTextIcon className="w-8 h-8 text-blue-600" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate" title={doc.originalName || doc.filename}>
+                            {doc.originalName || doc.filename}
+                          </p>
+                          {doc.size && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              {(doc.size / 1024).toFixed(2)} KB
+                            </p>
+                          )}
+                          {doc.uploadedAt && (
+                            <p className="text-xs text-gray-500">
+                              {formatDate(doc.uploadedAt)}
+                            </p>
+                          )}
+                          <a
+                            href={`${API_BASE_URL.replace('/api', '')}${doc.url}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-blue-600 hover:text-blue-800 mt-1 inline-block"
+                          >
+                            View/Download
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Transactions Section - Only for Tenants and Vendors */}
             {(viewModal.type === 'Tenant' || viewModal.type === 'Vendor') && (

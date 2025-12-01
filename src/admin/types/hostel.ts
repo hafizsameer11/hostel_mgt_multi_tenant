@@ -93,6 +93,8 @@ export interface RoomFormData {
   roomNumber: string;
   totalSeats: number;
   pricePerSeat?: number;
+  roomType?: 'single' | 'double' | 'triple' | 'quad' | 'dormitory' | 'suite';
+  furnishing?: 'furnished' | 'semi_furnished' | 'unfurnished';
 }
 
 /**

@@ -26,6 +26,8 @@ export const ROUTES = {
   HOSTEL_VIEW: (id: string | number) => `/admin/hostel/${id}`,
   HOSTEL_EDIT: (id: string | number) => `/admin/hostel/${id}/edit`,
   ALERTS: '/admin/alerts',
+  ALERTS_BILLS: '/admin/alerts/bills',
+  ALERTS_MAINTENANCE: '/admin/alerts/maintenance',
   VENDOR: '/admin/vendor',
   VENDOR_LIST: '/admin/vendor/list',
   VENDOR_MANAGEMENT: '/admin/vendor/management',
@@ -34,6 +36,8 @@ export const ROUTES = {
   COMM_EMPLOYEES: '/admin/communication/employees',
   COMM_VENDORS: '/admin/communication/vendors',
   FPA: '/admin/fpa',
+  FPA_MONTHLY: '/admin/fpa/monthly',
+  FPA_YEARLY: '/admin/fpa/yearly',
   SETTINGS: '/admin/settings',
 } as const;
 

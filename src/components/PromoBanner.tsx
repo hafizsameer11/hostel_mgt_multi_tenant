@@ -6,12 +6,12 @@ const PromoBanner = () => {
         backgroundImage: `repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(0,0,0,0.1) 10px, rgba(0,0,0,0.1) 20px)`
       }}></div>
 
-      <div className="container mx-auto px-4 py-3 relative z-10">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <p className="text-gray-900 font-bold text-lg md:text-xl text-center flex-1">
+      <div className="container mx-auto px-4 py-2 relative z-10">
+        <div className="flex flex-row items-center justify-center gap-3 whitespace-nowrap">
+          <p className="text-gray-900 font-semibold text-sm">
             Lowest Price for a week - Don't Miss Out!
           </p>
-          <button className="px-6 py-2.5 bg-red-600 text-white rounded-full font-semibold hover:bg-red-700 transition-all transform hover:scale-105 shadow-lg whitespace-nowrap">
+          <button className="px-4 py-2 bg-red-600 text-white rounded-full text-sm font-semibold hover:bg-red-700 transition-all shadow-md">
             Book Now
           </button>
         </div>

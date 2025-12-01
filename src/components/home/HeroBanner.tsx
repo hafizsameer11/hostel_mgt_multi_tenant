@@ -100,18 +100,18 @@ const HeroBanner = ({ images }: HeroBannerProps) => {
                 <p className="text-lg md:text-xl lg:text-2xl text-white mb-10 max-w-3xl mx-auto drop-shadow-md">
                     Discover amazing hotels and hostels around the world. Experience comfort, luxury, and unforgettable memories.
                 </p>
-                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
                     <Link
-                        to="/customer-service"
-                        className="bg-white text-primary-600 px-8 py-4 rounded-lg font-semibold hover:bg-gray-50 transition-all shadow-lg transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-primary-600 text-lg"
+                        to="/hostels"
+                        className="bg-white text-primary-600 px-6 py-3 rounded-lg font-semibold hover:bg-gray-50 transition-all shadow-lg transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-primary-600 text-lg w-full max-w-[220px] sm:w-auto sm:max-w-none text-center"
                     >
-                        Customer Service
+                        Looking for Hostel
                     </Link>
                     <Link
-                        to="/owner-hotel"
-                        className="bg-primary-600 text-white px-8 py-4 rounded-lg font-semibold hover:bg-primary-700 transition-all shadow-lg transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 text-lg"
+                        to="/onboarding"
+                        className="bg-primary-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-primary-700 transition-all shadow-lg transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 text-lg w-full max-w-[220px] sm:w-auto sm:max-w-none text-center"
                     >
-                        Owner Hotel
+                        Onboarding
                     </Link>
                 </div>
             </div>

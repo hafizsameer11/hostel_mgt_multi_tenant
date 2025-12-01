@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import { Link } from 'react-router-dom';
 
 interface BudgetProperty {
     id: number;
@@ -47,9 +48,10 @@ const BudgetFriendly = ({ properties }: BudgetFriendlyProps) => {
                         }}
                     >
                         {properties.map((property) => (
-                            <div
+                            <Link
+                                to="/hostels"
                                 key={property.id}
-                                className="budget-card flex-shrink-0 w-80 bg-white rounded-xl overflow-hidden shadow-lg hover:shadow-xl transition-all"
+                                className="budget-card flex-shrink-0 w-80 bg-white rounded-xl overflow-hidden shadow-lg hover:shadow-xl transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
                             >
                                 {/* Image Container */}
                                 <div className="relative h-64 overflow-hidden">
@@ -70,7 +72,7 @@ const BudgetFriendly = ({ properties }: BudgetFriendlyProps) => {
                                     <p className="text-gray-600 text-sm mb-2">{property.location}</p>
                                     <p className="text-lg font-semibold text-gray-900">{property.price}</p>
                                 </div>
-                            </div>
+                            </Link>
                         ))}
                     </div>
 

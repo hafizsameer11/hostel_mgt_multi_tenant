@@ -89,11 +89,22 @@ const createApiClient = (): AxiosInstance => {
         data: error.response?.data,
       });
       // Handle 401 Unauthorized - Clear auth and redirect to login
+      // But exclude login/register endpoints (they may return 401 for invalid credentials)
       if (error.response?.status === 401) {
-        clearAuthData();
-        // Redirect to login page
-        if (window.location.pathname !== '/login') {
-          window.location.href = '/login';
+        const requestUrl = error.config?.url || '';
+        const isAuthEndpoint = requestUrl.includes('/login') || 
+                              requestUrl.includes('/register') || 
+                              requestUrl.includes('/forgot-password') ||
+                              requestUrl.includes('/reset-password');
+        
+        // Only clear auth and redirect if it's not an auth endpoint
+        // Auth endpoints handle their own 401 errors
+        if (!isAuthEndpoint) {
+          clearAuthData();
+          // Redirect to login page only if not already there
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login';
+          }
         }
       }
 
@@ -156,22 +167,13 @@ export const api = {
     config?: AxiosRequestConfig
   ): Promise<ApiResponse<T>> => {
     try {
-      console.log('📤 [API CLIENT] POST request starting...');
-      console.log('📍 [API CLIENT] URL:', url);
-      console.log('📦 [API CLIENT] Data:', data);
       
       const response = await apiClient.post<ApiResponse<T>>(url, data, config);
       
-      console.log('📥 [API CLIENT] POST response received');
-      console.log('📊 [API CLIENT] Response status:', response.status);
-      console.log('📊 [API CLIENT] Response data:', response.data);
       
       return response.data;
     } catch (error: any) {
       console.error('❌ [API CLIENT] POST request failed');
-      console.error('❌ [API CLIENT] Error:', error);
-      console.error('❌ [API CLIENT] Error response:', error.response);
-      console.error('❌ [API CLIENT] Error request:', error.request);
       throw error;
     }
   },

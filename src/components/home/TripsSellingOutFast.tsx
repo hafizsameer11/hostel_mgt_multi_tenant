@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import { Link } from 'react-router-dom';
 
 interface Trip {
     id: number;
@@ -48,7 +49,8 @@ const TripsSellingOutFast = ({ trips }: TripsSellingOutFastProps) => {
                         }}
                     >
                         {trips.map((trip) => (
-                            <div
+                            <Link
+                                to="/hostels"
                                 key={trip.id}
                                 className="trip-card flex-shrink-0 w-80 bg-white rounded-xl overflow-hidden shadow-lg hover:shadow-xl transition-all"
                             >
@@ -85,7 +87,7 @@ const TripsSellingOutFast = ({ trips }: TripsSellingOutFastProps) => {
                                     <p className="text-gray-600 text-sm mb-2">{trip.dates}</p>
                                     <p className="text-lg font-semibold text-gray-700">{trip.price}</p>
                                 </div>
-                            </div>
+                            </Link>
                         ))}
                     </div>
 

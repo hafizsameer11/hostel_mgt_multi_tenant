@@ -7,6 +7,8 @@ import type { Id } from '../types/common';
 import * as db from './db';
 import hostelData from '../mock/hostels.json';
 import tenantsData from '../mock/tenants.json';
+import { api } from '../../services/apiClient';
+import { API_ROUTES } from '../../services/api.config';
 
 const ENTITY_KEY = 'hostels';
 
@@ -16,7 +18,68 @@ function init(): void {
 }
 
 /**
- * Get all hostels
+ * Hostel API Response Type
+ */
+export interface HostelApiResponse {
+  success: boolean;
+  data: {
+    items: Array<{
+      id: number;
+      name: string;
+      city: string;
+      floors: number;
+      roomsPerFloor: number;
+      manager: string | null;
+      managerId: number | null;
+      phone: string;
+      status: string;
+    }>;
+    total: number;
+    pagination: {
+      page: number;
+      limit: number;
+      pages: number;
+    };
+  };
+  message: string;
+  statusCode: number;
+}
+
+/**
+ * Get all hostels from API
+ * @returns Array of hostels mapped to Hostel type
+ */
+export async function getAllHostelsFromAPI(): Promise<Hostel[]> {
+  try {
+    console.log('🔐 [GET HOSTELS] Calling endpoint: /admin/hostels');
+    
+    const response = await api.get<HostelApiResponse>(API_ROUTES.HOSTEL.LIST);
+    
+    console.log('✅ [GET HOSTELS] Response received:', response);
+    
+    if (!response.success || !response.data) {
+      throw new Error(response.message || 'Failed to fetch hostels');
+    }
+    
+    // Map API response to Hostel type
+    return response.data.items.map(item => ({
+      id: String(item.id),
+      name: item.name,
+      city: item.city,
+      totalFloors: item.floors || 0,
+      roomsPerFloor: item.roomsPerFloor || 0,
+      managerName: item.manager || '',
+      managerPhone: item.phone || '',
+      notes: undefined,
+    }));
+  } catch (error: any) {
+    console.error('❌ [GET HOSTELS] Error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get all hostels (legacy - uses mock data)
  * @returns Array of hostels
  */
 export function getAllHostels(): Hostel[] {

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import type { Hostel } from './types';
 
 interface HotelCardProps {
@@ -18,9 +19,9 @@ export const HotelCard = ({ hostel, onSelect }: HotelCardProps) => {
     const starLabel = `${hostel.starRating}-Star`;
 
     return (
-        <div className="bg-white rounded-lg shadow-soft hover:shadow-soft-lg transition-all transform hover:-translate-y-1 overflow-hidden">
+        <div className="bg-white rounded-lg shadow-soft hover:shadow-soft-lg transition-all transform hover:-translate-y-1 overflow-hidden flex flex-col h-full">
             <img src={hostel.image} alt={hostel.name} className="w-full h-48 object-cover" />
-            <div className="p-6">
+            <div className="p-6 flex flex-col flex-1">
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">{hostel.name}</h3>
                 <div className="flex items-center justify-between mb-3 gap-3">
                     <span className="inline-flex items-center gap-1 rounded-full bg-primary-50 text-primary-700 px-3 py-1 text-xs font-semibold whitespace-nowrap">
@@ -99,16 +100,19 @@ export const HotelCard = ({ hostel, onSelect }: HotelCardProps) => {
                     )}
                 </div>
 
-                <div className="flex gap-3">
+                <div className="flex gap-3 mt-auto">
                     <button
                         onClick={() => onSelect(hostel)}
                         className="flex-1 bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg font-semibold transition-colors text-sm"
                     >
                         View Details
                     </button>
-                    <button className="flex-1 border-2 border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg font-semibold transition-colors text-sm">
+                    <Link
+                        to="/contact"
+                        className="flex-1 border-2 border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg font-semibold transition-colors text-sm text-center inline-flex items-center justify-center"
+                    >
                         Contact
-                    </button>
+                    </Link>
                 </div>
             </div>
         </div>

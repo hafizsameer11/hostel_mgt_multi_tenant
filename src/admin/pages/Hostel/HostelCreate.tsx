@@ -11,21 +11,34 @@ import { z } from 'zod';
 import { Toast } from '../../components/Toast';
 import { Modal } from '../../components/Modal';
 import { Button } from '../../components/Button';
-import type { HostelFormData } from '../../types/hostel';
 import type { ToastType } from '../../types/common';
 import ROUTES from '../../routes/routePaths';
-import * as hostelService from '../../services/hostel.service';
+import { api } from '../../../services/apiClient';
+import { API_ROUTES } from '../../../services/api.config';
 
-// Zod validation schema
+// Zod validation schema for the new API format
 const hostelSchema = z.object({
   name: z.string().min(3, 'Name must be at least 3 characters'),
-  city: z.string().min(2, 'City is required'),
-  totalFloors: z.number().min(1, 'Must have at least 1 floor').max(50),
-  roomsPerFloor: z.number().min(1, 'Must have at least 1 room').max(100),
-  managerName: z.string().min(2, 'Manager name is required'),
-  managerPhone: z.string().regex(/^\+?[1-9]\d{1,14}$/, 'Invalid phone number'),
-  notes: z.string().optional(),
+  contactInfo: z.object({
+    phone: z.string().min(1, 'Phone is required'),
+    email: z.string().email('Invalid email address'),
+  }),
+  address: z.object({
+    country: z.string().min(2, 'Country is required'),
+    state: z.string().min(2, 'State is required'),
+    city: z.string().min(2, 'City is required'),
+    street: z.string().min(1, 'Street is required'),
+  }),
+  description: z.string().optional(),
+  category: z.enum(['luxury', 'back_pack', 'home2']),
+  type: z.enum(['boy', 'girl', 'family', 'mixed']),
+  operatingHours: z.object({
+    checkIn: z.string().min(1, 'Check-in time is required'),
+    checkOut: z.string().min(1, 'Check-out time is required'),
+  }),
 });
+
+type HostelFormData = z.infer<typeof hostelSchema>;
 
 /**
  * Hostel create page
@@ -46,24 +59,52 @@ const HostelCreate: React.FC = () => {
     formState: { errors, isSubmitting },
   } = useForm<HostelFormData>({
     resolver: zodResolver(hostelSchema),
+    defaultValues: {
+      contactInfo: {
+        phone: '',
+        email: '',
+      },
+      address: {
+        country: '',
+        state: '',
+        city: '',
+        street: '',
+      },
+      operatingHours: {
+        checkIn: '9:00AM',
+        checkOut: '6:00PM',
+      },
+    },
   });
 
   const onSubmit = async (data: HostelFormData) => {
     try {
-      const createdHostel = hostelService.createHostel(data);
-      setCreatedHostelId(typeof createdHostel.id === 'number' ? createdHostel.id : Number(createdHostel.id));
-      setToast({
-        open: true,
-        type: 'success',
-        message: 'Hostel created successfully!',
-      });
-      // Show prompt to add rooms
-      setShowAddRoomsPrompt(true);
-    } catch (error) {
+      console.log('📡 Sending hostel creation request:', data);
+      
+      // Make API call
+      const response = await api.post(API_ROUTES.HOSTEL.CREATE, data);
+      
+      console.log('✅ Hostel created successfully:', response);
+      
+      if (response.success && response.data) {
+        const hostelId = response.data.id;
+        setCreatedHostelId(hostelId);
+        setToast({
+          open: true,
+          type: 'success',
+          message: response.message || 'Hostel created successfully!',
+        });
+        // Show prompt to add rooms
+        setShowAddRoomsPrompt(true);
+      } else {
+        throw new Error(response.message || 'Failed to create hostel');
+      }
+    } catch (error: any) {
+      console.error('❌ Error creating hostel:', error);
       setToast({
         open: true,
         type: 'error',
-        message: 'Failed to create hostel. Please try again.',
+        message: error.message || 'Failed to create hostel. Please try again.',
       });
     }
   };
@@ -110,117 +151,217 @@ const HostelCreate: React.FC = () => {
             {...register('name')}
             type="text"
             className="block w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
-            placeholder="Downtown Hub Hostel"
+            placeholder="Star Hostel"
           />
           {errors.name && (
             <p className="mt-1 text-sm text-red-600">{errors.name.message}</p>
           )}
         </div>
 
-        {/* City */}
+        {/* Contact Info */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold text-slate-900">Contact Information</h3>
+          <div className="grid grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Phone *
+              </label>
+              <input
+                {...register('contactInfo.phone')}
+                type="tel"
+                className="block w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
+                placeholder="3243534"
+              />
+              {errors.contactInfo?.phone && (
+                <p className="mt-1 text-sm text-red-600">
+                  {errors.contactInfo.phone.message}
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Email *
+              </label>
+              <input
+                {...register('contactInfo.email')}
+                type="email"
+                className="block w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
+                placeholder="info@gmail.com"
+              />
+              {errors.contactInfo?.email && (
+                <p className="mt-1 text-sm text-red-600">
+                  {errors.contactInfo.email.message}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Address */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold text-slate-900">Address</h3>
+          <div className="grid grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Country *
+              </label>
+              <input
+                {...register('address.country')}
+                type="text"
+                className="block w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
+                placeholder="Pakistan"
+              />
+              {errors.address?.country && (
+                <p className="mt-1 text-sm text-red-600">
+                  {errors.address.country.message}
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                State *
+              </label>
+              <input
+                {...register('address.state')}
+                type="text"
+                className="block w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
+                placeholder="Punjab"
+              />
+              {errors.address?.state && (
+                <p className="mt-1 text-sm text-red-600">
+                  {errors.address.state.message}
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                City *
+              </label>
+              <input
+                {...register('address.city')}
+                type="text"
+                className="block w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
+                placeholder="Faisalabad"
+              />
+              {errors.address?.city && (
+                <p className="mt-1 text-sm text-red-600">
+                  {errors.address.city.message}
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Street *
+              </label>
+              <input
+                {...register('address.street')}
+                type="text"
+                className="block w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
+                placeholder="Street no 1"
+              />
+              {errors.address?.street && (
+                <p className="mt-1 text-sm text-red-600">
+                  {errors.address.street.message}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Description */}
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-2">
-            City *
-          </label>
-          <input
-            {...register('city')}
-            type="text"
-            className="block w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
-            placeholder="New York"
-          />
-          {errors.city && (
-            <p className="mt-1 text-sm text-red-600">{errors.city.message}</p>
-          )}
-        </div>
-
-        {/* Floors and Rooms */}
-        <div className="grid grid-cols-2 gap-6">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
-              Total Floors *
-            </label>
-            <input
-              {...register('totalFloors', { valueAsNumber: true })}
-              type="number"
-              min="1"
-              className="block w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
-              placeholder="5"
-            />
-            {errors.totalFloors && (
-              <p className="mt-1 text-sm text-red-600">
-                {errors.totalFloors.message}
-              </p>
-            )}
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
-              Rooms per Floor *
-            </label>
-            <input
-              {...register('roomsPerFloor', { valueAsNumber: true })}
-              type="number"
-              min="1"
-              className="block w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
-              placeholder="12"
-            />
-            {errors.roomsPerFloor && (
-              <p className="mt-1 text-sm text-red-600">
-                {errors.roomsPerFloor.message}
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* Manager Info */}
-        <div className="grid grid-cols-2 gap-6">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
-              Manager Name *
-            </label>
-            <input
-              {...register('managerName')}
-              type="text"
-              className="block w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
-              placeholder="John Doe"
-            />
-            {errors.managerName && (
-              <p className="mt-1 text-sm text-red-600">
-                {errors.managerName.message}
-              </p>
-            )}
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
-              Manager Phone *
-            </label>
-            <input
-              {...register('managerPhone')}
-              type="tel"
-              className="block w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
-              placeholder="+1-555-0100"
-            />
-            {errors.managerPhone && (
-              <p className="mt-1 text-sm text-red-600">
-                {errors.managerPhone.message}
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* Notes */}
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-2">
-            Notes (Optional)
+            Description (Optional)
           </label>
           <textarea
-            {...register('notes')}
+            {...register('description')}
             rows={4}
             className="block w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
-            placeholder="Additional information about the hostel..."
+            placeholder="Add new hostel"
           />
-          {errors.notes && (
-            <p className="mt-1 text-sm text-red-600">{errors.notes.message}</p>
+          {errors.description && (
+            <p className="mt-1 text-sm text-red-600">{errors.description.message}</p>
           )}
+        </div>
+
+        {/* Category and Type */}
+        <div className="grid grid-cols-2 gap-6">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Category *
+            </label>
+            <select
+              {...register('category')}
+              className="block w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
+            >
+              <option value="">Select Category</option>
+              <option value="luxury">Luxury</option>
+              <option value="back_pack">Back Pack</option>
+              <option value="home2">Home2</option>
+            </select>
+            {errors.category && (
+              <p className="mt-1 text-sm text-red-600">{errors.category.message}</p>
+            )}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Type *
+            </label>
+            <select
+              {...register('type')}
+              className="block w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
+            >
+              <option value="">Select Type</option>
+              <option value="boy">Boy</option>
+              <option value="girl">Girl</option>
+              <option value="family">Family</option>
+              <option value="mixed">Mixed</option>
+            </select>
+            {errors.type && (
+              <p className="mt-1 text-sm text-red-600">{errors.type.message}</p>
+            )}
+          </div>
+        </div>
+
+        {/* Operating Hours */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold text-slate-900">Operating Hours</h3>
+          <div className="grid grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Check-In Time *
+              </label>
+              <input
+                {...register('operatingHours.checkIn')}
+                type="text"
+                className="block w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
+                placeholder="9:00AM"
+              />
+              {errors.operatingHours?.checkIn && (
+                <p className="mt-1 text-sm text-red-600">
+                  {errors.operatingHours.checkIn.message}
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Check-Out Time *
+              </label>
+              <input
+                {...register('operatingHours.checkOut')}
+                type="text"
+                className="block w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
+                placeholder="6:00PM"
+              />
+              {errors.operatingHours?.checkOut && (
+                <p className="mt-1 text-sm text-red-600">
+                  {errors.operatingHours.checkOut.message}
+                </p>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Actions */}
@@ -284,4 +425,3 @@ const HostelCreate: React.FC = () => {
 };
 
 export default HostelCreate;
-

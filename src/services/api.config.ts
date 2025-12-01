@@ -37,25 +37,55 @@ export const API_ROUTES = {
 
   // Hostel Routes
   HOSTEL: {
-    LIST: '/hostels',
-    CREATE: '/hostels',
-    BY_ID: (id: string | number) => `/hostels/${id}`,
-    UPDATE: (id: string | number) => `/hostels/${id}`,
-    DELETE: (id: string | number) => `/hostels/${id}`,
-    SEARCH: '/hostels/search',
-    BY_CITY: '/hostels/city',
-    ARCHITECTURE: (id: string | number) => `/hostels/${id}/architecture`,
+    LIST: '/admin/hostels',
+    CREATE: '/admin/hostels',
+    BY_ID: (id: string | number) => `/admin/hostels/${id}`,
+    UPDATE: (id: string | number) => `/admin/hostels/${id}`,
+    DELETE: (id: string | number) => `/admin/hostels/${id}`,
+    SEARCH: '/admin/hostels/search',
+    BY_CITY: '/admin/hostels/city',
+    ARCHITECTURE: (id: string | number) => `/admin/hostels/${id}/architecture`,
   },
 
   // Tenant Routes
   TENANT: {
     LIST: '/tenants',
-    CREATE: '/tenants',
+    CREATE: '/admin/tenant',
     BY_ID: (id: string | number) => `/tenants/${id}`,
     UPDATE: (id: string | number) => `/tenants/${id}`,
     DELETE: (id: string | number) => `/tenants/${id}`,
     SEARCH: '/tenants/search',
     BY_HOSTEL: (hostelId: string | number) => `/tenants/hostel/${hostelId}`,
+  },
+
+  // Floor/Block Routes (UI shows "Block", backend uses "Floor")
+  FLOOR: {
+    CREATE: '/admin/floor',
+    LIST: '/admin/floors',
+    BY_ID: (id: string | number) => `/admin/floor/${id}`,
+    UPDATE: (id: string | number) => `/admin/floor/${id}`,
+    DELETE: (id: string | number) => `/admin/floor/${id}`,
+    BY_HOSTEL: (hostelId: string | number) => `/admin/floors/hostel/${hostelId}`,
+  },
+
+  // Room Routes
+  ROOM: {
+    CREATE: '/admin/room',
+    LIST: '/admin/rooms',
+    BY_ID: (id: string | number) => `/admin/room/${id}`,
+    UPDATE: (id: string | number) => `/admin/room/${id}`,
+    DELETE: (id: string | number) => `/admin/room/${id}`,
+    BY_HOSTEL: (hostelId: string | number) => `/admin/room/hostel/${hostelId}`,
+    BY_FLOOR: (floorId: string | number) => `/admin/room/floor/${floorId}`,
+    UPDATE_STATUS: (id: string | number) => `/admin/room/${id}/status`,
+    MAINTENANCE: (id: string | number) => `/admin/rooms/${id}/maintenance`,
+  },
+
+  // Allocation Routes
+  ALLOCATION: {
+    FLOORS: '/floors',
+    ROOMS_BY_FLOOR: (floorId: string | number) => `/room/floor/${floorId}`,
+    BEDS_BY_ROOM: (roomId: string | number) => `/beds/room/${roomId}`,
   },
 
   // Employee Routes
@@ -82,19 +112,19 @@ export const API_ROUTES = {
 
   // Vendor Routes
   VENDOR: {
-    LIST: '/vendors',
-    CREATE: '/vendors',
-    BY_ID: (id: string | number) => `/vendors/${id}`,
-    UPDATE: (id: string | number) => `/vendors/${id}`,
-    DELETE: (id: string | number) => `/vendors/${id}`,
-    SEARCH: '/vendors/search',
+    LIST: '/admin/vendors',
+    CREATE: '/admin/vendors',
+    BY_ID: (id: string | number) => `/admin/vendors/${id}`,
+    UPDATE: (id: string | number) => `/admin/vendors/${id}`,
+    DELETE: (id: string | number) => `/admin/vendors/${id}`,
+    SEARCH: '/admin/vendors/search',
   },
 
   // Alert Routes
   ALERT: {
-    LIST: '/alerts',
-    CREATE: '/alerts',
-    BY_ID: (id: string | number) => `/alerts/${id}`,
+    LIST: '/admin/alerts',
+    CREATE: '/admin/alerts',
+    BY_ID: (id: string | number) => `/admin/alerts/${id}`,
     UPDATE: (id: string | number) => `/alerts/${id}`,
     DELETE: (id: string | number) => `/alerts/${id}`,
     MARK_READ: (id: string | number) => `/alerts/${id}/read`,
@@ -115,10 +145,28 @@ export const API_ROUTES = {
     DASHBOARD: '/finance/dashboard',
   },
 
+  // FP&A Routes
+  FPA: {
+    SUMMARY: '/admin/fpa/summary',
+    MONTHLY_COMPARISON: '/admin/fpa/monthly-comparison',
+    CATEGORIES: '/admin/fpa/categories',
+    CASH_FLOW: '/admin/fpa/cash-flow',
+    RATIOS: '/admin/fpa/ratios',
+    PRINT: '/admin/fpa/print',
+  },
+
+  // Dashboard Routes
+  DASHBOARD: {
+    OVERVIEW: '/admin/dashboard/overview',
+  },
+
   // Settings Routes
   SETTINGS: {
     GET: '/settings',
     UPDATE: '/settings',
+    PERSONAL_INFO: '/admin/settings/profile/personal-info',
+    PROFILE_INFO: '/admin/settings/profile-info',
+    CHANGE_PASSWORD: '/admin/settings/profile/password',
   },
 } as const;
 

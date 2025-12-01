@@ -61,7 +61,7 @@ const Header = () => {
               to="/login"
               className="hidden md:inline-flex items-center rounded-full bg-black text-white px-6 py-3 text-sm font-semibold shadow-soft hover:bg-gray-900 transition-colors"
             >
-              Login
+              Login Owners
             </Link>
             <button
               className="inline-flex md:hidden items-center justify-center rounded-full border border-gray-200 w-12 h-12 text-gray-700 hover:text-primary-600 hover:border-primary-300 transition-colors"
@@ -102,13 +102,13 @@ const Header = () => {
             </li>
             <li>
               <Link
-                to="/jobs"
-                className={`font-medium transition-colors ${location.pathname === '/jobs'
+                to="/hostels"
+                className={`font-medium transition-colors ${location.pathname === '/hostels'
                   ? 'text-primary-600 border-b-2 border-primary-600 pb-1'
                   : 'text-gray-700 hover:text-primary-600'
                   }`}
               >
-                Jobs
+                Hotels
               </Link>
             </li>
             <li>
@@ -124,13 +124,13 @@ const Header = () => {
             </li>
             <li>
               <Link
-                to="/merchandise"
-                className={`font-medium transition-colors ${location.pathname === '/merchandise'
+                to="/products"
+                className={`font-medium transition-colors ${location.pathname === '/products'
                   ? 'text-primary-600 border-b-2 border-primary-600 pb-1'
                   : 'text-gray-700 hover:text-primary-600'
                   }`}
               >
-                Merchandise
+                Products
               </Link>
             </li>
             <li>
@@ -157,13 +157,24 @@ const Header = () => {
             </li>
             <li>
               <Link
-                to="/hostels"
-                className={`font-medium transition-colors ${location.pathname === '/hostels'
+                to="/jobs"
+                className={`font-medium transition-colors ${location.pathname === '/jobs'
                   ? 'text-primary-600 border-b-2 border-primary-600 pb-1'
                   : 'text-gray-700 hover:text-primary-600'
                   }`}
               >
-                Hostels
+                Jobs
+              </Link>
+            </li>
+            <li>
+              <Link
+                to="/merchandise"
+                className={`font-medium transition-colors ${location.pathname === '/merchandise'
+                  ? 'text-primary-600 border-b-2 border-primary-600 pb-1'
+                  : 'text-gray-700 hover:text-primary-600'
+                  }`}
+              >
+                Merchandise
               </Link>
             </li>
             <li>
@@ -181,16 +192,16 @@ const Header = () => {
 
           <div className="hidden lg:flex items-center gap-4 text-sm font-semibold">
             <Link
-              to="/customer-service"
+              to="/hostels"
               className="inline-flex items-center gap-2 rounded-full border border-gray-200 px-5 py-2.5 text-gray-700 hover:bg-gray-50 transition-colors"
             >
-              Customer Service
+              Looking for Hostel
             </Link>
             <Link
-              to="/owner-hotel"
+              to="/onboarding"
               className="inline-flex items-center gap-2 rounded-full bg-gray-900 text-white px-5 py-2.5 hover:bg-black transition-colors"
             >
-              Owner Hotel
+              Onboarding
             </Link>
           </div>
         </div>
@@ -214,14 +225,14 @@ const Header = () => {
             </li>
             <li>
               <Link
-                to="/jobs"
-                className={`block font-medium transition-colors ${location.pathname === '/jobs'
+                to="/hostels"
+                className={`block font-medium transition-colors ${location.pathname === '/hostels'
                   ? 'text-primary-600'
                   : 'text-gray-700 hover:text-primary-600'
                   }`}
                 onClick={() => setMobileMenuOpen(false)}
               >
-                Jobs
+                Hotels
               </Link>
             </li>
             <li>
@@ -238,14 +249,14 @@ const Header = () => {
             </li>
             <li>
               <Link
-                to="/merchandise"
-                className={`block font-medium transition-colors ${location.pathname === '/merchandise'
+                to="/products"
+                className={`block font-medium transition-colors ${location.pathname === '/products'
                   ? 'text-primary-600'
                   : 'text-gray-700 hover:text-primary-600'
                   }`}
                 onClick={() => setMobileMenuOpen(false)}
               >
-                Merchandise
+                Products
               </Link>
             </li>
             <li>
@@ -274,14 +285,26 @@ const Header = () => {
             </li>
             <li>
               <Link
-                to="/hostels"
-                className={`block font-medium transition-colors ${location.pathname === '/hostels'
+                to="/jobs"
+                className={`block font-medium transition-colors ${location.pathname === '/jobs'
                   ? 'text-primary-600'
                   : 'text-gray-700 hover:text-primary-600'
                   }`}
                 onClick={() => setMobileMenuOpen(false)}
               >
-                Hostels
+                Jobs
+              </Link>
+            </li>
+            <li>
+              <Link
+                to="/merchandise"
+                className={`block font-medium transition-colors ${location.pathname === '/merchandise'
+                  ? 'text-primary-600'
+                  : 'text-gray-700 hover:text-primary-600'
+                  }`}
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Merchandise
               </Link>
             </li>
             <li>
@@ -307,18 +330,18 @@ const Header = () => {
               Login
             </Link>
             <Link
-              to="/customer-service"
+              to="/hostels"
               className="inline-flex w-full max-w-[160px] justify-center px-4 py-2 bg-primary-600 text-black border border-black rounded-lg font-medium hover:bg-primary-700 transition-colors text-center mx-auto"
               onClick={() => setMobileMenuOpen(false)}
             >
-              Customer Service
+              Looking for Hostel
             </Link>
             <Link
-              to="/owner-hotel"
+              to="/onboarding"
               className="inline-flex w-full max-w-[160px] justify-center px-4 py-2 bg-gray-800 text-white rounded-lg font-medium hover:bg-gray-900 transition-colors text-center mx-auto"
               onClick={() => setMobileMenuOpen(false)}
             >
-              Owner Hotel
+              Onboarding
             </Link>
           </div>
         </div>

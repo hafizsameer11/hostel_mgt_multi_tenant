@@ -19,12 +19,14 @@ export const AdminLayout: React.FC = () => {
   // State to track if user manually collapsed the sidebar (via toggle button)
   const [isManuallyCollapsed, setIsManuallyCollapsed] = useState(false);
   
-  // Check if People, Vendor, Accounts, or Communication section is active by examining the current route
+  // Check if People, Vendor, Accounts, Communication, FP&A, or Alerts section is active by examining the current route
   const isPeopleActive = location.pathname.startsWith(ROUTES.PEOPLE);
   const isVendorActive = location.pathname.startsWith(ROUTES.VENDOR);
   const isAccountsActive = location.pathname.startsWith(ROUTES.ACCOUNTS);
   const isCommunicationActive = location.pathname.startsWith(ROUTES.COMM);
-  const isSecondSidebarActive = isPeopleActive || isVendorActive || isAccountsActive || isCommunicationActive;
+  const isFPAActive = location.pathname.startsWith(ROUTES.FPA);
+  const isAlertsActive = location.pathname.startsWith(ROUTES.ALERTS);
+  const isSecondSidebarActive = isPeopleActive || isVendorActive || isAccountsActive || isCommunicationActive || isFPAActive || isAlertsActive;
   
   /**
    * Sidebar Collapse Logic:
@@ -92,7 +94,7 @@ export const AdminLayout: React.FC = () => {
       {/* Main Sidebar - Collapses to icons when People is active or manually toggled */}
       <Sidebar isCollapsed={isSidebarCollapsed} />
 
-      {/* Second Sidebar - Only appears when People or Vendor is active */}
+      {/* Second Sidebar - Only appears when People, Vendor, Accounts, Communication, or FP&A is active */}
       <SecondSidebar isVisible={isSecondSidebarActive} />
 
       {/* Main content */}

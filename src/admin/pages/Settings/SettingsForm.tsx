@@ -10,8 +10,7 @@ import {
   UserCircleIcon,
   LockClosedIcon,
   BuildingOfficeIcon,
-  GlobeAltIcon,
-  CalculatorIcon,
+  BellIcon, 
   UsersIcon,
   KeyIcon,
   ClipboardDocumentCheckIcon,
@@ -32,7 +31,6 @@ import {
 } from '@heroicons/react/24/outline';
 import { Toast } from '../../components/Toast';
 import type { ToastType } from '../../types/common';
-import { SearchInput } from '../../components/SearchInput';
 import { DataTable } from '../../components/DataTable';
 import type { Column } from '../../components/DataTable';
 import { PersonalInfoModal } from '../../components/settings/PersonalInfoModal';
@@ -40,6 +38,8 @@ import { HostelInfoModal } from '../../components/settings/HostelInfoModal';
 import { NewUserModal } from '../../components/settings/NewUserModal';
 import { UserRolesList } from '../../components/settings/UserRolesList';
 import { NewUserRoleModal } from '../../components/settings/NewUserRoleModal';
+import { ViewRoleModal } from '../../components/settings/ViewRoleModal';
+import { changePassword } from '../../services/settings.service';
 import type {
   PersonalInfoModalProps,
   HostelInfoModalProps,
@@ -64,7 +64,8 @@ interface LoginPasswordModalProps {
 }
 
 interface LoginPasswordFormData {
-  password: string;
+  currentPassword: string;
+  newPassword: string;
   confirmPassword: string;
 }
 
@@ -73,16 +74,26 @@ interface LoginPasswordFormData {
  */
 const LoginPasswordModal: React.FC<LoginPasswordModalProps> = ({ isOpen, onClose }) => {
   const [formData, setFormData] = useState<LoginPasswordFormData>({
-    password: '',
+    currentPassword: '',
+    newPassword: '',
     confirmPassword: '',
   });
-  const [showPassword, setShowPassword] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [errors, setErrors] = useState<{ password?: string; confirmPassword?: string }>({});
+  const [errors, setErrors] = useState<{ currentPassword?: string; newPassword?: string; confirmPassword?: string }>({});
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
+      // Reset form when modal opens
+      setFormData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      setErrors({});
+      setSuccess(null);
+      setApiError(null);
     } else {
       document.body.style.overflow = 'unset';
     }
@@ -90,6 +101,20 @@ const LoginPasswordModal: React.FC<LoginPasswordModalProps> = ({ isOpen, onClose
       document.body.style.overflow = 'unset';
     };
   }, [isOpen]);
+
+  // Clear success message after 3 seconds
+  useEffect(() => {
+    if (success) {
+      const timer = setTimeout(() => {
+        setSuccess(null);
+        // Close modal after showing success
+        setTimeout(() => {
+          onClose();
+        }, 500);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [success, onClose]);
 
   const handleInputChange = (field: keyof LoginPasswordFormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -100,17 +125,21 @@ const LoginPasswordModal: React.FC<LoginPasswordModalProps> = ({ isOpen, onClose
   };
 
   const validateForm = (): boolean => {
-    const newErrors: { password?: string; confirmPassword?: string } = {};
+    const newErrors: { currentPassword?: string; newPassword?: string; confirmPassword?: string } = {};
 
-    if (!formData.password.trim()) {
-      newErrors.password = 'Password is required';
-    } else if (formData.password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters';
+    if (!formData.currentPassword.trim()) {
+      newErrors.currentPassword = 'Current password is required';
+    }
+
+    if (!formData.newPassword.trim()) {
+      newErrors.newPassword = 'New password is required';
+    } else if (formData.newPassword.length < 8) {
+      newErrors.newPassword = 'New password must be at least 8 characters';
     }
 
     if (!formData.confirmPassword.trim()) {
-      newErrors.confirmPassword = 'Please confirm your password';
-    } else if (formData.password !== formData.confirmPassword) {
+      newErrors.confirmPassword = 'Please confirm your new password';
+    } else if (formData.newPassword !== formData.confirmPassword) {
       newErrors.confirmPassword = 'Passwords do not match';
     }
 
@@ -118,44 +147,55 @@ const LoginPasswordModal: React.FC<LoginPasswordModalProps> = ({ isOpen, onClose
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!validateForm()) {
       return;
     }
 
-    // Prepare data for API call
-    const passwordData = {
-      password: formData.password,
-    };
+    setLoading(true);
+    setApiError(null);
+    setSuccess(null);
 
-    console.log('Submitting password change:', passwordData);
-
-    // TODO: Replace with actual API call
-    // Example:
-    // try {
-    //   await fetch('/api/change-password', {
-    //     method: 'POST',
-    //     headers: { 'Content-Type': 'application/json' },
-    //     body: JSON.stringify(passwordData),
-    //   });
-    //   // Handle success
-    // } catch (error) {
-    //   // Handle error
-    // }
-
-    // For now, save to localStorage as backup
     try {
-      localStorage.setItem('passwordChangeData', JSON.stringify(passwordData));
-    } catch (error) {
-      console.error('Failed to save to localStorage:', error);
-    }
+      // Call the change password API
+      const response = await changePassword({
+        currentPassword: formData.currentPassword,
+        newPassword: formData.newPassword,
+        confirmPassword: formData.confirmPassword,
+      });
 
-    // Reset form and close
-    setFormData({ password: '', confirmPassword: '' });
-    setErrors({});
-    onClose();
+      if (response && response.success) {
+        setSuccess(response.message || 'Password changed successfully!');
+        
+        // Reset form
+        setFormData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+        setErrors({});
+      } else {
+        setApiError(response?.message || 'Failed to change password');
+      }
+    } catch (err: any) {
+      console.error('Error changing password:', err);
+      // Extract error message from the error object
+      let errorMessage = 'Failed to change password. Please try again.';
+      
+      if (err?.message) {
+        errorMessage = err.message;
+      } else if (err?.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      } else if (err?.response?.status === 404) {
+        errorMessage = 'Password change endpoint not found. Please contact support.';
+      } else if (err?.response?.status === 400) {
+        errorMessage = 'Invalid password. Please check your current password and try again.';
+      } else if (err?.response?.status === 401) {
+        errorMessage = 'Current password is incorrect. Please try again.';
+      }
+      
+      setApiError(errorMessage);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -197,38 +237,80 @@ const LoginPasswordModal: React.FC<LoginPasswordModalProps> = ({ isOpen, onClose
               {/* Form Content */}
               <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">
                 <div className="flex-1 overflow-y-auto p-6">
+                  {/* Error and Success Messages */}
+                  {(apiError || success) && (
+                    <div className="mb-6">
+                      {apiError && (
+                        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
+                          <p className="text-sm">{apiError}</p>
+                        </div>
+                      )}
+                      {success && (
+                        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-4">
+                          <p className="text-sm">{success}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
                   <div className="space-y-6 max-w-md">
-                    {/* Password Field */}
+                    {/* Current Password Field */}
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Password <span className="text-red-500">*</span>
+                        Current Password <span className="text-red-500">*</span>
                       </label>
                       <div className="relative">
                         <input
-                          type={showPassword ? 'text' : 'password'}
-                          value={formData.password}
-                          onChange={(e) => handleInputChange('password', e.target.value)}
-                          placeholder="Enter new password"
+                          type={showCurrentPassword ? 'text' : 'password'}
+                          value={formData.currentPassword}
+                          onChange={(e) => handleInputChange('currentPassword', e.target.value)}
+                          placeholder="Enter current password"
                           className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
-                            errors.password
+                            errors.currentPassword
                               ? 'border-red-300 focus:ring-red-500'
                               : 'border-slate-300 focus:ring-blue-500'
                           }`}
                         />
                         <button
                           type="button"
-                          onClick={() => setShowPassword(!showPassword)}
+                          onClick={() => setShowCurrentPassword(!showCurrentPassword)}
                           className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700"
                         >
-                          {showPassword ? (
-                            <LockClosedIcon className="w-5 h-5" />
-                          ) : (
-                            <LockClosedIcon className="w-5 h-5" />
-                          )}
+                          <LockClosedIcon className="w-5 h-5" />
                         </button>
                       </div>
-                      {errors.password && (
-                        <p className="mt-1 text-sm text-red-600">{errors.password}</p>
+                      {errors.currentPassword && (
+                        <p className="mt-1 text-sm text-red-600">{errors.currentPassword}</p>
+                      )}
+                    </div>
+
+                    {/* New Password Field */}
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        New Password <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showNewPassword ? 'text' : 'password'}
+                          value={formData.newPassword}
+                          onChange={(e) => handleInputChange('newPassword', e.target.value)}
+                          placeholder="Enter new password"
+                          className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
+                            errors.newPassword
+                              ? 'border-red-300 focus:ring-red-500'
+                              : 'border-slate-300 focus:ring-blue-500'
+                          }`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowNewPassword(!showNewPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700"
+                        >
+                          <LockClosedIcon className="w-5 h-5" />
+                        </button>
+                      </div>
+                      {errors.newPassword && (
+                        <p className="mt-1 text-sm text-red-600">{errors.newPassword}</p>
                       )}
                       <p className="mt-1 text-xs text-slate-500">
                         Password must be at least 8 characters long
@@ -257,11 +339,7 @@ const LoginPasswordModal: React.FC<LoginPasswordModalProps> = ({ isOpen, onClose
                           onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                           className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700"
                         >
-                          {showConfirmPassword ? (
-                            <LockClosedIcon className="w-5 h-5" />
-                          ) : (
-                            <LockClosedIcon className="w-5 h-5" />
-                          )}
+                          <LockClosedIcon className="w-5 h-5" />
                         </button>
                       </div>
                       {errors.confirmPassword && (
@@ -276,15 +354,24 @@ const LoginPasswordModal: React.FC<LoginPasswordModalProps> = ({ isOpen, onClose
                   <button
                     type="button"
                     onClick={onClose}
-                    className="px-6 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
+                    disabled={loading}
+                    className="px-6 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-6 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors"
+                    disabled={loading}
+                    className="px-6 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   >
-                    Save
+                    {loading ? (
+                      <>
+                        <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        <span>Changing...</span>
+                      </>
+                    ) : (
+                      'Save'
+                    )}
                   </button>
                 </div>
               </form>
@@ -496,6 +583,9 @@ const SettingsForm: React.FC = () => {
   const [showUserRolesList, setShowUserRolesList] = useState(false);
   const [isNewUserRoleOpen, setIsNewUserRoleOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<UserRole | null>(null);
+  const [viewingRole, setViewingRole] = useState<UserRole | null>(null);
+  const [isViewRoleOpen, setIsViewRoleOpen] = useState(false);
+  const [rolesRefreshTrigger, setRolesRefreshTrigger] = useState(0);
 
   // Personal settings cards
   const personalSettings: SettingCard[] = [
@@ -556,15 +646,15 @@ const SettingsForm: React.FC = () => {
     //     });
     //   },
     // },
-    {
-      id: 'users',
-      title: 'Users',
-      description: 'Add or edit users.',
-      icon: UsersIcon,
-      onClick: () => {
-        setShowUsersList(true);
-      },
-    },
+    // {
+    //   id: 'users',
+    //   title: 'Users',
+    //   description: 'Add or edit users.',
+    //   icon: UsersIcon,
+    //   onClick: () => {
+    //     setShowUsersList(true);
+    //   },
+    // },
     {
       id: 'user-roles',
       title: 'User Roles',
@@ -712,14 +802,136 @@ const SettingsForm: React.FC = () => {
     setEditingRole(null);
   };
 
+  // Handle role created successfully - refresh the list
+  const handleRoleCreated = () => {
+    setRolesRefreshTrigger(prev => prev + 1);
+  };
+
+  // Handle view user role
+  const handleViewUserRole = (role: UserRole) => {
+    setViewingRole(role);
+    setIsViewRoleOpen(true);
+  };
+
+  // Handle view role modal close
+  const handleViewRoleModalClose = () => {
+    setIsViewRoleOpen(false);
+    setViewingRole(null);
+  };
+
+  // Handle delete user role
+  const handleDeleteUserRole = async (role: UserRole) => {
+    if (window.confirm(`Are you sure you want to delete the role "${role.name}"? This action cannot be undone.`)) {
+      try {
+        const { deleteRole } = await import('../../services/role.service');
+        const roleId = Number(role.id);
+        
+        await deleteRole(roleId);
+        
+        setToast({
+          open: true,
+          type: 'success',
+          message: `Role "${role.name}" has been deleted successfully.`,
+        });
+        
+        // Refresh the roles list
+        setRolesRefreshTrigger(prev => prev + 1);
+      } catch (error: any) {
+        console.error('Error deleting role:', error);
+        setToast({
+          open: true,
+          type: 'error',
+          message: error?.message || `Failed to delete role "${role.name}". Please try again.`,
+        });
+      }
+    }
+  };
+
   // Convert editingRole to form data
   const getRoleFormData = (): UserRoleFormData | null => {
     if (!editingRole) return null;
     // In a real app, you would fetch the full role data from API
-    // For now, return a basic structure
+    // For now, try to get from localStorage or return default structure
+    try {
+      const savedData = localStorage.getItem('userRoleData');
+      if (savedData) {
+        const parsed = JSON.parse(savedData);
+        if (parsed.roleName === editingRole.name) {
+          return parsed;
+        }
+      }
+    } catch (error) {
+      console.error('Error loading role data from localStorage:', error);
+    }
+    
+    // Return default structure
     return {
       roleName: editingRole.name,
       roleDescription: editingRole.description,
+      permissions: {
+        people: {
+          prospects: { viewList: false, viewOne: false, create: false, edit: false, delete: false },
+          owners: { viewList: true, viewOne: true, create: false, edit: false, delete: false },
+          vendors: { viewList: true, viewOne: true, create: false, edit: false, delete: false },
+          tenants: { viewList: true, viewOne: true, create: false, edit: false, delete: false },
+          users: { viewList: true, viewOne: false, create: false, edit: false, delete: false },
+          userRoles: { viewList: false, viewOne: false, create: false, edit: false, delete: false },
+          apiKeys: { viewList: false, viewOne: false, create: false, edit: false, delete: false },
+        },
+        tasksAndMaintenance: {
+          tasks: {
+            viewList: 'none',
+            viewOne: 'none',
+            create: false,
+            edit: false,
+            delete: false,
+          },
+          workOrders: {
+            viewList: 'none',
+            viewOne: 'none',
+            create: false,
+            edit: false,
+            delete: false,
+          },
+          tenantRequests: {
+            viewList: 'none',
+            viewOne: 'none',
+            create: false,
+            edit: false,
+            delete: false,
+          },
+          ownerRequests: {
+            viewList: 'none',
+            viewOne: 'none',
+            create: false,
+            edit: false,
+            delete: false,
+          },
+        },
+      },
+    };
+  };
+
+  // Get role form data for viewing
+  const getViewRoleFormData = (): UserRoleFormData | null => {
+    if (!viewingRole) return null;
+    // Try to get from localStorage
+    try {
+      const savedData = localStorage.getItem('userRoleData');
+      if (savedData) {
+        const parsed = JSON.parse(savedData);
+        if (parsed.roleName === viewingRole.name) {
+          return parsed;
+        }
+      }
+    } catch (error) {
+      console.error('Error loading role data from localStorage:', error);
+    }
+    
+    // Return default structure if not found
+    return {
+      roleName: viewingRole.name,
+      roleDescription: viewingRole.description,
       permissions: {
         people: {
           prospects: { viewList: false, viewOne: false, create: false, edit: false, delete: false },
@@ -792,6 +1004,9 @@ const SettingsForm: React.FC = () => {
           onBack={() => setShowUserRolesList(false)}
           onNewRole={handleNewUserRole}
           onEditRole={handleEditUserRole}
+          onViewRole={handleViewUserRole}
+          onDeleteRole={handleDeleteUserRole}
+          refreshTrigger={rolesRefreshTrigger}
         />
         {/* New User Role Modal */}
         <NewUserRoleModal
@@ -799,7 +1014,20 @@ const SettingsForm: React.FC = () => {
           onClose={handleUserRoleModalClose}
           roleData={getRoleFormData()}
           isEdit={!!editingRole}
+          roleId={editingRole ? Number(editingRole.id) : null}
+          onSuccess={handleRoleCreated}
         />
+        {/* View Role Modal */}
+        {viewingRole && (
+          <ViewRoleModal
+            isOpen={isViewRoleOpen}
+            onClose={handleViewRoleModalClose}
+            roleId={Number(viewingRole.id)}
+            roleData={getViewRoleFormData()}
+            roleName={viewingRole.name}
+            roleDescription={viewingRole.description}
+          />
+        )}
       </>
     );
   }

@@ -3,7 +3,7 @@
  * Comprehensive dashboard with multiple data visualizations
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { StatCard } from '../components/StatCard';
 import { formatCurrency } from '../types/common';
@@ -33,104 +33,106 @@ import {
   UserIcon,
   BellAlertIcon,
 } from '@heroicons/react/24/outline';
-import tenantsData from '../mock/tenants.json';
-import accountsData from '../mock/accounts.json';
-import vendorsData from '../mock/vendors.json';
-import tenantRequestsData from '../mock/tenant-requests.json';
-import activityLogData from '../mock/activity-log.json';
+import { getOverviewDashboard, type OverviewDashboardResponse } from '../services/dashboard.service';
 
 /**
  * Professional overview dashboard page
  */
 const Overview: React.FC = () => {
+  // API Data State
+  const [dashboardData, setDashboardData] = useState<OverviewDashboardResponse['data'] | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
   // Tab state for Paid Transactions & Recent Payments
   const [activePaymentTab, setActivePaymentTab] = useState<'transactions' | 'payments'>('transactions');
   
   // Tab state for Bills & Maintenance
   const [activeRequestTab, setActiveRequestTab] = useState<'bills' | 'maintenance'>('bills');
 
-  // Calculate stats for stat cards
+  // Fetch dashboard data on component mount
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const data = await getOverviewDashboard();
+        setDashboardData(data);
+      } catch (err: any) {
+        console.error('Error fetching dashboard data:', err);
+        setError(err.message || 'Failed to load dashboard data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
+
+  // Get stats from API data
   const stats = useMemo(() => {
-    const activeTenants = tenantsData.filter((t) => t.status === 'Active').length;
-    const activeVendors = vendorsData.filter((v) => v.status === 'Active').length;
-    
-    // Calculate current month revenue
-    const currentMonthIncome = accountsData
-      .filter((a) => a.type === 'Rent' || a.type === 'Deposit')
-      .reduce((sum, a) => sum + a.amount, 0);
-    
-    // Calculate occupancy (assuming 100 total beds)
-    const totalBeds = 100;
-    const occupancyRate = Math.round((activeTenants / totalBeds) * 100);
+    if (!dashboardData) {
+      return {
+        activeTenants: 0,
+        monthlyRevenue: 0,
+        activeVendors: 0,
+        occupancyRate: 0,
+      };
+    }
+
+    const occupancyCard = dashboardData.summaryCards.find(card => card.key === 'occupancyRate');
+    const revenueCard = dashboardData.summaryCards.find(card => card.key === 'monthlyRevenue');
+    const tenantsCard = dashboardData.summaryCards.find(card => card.key === 'activeTenants');
+    const vendorsCard = dashboardData.summaryCards.find(card => card.key === 'activeVendors');
 
     return {
-      activeTenants,
-      monthlyRevenue: currentMonthIncome,
-      activeVendors,
-      occupancyRate,
+      activeTenants: tenantsCard?.value || 0,
+      monthlyRevenue: revenueCard?.value || 0,
+      activeVendors: vendorsCard?.value || 0,
+      occupancyRate: occupancyCard?.value || 0,
     };
-  }, []);
+  }, [dashboardData]);
 
-  // Calculate Profit & Loss data (last 3 months)
+  // Get Profit & Loss data from API
   const profitLossData = useMemo(() => {
-    const months = ['January 2023', 'February 2023', 'March 2023'];
-    const revenue = [30036, 32000, 31000];
-    const expenses = [5018, 5500, 5200];
-    const netIncome = revenue.map((r, i) => r - expenses[i]);
-    
-    return months.map((month, i) => ({
-      month,
-      revenue: revenue[i],
-      expenses: expenses[i],
-      netIncome: netIncome[i],
-    }));
-  }, []);
+    if (!dashboardData) return [];
+    return dashboardData.profitLoss.series;
+  }, [dashboardData]);
 
-  // Calculate Net Income for last 3 months
+  // Get Net Income from API
   const netIncome = useMemo(() => {
-    return profitLossData.reduce((sum, item) => sum + item.netIncome, 0);
-  }, [profitLossData]);
+    if (!dashboardData) return 0;
+    return dashboardData.profitLoss.totalNetIncome;
+  }, [dashboardData]);
 
-  // Paid transactions (all paid transactions including rent, deposits, expenses)
+  // Get paid transactions from API
   const paidTransactions = useMemo(() => {
-    return accountsData
-      .filter(a => a.status === 'Paid')
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, 5)
-      .map(transaction => {
-        const tenant = tenantsData.find(t => t.name === transaction.tenantName);
+    if (!dashboardData) return [];
+    return dashboardData.transactions.payable.items.map(transaction => {
         const daysAgo = Math.floor((Date.now() - new Date(transaction.date).getTime()) / (1000 * 60 * 60 * 24));
         return {
           ...transaction,
-          property: tenant ? `${tenant.room}-${tenant.bed}` : 'N/A',
           daysAgo,
         };
       });
-  }, []);
+  }, [dashboardData]);
 
-  // Recent payments received (only rent payments that are paid)
+  // Get recent payments received from API
   const recentPaymentsReceived = useMemo(() => {
-    return accountsData
-      .filter(a => (a.type === 'Rent' || a.type === 'Deposit') && a.status === 'Paid')
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, 5)
-      .map(payment => {
-        const tenant = tenantsData.find(t => t.name === payment.tenantName);
+    if (!dashboardData) return [];
+    return dashboardData.transactions.receivable.items.map(payment => {
         const daysAgo = Math.floor((Date.now() - new Date(payment.date).getTime()) / (1000 * 60 * 60 * 24));
         return {
           ...payment,
-          property: tenant ? `${tenant.room}-${tenant.bed}` : 'N/A',
           daysAgo,
         };
       });
-  }, []);
+  }, [dashboardData]);
 
-  // Employee activity log
+  // Get employee activity log from API
   const activityLog = useMemo(() => {
-    return activityLogData
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-      .slice(0, 10)
-      .map(activity => {
+    if (!dashboardData) return [];
+    return dashboardData.employeeActivityLog.items.map(activity => {
         const hoursAgo = Math.floor((Date.now() - new Date(activity.timestamp).getTime()) / (1000 * 60 * 60));
         const daysAgo = Math.floor(hoursAgo / 24);
         return {
@@ -139,7 +141,7 @@ const Overview: React.FC = () => {
           daysAgo,
         };
       });
-  }, []);
+  }, [dashboardData]);
 
   // Format activity time
   const formatActivityTime = (hoursAgo: number, daysAgo: number) => {
@@ -169,116 +171,67 @@ const Overview: React.FC = () => {
     return 'bg-gray-100 text-gray-700';
   };
 
-  // Recent tenant requests - Bills (from accounts data)
+  // Get recent bills from API
   const recentBills = useMemo(() => {
-    return accountsData
-      .filter(a => (a.type === 'Expense' || a.type === 'Refund') && (a.status === 'Pending' || a.status === 'Overdue'))
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, 5)
-      .map(bill => {
+    if (!dashboardData) return [];
+    return dashboardData.recentBills.map(bill => {
         const daysAgo = Math.floor((Date.now() - new Date(bill.date).getTime()) / (1000 * 60 * 60 * 24));
         return {
           ...bill,
           daysAgo,
-          description: bill.description || `${bill.type} - ${bill.ref}`,
           property: bill.hostelName || 'N/A',
           unit: bill.tenantName || 'N/A',
         };
       });
-  }, []);
+  }, [dashboardData]);
 
-  // Recent tenant requests - Maintenance (from tenant requests data)
+  // Get recent maintenance from API
   const recentMaintenance = useMemo(() => {
-    return tenantRequestsData
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 5)
-      .map(req => {
+    if (!dashboardData) return [];
+    return dashboardData.recentMaintenance.map(req => {
         const daysAgo = Math.floor((Date.now() - new Date(req.createdAt).getTime()) / (1000 * 60 * 60 * 24));
         return {
           ...req,
           daysAgo,
         };
       });
-  }, []);
+  }, [dashboardData]);
 
-  // Unpaid rent by aging with tenant details
+  // Get unpaid rent data from API
   const unpaidRentData = useMemo(() => {
-    const unpaid = accountsData.filter(a => a.type === 'Rent' && (a.status === 'Pending' || a.status === 'Overdue'));
-    const now = Date.now();
-    
-    const aging = unpaid.reduce((acc, payment) => {
-      const daysOld = Math.floor((now - new Date(payment.date).getTime()) / (1000 * 60 * 60 * 24));
-      let category = '91+';
-      if (daysOld <= 30) category = '0-30';
-      else if (daysOld <= 60) category = '31-60';
-      else if (daysOld <= 90) category = '61-90';
-      
-      acc[category] = (acc[category] || 0) + payment.amount;
-      return acc;
-    }, {} as Record<string, number>);
+    if (!dashboardData) return [];
+    return dashboardData.unpaidRent.aging;
+  }, [dashboardData]);
 
-    return [
-      { category: '0-30', amount: aging['0-30'] || 0 },
-      { category: '31-60', amount: aging['31-60'] || 0 },
-      { category: '61-90', amount: aging['61-90'] || 0 },
-      { category: '91+', amount: aging['91+'] || 0 },
-    ];
-  }, []);
-
-  // Get tenants with unpaid rent
+  // Get tenants with unpaid rent from API
   const tenantsWithUnpaidRent = useMemo(() => {
-    const unpaid = accountsData.filter(a => a.type === 'Rent' && (a.status === 'Pending' || a.status === 'Overdue'));
-    const now = Date.now();
-    
-    return unpaid.map(payment => {
-      const tenant = tenantsData.find(t => t.name === payment.tenantName);
-      const daysOld = Math.floor((now - new Date(payment.date).getTime()) / (1000 * 60 * 60 * 24));
-      let category = '91+';
-      if (daysOld <= 30) category = '0-30';
-      else if (daysOld <= 60) category = '31-60';
-      else if (daysOld <= 90) category = '61-90';
-      
-      return {
-        tenantName: payment.tenantName || 'Unknown',
-        room: tenant ? `${tenant.room}-${tenant.bed}` : 'N/A',
-        amount: payment.amount,
-        daysOld,
-        category,
-        status: payment.status,
-        hostelName: payment.hostelName || 'N/A',
-      };
-    }).sort((a, b) => b.amount - a.amount);
-  }, []);
+    if (!dashboardData) return [];
+    return dashboardData.unpaidRent.tenants;
+  }, [dashboardData]);
 
-  // Get all tenants and mark their payment status
+  // Get tenant payment status summary from API
   const allTenantsWithPaymentStatus = useMemo(() => {
-    return tenantsData.map(tenant => {
-      const unpaidRent = accountsData.find(
-        a => a.type === 'Rent' && 
-        a.tenantName === tenant.name && 
-        (a.status === 'Pending' || a.status === 'Overdue')
-      );
-      
-      return {
-        ...tenant,
-        hasUnpaidRent: !!unpaidRent,
-        unpaidAmount: unpaidRent?.amount || 0,
-        unpaidStatus: unpaidRent?.status || null,
-      };
-    });
-  }, []);
+    if (!dashboardData) return [];
+    // Create a mock array for the summary display
+    const paidCount = dashboardData.unpaidRent.summary.paidCount;
+    const unpaidCount = dashboardData.unpaidRent.summary.unpaidCount;
+    return Array(paidCount + unpaidCount).fill(null).map((_, i) => ({
+      id: i + 1,
+      hasUnpaidRent: i >= paidCount,
+    }));
+  }, [dashboardData]);
 
+  // Get total unpaid rent from API
   const totalUnpaidRent = useMemo(() => {
-    return unpaidRentData.reduce((sum, item) => sum + item.amount, 0);
-  }, [unpaidRentData]);
+    if (!dashboardData) return 0;
+    return dashboardData.unpaidRent.totalAmount;
+  }, [dashboardData]);
 
-  // Check in and Check out data (dummy data for display)
+  // Get check in/out data from API
   const checkInCheckOutData = useMemo(() => {
-    // Dummy data: Check-ins and Check-outs for the last 30 days / next 30 days
-    // These are realistic numbers based on typical hostel operations
-    const checkIns = 28; // Tenants who checked in during the last 30 days
-    const checkOuts = 15; // Tenants who will check out in the next 30 days
-    
+    if (!dashboardData) return [];
+    const checkIns = dashboardData.checkInCheckOut.checkIns.count;
+    const checkOuts = dashboardData.checkInCheckOut.checkOuts.count;
     const total = checkIns + checkOuts;
     const checkInPercentage = total > 0 ? (checkIns / total) * 100 : 0;
     const checkOutPercentage = total > 0 ? (checkOuts / total) * 100 : 0;
@@ -295,25 +248,22 @@ const Overview: React.FC = () => {
         percentage: checkOutPercentage,
       },
     ];
-  }, []);
+  }, [dashboardData]);
 
   const checkInCheckOutTotal = useMemo(() => {
-    return checkInCheckOutData.reduce((sum, item) => sum + item.count, 0);
-  }, [checkInCheckOutData]);
+    if (!dashboardData) return 0;
+    return dashboardData.checkInCheckOut.total;
+  }, [dashboardData]);
 
-  // Occupancy rate data
+  // Get occupancy data from API
   const occupancyData = useMemo(() => {
-    const totalBeds = 100;
-    const occupied = tenantsData.filter(t => t.status === 'Active').length;
-    const vacant = totalBeds - occupied;
-    const occupiedPercent = Math.round((occupied / totalBeds) * 100);
-    const vacantPercent = Math.round((vacant / totalBeds) * 100);
-    
+    if (!dashboardData) return [];
+    const occupancy = dashboardData.overview.occupancy;
     return [
-      { name: 'Occupied', value: occupied, percent: occupiedPercent },
-      { name: 'Vacant', value: vacant, percent: vacantPercent },
+      { name: 'Occupied', value: occupancy.occupied, percent: occupancy.occupiedPercent },
+      { name: 'Vacant', value: occupancy.vacant, percent: occupancy.vacantPercent },
     ];
-  }, []);
+  }, [dashboardData]);
 
   const COLORS = ['#3b82f6', '#ec4899'];
 
@@ -339,6 +289,46 @@ const Overview: React.FC = () => {
     }
   };
 
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900">Overview</h1>
+          <p className="text-slate-600 mt-1">Dashboard summary and key metrics</p>
+        </div>
+        <div className="flex items-center justify-center py-20">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-4 text-slate-600">Loading dashboard data...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900">Overview</h1>
+          <p className="text-slate-600 mt-1">Dashboard summary and key metrics</p>
+        </div>
+        <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+          <p className="text-red-800 font-medium">Error loading dashboard</p>
+          <p className="text-red-600 text-sm mt-1">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Get summary cards from API
+  const occupancyCard = dashboardData?.summaryCards.find(card => card.key === 'occupancyRate');
+  const revenueCard = dashboardData?.summaryCards.find(card => card.key === 'monthlyRevenue');
+  const tenantsCard = dashboardData?.summaryCards.find(card => card.key === 'activeTenants');
+  const vendorsCard = dashboardData?.summaryCards.find(card => card.key === 'activeVendors');
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -351,20 +341,27 @@ const Overview: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {/* Row 1 - Card 1 */}
         <StatCard
-          title="Occupancy Rate"
-          value={`${stats.occupancyRate}%`}
+          title={occupancyCard?.title || "Occupancy Rate"}
+          value={occupancyCard?.valueFormatted || `${stats.occupancyRate}%`}
           icon={<HomeIcon className="w-6 h-6 text-white" />}
           variant="primary"
-          trend={{ value: '+5% from last month', isPositive: true }}
+          trend={{
+            value: occupancyCard?.changeFormatted || '+0%',
+            isPositive: occupancyCard?.direction === 'up' || occupancyCard?.direction === 'flat'
+          }}
           delay={0}
         />
         
         {/* Row 1 - Card 2 */}
         <StatCard
-          title="Active Tenants"
-          value={stats.activeTenants}
+          title={tenantsCard?.title || "Active Tenants"}
+          value={tenantsCard?.valueFormatted || stats.activeTenants.toString()}
           icon={<UsersIcon className="w-6 h-6 text-white" />}
           variant="success"
+          trend={{
+            value: tenantsCard?.changeFormatted || '+0%',
+            isPositive: tenantsCard?.direction === 'up' || tenantsCard?.direction === 'flat'
+          }}
           delay={0.1}
         />
         
@@ -413,20 +410,27 @@ const Overview: React.FC = () => {
 
         {/* Row 2 - Card 3 */}
         <StatCard
-          title="Monthly Revenue"
-          value={formatCurrency(stats.monthlyRevenue)}
+          title={revenueCard?.title || "Monthly Revenue"}
+          value={revenueCard?.valueFormatted || formatCurrency(stats.monthlyRevenue)}
           icon={<CurrencyDollarIcon className="w-6 h-6 text-white" />}
           variant="success"
-          trend={{ value: '+12% from last month', isPositive: true }}
+          trend={{
+            value: revenueCard?.changeFormatted || '+0%',
+            isPositive: revenueCard?.direction === 'up' || revenueCard?.direction === 'flat'
+          }}
           delay={0.2}
         />
         
         {/* Row 2 - Card 4 */}
         <StatCard
-          title="Active Vendors"
-          value={stats.activeVendors}
+          title={vendorsCard?.title || "Active Vendors"}
+          value={vendorsCard?.valueFormatted || stats.activeVendors.toString()}
           icon={<UserGroupIcon className="w-6 h-6 text-white" />}
           variant="default"
+          trend={{
+            value: vendorsCard?.changeFormatted || '+0%',
+            isPositive: vendorsCard?.direction === 'up' || vendorsCard?.direction === 'flat'
+          }}
           delay={0.3}
         />
       </div>
@@ -479,7 +483,7 @@ const Overview: React.FC = () => {
         {/* Paid Transactions & Recent Payments Received - Combined Card */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
           <div className="mb-4">
-            <h2 className="text-xl font-bold text-slate-900 mb-2">Payable Transactions & Receivable Payments</h2>
+            <h2 className="text-xl font-bold text-slate-900 mb-2">Transactions </h2>
             <p className="text-sm text-slate-600">All payable transactions and receivable payments</p>
           </div>
           

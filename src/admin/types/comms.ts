@@ -59,5 +59,13 @@ export interface Alert {
   status: AlertStatus;
   description?: string;
   assignedTo?: string;
+  // Additional fields from API
+  type?: string;
+  priority?: string;
+  hostel?: string;
+  room?: string | null;
+  tenant?: string | null;
+  amount?: number | null;
+  dueDate?: string | null;
 }
 

@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import { Link } from 'react-router-dom';
 
 interface Trip {
     id: number;
@@ -48,9 +49,10 @@ const TopTripsForYou = ({ trips }: TopTripsForYouProps) => {
                         }}
                     >
                         {trips.map((trip) => (
-                            <div
+                            <Link
+                                to="/hostels"
                                 key={trip.id}
-                                className="trip-card flex-shrink-0 w-80 bg-white rounded-xl overflow-hidden shadow-lg hover:shadow-xl transition-all"
+                                className="trip-card flex-shrink-0 w-80 bg-white rounded-xl overflow-hidden shadow-lg hover:shadow-xl transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
                             >
                                 {/* Image Container */}
                                 <div className="relative h-80 overflow-hidden">
@@ -85,7 +87,7 @@ const TopTripsForYou = ({ trips }: TopTripsForYouProps) => {
                                     <p className="text-gray-600 text-sm mb-2">{trip.dates}</p>
                                     <p className="text-lg font-semibold text-gray-700">{trip.price}</p>
                                 </div>
-                            </div>
+                            </Link>
                         ))}
                     </div>
 

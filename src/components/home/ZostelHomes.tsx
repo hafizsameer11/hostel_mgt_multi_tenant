@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import { Link } from 'react-router-dom';
 
 interface Home {
     id: number;
@@ -50,7 +51,8 @@ const ZostelHomes = ({ homes }: ZostelHomesProps) => {
                         }}
                     >
                         {homes.map((home) => (
-                            <div
+                            <Link
+                                to="/hostels"
                                 key={home.id}
                                 className="home-card flex-shrink-0 w-80 bg-white rounded-xl overflow-hidden shadow-lg hover:shadow-xl transition-all"
                             >
@@ -76,7 +78,7 @@ const ZostelHomes = ({ homes }: ZostelHomesProps) => {
                                     <p className="text-gray-600 text-sm mb-2">{home.location}</p>
                                     <p className="text-lg font-semibold text-gray-900">{home.price}</p>
                                 </div>
-                            </div>
+                            </Link>
                         ))}
                     </div>
 

@@ -19,6 +19,8 @@ import type { Hostel, HostelFormData } from '../../types/hostel';
 import type { ToastType } from '../../types/common';
 import ROUTES from '../../routes/routePaths';
 import * as hostelService from '../../services/hostel.service';
+import { api } from '../../../services/apiClient';
+import { API_ROUTES } from '../../../services/api.config';
 
 /**
  * Hostel list page
@@ -26,6 +28,8 @@ import * as hostelService from '../../services/hostel.service';
 const HostelList: React.FC = () => {
   const navigate = useNavigate();
   const [hostels, setHostels] = useState<Hostel[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCity, setSelectedCity] = useState<string>('');
   const [isAddHostelOpen, setIsAddHostelOpen] = useState(false);
@@ -39,14 +43,24 @@ const HostelList: React.FC = () => {
     message: string;
   }>({ open: false, type: 'success', message: '' });
 
-  // Load hostels
+  // Load hostels from API
   useEffect(() => {
     loadHostels();
   }, []);
 
-  const loadHostels = () => {
-    const data = hostelService.getAllHostels();
-    setHostels(data);
+  const loadHostels = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await hostelService.getAllHostelsFromAPI();
+      setHostels(data);
+    } catch (err: any) {
+      console.error('Error loading hostels:', err);
+      setError(err?.message || 'Failed to load hostels. Please try again.');
+      setHostels([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Get unique cities from hostels
@@ -63,7 +77,9 @@ const HostelList: React.FC = () => {
 
     // Apply city filter
     if (selectedCity) {
-      filtered = hostelService.getHostelsByCity(selectedCity);
+      filtered = filtered.filter(
+        (h) => h.city.toLowerCase() === selectedCity.toLowerCase()
+      );
     }
 
     // Apply search query
@@ -73,23 +89,54 @@ const HostelList: React.FC = () => {
         (h) =>
           h.name.toLowerCase().includes(lowerQuery) ||
           h.city.toLowerCase().includes(lowerQuery) ||
-          h.managerName.toLowerCase().includes(lowerQuery)
+          (h.managerName && h.managerName.toLowerCase().includes(lowerQuery))
       );
     }
 
     return filtered;
   }, [hostels, selectedCity, searchQuery]);
 
-  // Handle add hostel
-  const handleAddHostel = (data: HostelFormData) => {
+  // Handle add hostel (from AddHostelForm modal)
+  const handleAddHostel = async (data: any) => {
     try {
-      const newHostel = hostelService.createHostel(data);
+      // Prepare payload for backend API according to specification
+      const payload = {
+        name: data.name?.trim(),
+        contactInfo: {
+          phone: data.phone?.trim(),
+          email: data.email?.trim(),
+        },
+        address: {
+          country: data.address?.country?.trim() ?? data.country?.trim(),
+          state: data.address?.state?.trim() ?? data.state?.trim(),
+          city: data.address?.city?.trim() ?? data.city?.trim(),
+          street: data.address?.street?.trim() ?? data.street?.trim(),
+        },
+        description: data.description?.trim() || undefined,
+        category: data.category,
+        type: data.type,
+        operatingHours: {
+          checkIn: data.operatingHours?.checkIn || data.checkInTime,
+          checkOut: data.operatingHours?.checkOut || data.checkOutTime,
+        },
+      };
+
+      console.log('📡 [ADD HOSTEL MODAL] Sending payload:', payload);
+
+      const response = await api.post(API_ROUTES.HOSTEL.CREATE, payload);
+
+      if (!response.success || !response.data) {
+        throw new Error(response.message || 'Failed to create hostel');
+      }
+
       setToast({
         open: true,
         type: 'success',
-        message: `Hostel "${newHostel.name}" created successfully!`,
+        message: response.message || `Hostel "${response.data.name}" created successfully!`,
       });
-      loadHostels();
+      // Reload hostels from API
+      await loadHostels();
+      setIsAddHostelOpen(false);
       // Optionally navigate to view the new hostel
       // navigate(`/admin/hostel/${newHostel.id}`);
     } catch (error) {
@@ -102,22 +149,33 @@ const HostelList: React.FC = () => {
   };
 
   // Handle delete
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!deleteConfirm.hostel) return;
 
-    const success = hostelService.deleteHostel(deleteConfirm.hostel.id);
-    if (success) {
-      setToast({
-        open: true,
-        type: 'success',
-        message: `Hostel "${deleteConfirm.hostel.name}" deleted successfully`,
-      });
-      loadHostels();
-    } else {
+    try {
+      const hostelId = deleteConfirm.hostel.id;
+      console.log('📡 Deleting hostel:', hostelId);
+
+      const response = await api.delete(API_ROUTES.HOSTEL.DELETE(hostelId));
+
+      if (response.success) {
+        console.log('✅ Hostel deleted successfully');
+        setToast({
+          open: true,
+          type: 'success',
+          message: response.message || `Hostel "${deleteConfirm.hostel.name}" deleted successfully`,
+        });
+        // Reload hostels from API
+        await loadHostels();
+      } else {
+        throw new Error(response.message || 'Failed to delete hostel');
+      }
+    } catch (error: any) {
+      console.error('❌ Error deleting hostel:', error);
       setToast({
         open: true,
         type: 'error',
-        message: 'Failed to delete hostel',
+        message: error.message || 'Failed to delete hostel. Please try again.',
       });
     }
     setDeleteConfirm({ open: false, hostel: null });
@@ -137,11 +195,11 @@ const HostelList: React.FC = () => {
     },
     {
       key: 'totalFloors',
-      label: 'Floors',
+      label: 'Blocks',
     },
     {
       key: 'roomsPerFloor',
-      label: 'Rooms/Floor',
+      label: 'Rooms/Block',
     },
     {
       key: 'managerName',
@@ -235,14 +293,37 @@ const HostelList: React.FC = () => {
         </Button>
       </div>
 
+      {/* Loading State */}
+      {loading && (
+        <div className="text-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-slate-500">Loading hostels...</p>
+        </div>
+      )}
+
+      {/* Error State */}
+      {error && !loading && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+          <p className="text-sm">{error}</p>
+          <button
+            onClick={loadHostels}
+            className="mt-2 text-sm text-red-600 hover:text-red-800 underline"
+          >
+            Try again
+          </button>
+        </div>
+      )}
+
       {/* Data table */}
-      <DataTable
-        columns={columns}
-        data={filteredData}
-        toolbar={toolbar}
-        actionsRender={actionsRender}
-        emptyMessage="No hostels found. Create your first hostel to get started."
-      />
+      {!loading && !error && (
+        <DataTable
+          columns={columns}
+          data={filteredData}
+          toolbar={toolbar}
+          actionsRender={actionsRender}
+          emptyMessage="No hostels found. Create your first hostel to get started."
+        />
+      )}
 
       {/* Delete confirmation dialog */}
       <ConfirmDialog

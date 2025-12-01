@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 
 interface Destination {
     id: number;
@@ -16,9 +17,8 @@ interface DestinationsProps {
 const Destinations = ({ destinations, filterCategories }: DestinationsProps) => {
     const [destinationSearch, setDestinationSearch] = useState('');
     const [activeFilter, setActiveFilter] = useState('All');
-    const [currentCitySlide, setCurrentCitySlide] = useState(0);
-    const [currentMountainSlide, setCurrentMountainSlide] = useState(0);
-    const [itemsPerView, setItemsPerView] = useState(1);
+    const [currentSlide, setCurrentSlide] = useState(0);
+    const [itemsPerView, setItemsPerView] = useState(4);
 
     const filteredDestinations = destinations.filter((dest) => {
         const matchesSearch =
@@ -28,17 +28,16 @@ const Destinations = ({ destinations, filterCategories }: DestinationsProps) => 
         return matchesSearch && matchesFilter;
     });
 
-    const cityDestinations = filteredDestinations.filter((dest) => dest.category === 'City');
-    const mountainDestinations = filteredDestinations.filter((dest) => dest.category === 'Mountain');
-
     useEffect(() => {
         const handleResize = () => {
             if (window.innerWidth >= 1280) {
                 setItemsPerView(4);
             } else if (window.innerWidth >= 1024) {
                 setItemsPerView(3);
-            } else {
+            } else if (window.innerWidth >= 640) {
                 setItemsPerView(2);
+            } else {
+                setItemsPerView(1);
             }
         };
 
@@ -47,38 +46,38 @@ const Destinations = ({ destinations, filterCategories }: DestinationsProps) => 
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    const effectiveCityPerView = Math.min(itemsPerView, Math.max(1, cityDestinations.length));
-    const effectiveMountainPerView = Math.min(itemsPerView, Math.max(1, mountainDestinations.length));
+    const effectiveItemsPerView = Math.min(itemsPerView, Math.max(1, filteredDestinations.length));
 
     useEffect(() => {
-        setCurrentCitySlide(0);
-        const maxSlides = Math.max(0, cityDestinations.length - effectiveCityPerView);
+        setCurrentSlide(0);
+        const maxSlides = Math.max(0, filteredDestinations.length - effectiveItemsPerView);
         if (maxSlides > 0) {
             const interval = setInterval(() => {
-                setCurrentCitySlide((prev) => (prev + 1) % (maxSlides + 1));
+                setCurrentSlide((prev) => (prev + 1) % (maxSlides + 1));
             }, 5000);
             return () => clearInterval(interval);
         }
-    }, [cityDestinations.length, destinationSearch, activeFilter, effectiveCityPerView]);
+    }, [filteredDestinations.length, destinationSearch, activeFilter, effectiveItemsPerView]);
 
-    useEffect(() => {
-        setCurrentMountainSlide(0);
-        const maxSlides = Math.max(0, mountainDestinations.length - effectiveMountainPerView);
-        if (maxSlides > 0) {
-            const interval = setInterval(() => {
-                setCurrentMountainSlide((prev) => (prev + 1) % (maxSlides + 1));
-            }, 5000);
-            return () => clearInterval(interval);
-        }
-    }, [mountainDestinations.length, destinationSearch, activeFilter, effectiveMountainPerView]);
+    const handlePrev = () => {
+        const maxSlides = Math.max(0, filteredDestinations.length - effectiveItemsPerView);
+        setCurrentSlide((prev) => (prev === 0 ? maxSlides : prev - 1));
+    };
+
+    const handleNext = () => {
+        const maxSlides = Math.max(0, filteredDestinations.length - effectiveItemsPerView);
+        setCurrentSlide((prev) => (prev === maxSlides ? 0 : prev + 1));
+    };
+
+    const showNavigation = filteredDestinations.length > effectiveItemsPerView;
 
     return (
         <section className="py-8 bg-white">
-            <div className="w-full px-4 sm:px-8 lg:px-16">
+            <div className="w-full lg:w-[90%] mx-auto px-3 sm:px-8 lg:px-12">
                 <h2 className="text-4xl font-bold text-gray-900 mb-4">Destinations</h2>
 
                 {/* Filters and Search - One Line */}
-                <div className="mb-4 flex flex-wrap items-center gap-4">
+                <div className="mb-6 flex flex-wrap items-center gap-4">
                     {/* Search Bar - First */}
                     <div className="relative w-full md:w-auto md:min-w-[300px]">
                         <input
@@ -106,7 +105,7 @@ const Destinations = ({ destinations, filterCategories }: DestinationsProps) => 
                                 key={category}
                                 onClick={() => setActiveFilter(category)}
                                 className={`px-4 py-2 rounded-full font-medium transition-colors ${activeFilter === category
-                                    ? 'bg-primary-600 text-white'
+                                    ? 'bg-black text-white'
                                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                     }`}
                             >
@@ -116,86 +115,76 @@ const Destinations = ({ destinations, filterCategories }: DestinationsProps) => 
                     </div>
                 </div>
 
-                {/* Cities Row - First Row */}
-                {cityDestinations.length > 0 && (
-                    <div className="mb-6">
+                {/* Destination Slider - 4 columns */}
+                {filteredDestinations.length > 0 ? (
+                    <div className="relative">
                         <div className="relative overflow-hidden">
                             <div
-                                className="flex gap-6 transition-transform duration-500 ease-in-out"
+                                className="flex transition-transform duration-500 ease-in-out"
                                 style={{
-                                    transform: `translateX(-${currentCitySlide * (100 / effectiveCityPerView)}%)`,
+                                    gap: '1.5rem',
+                                    transform: `translateX(calc(-${currentSlide * (100 / effectiveItemsPerView)}% - ${currentSlide * 1.5}rem))`,
                                 }}
                             >
-                                {cityDestinations.map((destination) => (
-                                    <div
-                                        key={destination.id}
-                                        className="flex-shrink-0 text-center"
-                                        style={{
-                                            flexBasis: `${100 / effectiveCityPerView}%`,
-                                            maxWidth: `${100 / effectiveCityPerView}%`,
-                                        }}
-                                    >
-                                        <div className="relative mb-4">
-                                            <div className="w-36 h-36 sm:w-40 sm:h-40 lg:w-48 lg:h-48 mx-auto rounded-full overflow-hidden shadow-lg hover:shadow-xl transition-shadow">
-                                                <img
-                                                    src={destination.image}
-                                                    alt={destination.city}
-                                                    className="w-full h-full object-cover"
-                                                />
-                                            </div>
+                                {filteredDestinations.map((destination: Destination) => {
+                                    const itemWidth = `calc((100% - ${(effectiveItemsPerView - 1) * 1.5}rem) / ${effectiveItemsPerView})`;
+                                    return (
+                                        <div
+                                            key={destination.id}
+                                            className="flex-shrink-0 text-center"
+                                            style={{
+                                                width: itemWidth,
+                                            }}
+                                        >
+                                            <Link
+                                                to={`/hostels?city=${encodeURIComponent(destination.city)}`}
+                                                className="group block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white rounded-[2.5rem]"
+                                            >
+                                                <div className="relative mb-4">
+                                                    <div className="w-36 h-36 sm:w-40 sm:h-40 lg:w-48 lg:h-48 mx-auto rounded-full overflow-hidden shadow-lg transition-all group-hover:shadow-xl">
+                                                        <img
+                                                            src={destination.image}
+                                                            alt={destination.city}
+                                                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <h3 className="text-xl font-bold text-gray-900 mb-1 transition-colors group-hover:text-primary-600">
+                                                    {destination.city}
+                                                </h3>
+                                                <p className="text-gray-600 text-sm">{destination.region}</p>
+                                            </Link>
                                         </div>
-                                        <h3 className="text-xl font-bold text-gray-900 mb-1">
-                                            {destination.city}
-                                        </h3>
-                                        <p className="text-gray-600 text-sm">{destination.region}</p>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </div>
-                    </div>
-                )}
 
-                {/* Mountain Areas Row - Second Row */}
-                {mountainDestinations.length > 0 && (
-                    <div>
-                        <div className="relative overflow-hidden">
-                            <div
-                                className="flex gap-6 transition-transform duration-500 ease-in-out"
-                                style={{
-                                    transform: `translateX(-${currentMountainSlide * (100 / effectiveMountainPerView)}%)`,
-                                }}
-                            >
-                                {mountainDestinations.map((destination) => (
-                                    <div
-                                        key={destination.id}
-                                        className="flex-shrink-0 text-center"
-                                        style={{
-                                            flexBasis: `${100 / effectiveMountainPerView}%`,
-                                            maxWidth: `${100 / effectiveMountainPerView}%`,
-                                        }}
-                                    >
-                                        <div className="relative mb-4">
-                                            <div className="w-36 h-36 sm:w-40 sm:h-40 lg:w-48 lg:h-48 mx-auto rounded-full overflow-hidden shadow-lg hover:shadow-xl transition-shadow">
-                                                <img
-                                                    src={destination.image}
-                                                    alt={destination.city}
-                                                    className="w-full h-full object-cover"
-                                                />
-                                            </div>
-                                        </div>
-                                        <h3 className="text-xl font-bold text-gray-900 mb-1">
-                                            {destination.city}
-                                        </h3>
-                                        <p className="text-gray-600 text-sm">{destination.region}</p>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
+                        {/* Navigation Arrows */}
+                        {showNavigation && (
+                            <>
+                                <button
+                                    onClick={handlePrev}
+                                    aria-label="Previous"
+                                    className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 lg:-translate-x-12 bg-white rounded-full w-10 h-10 shadow-lg flex items-center justify-center hover:bg-gray-50 transition-colors z-10"
+                                >
+                                    <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                    </svg>
+                                </button>
+                                <button
+                                    onClick={handleNext}
+                                    aria-label="Next"
+                                    className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 lg:translate-x-12 bg-white rounded-full w-10 h-10 shadow-lg flex items-center justify-center hover:bg-gray-50 transition-colors z-10"
+                                >
+                                    <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                    </svg>
+                                </button>
+                            </>
+                        )}
                     </div>
-                )}
-
-                {/* Empty State */}
-                {cityDestinations.length === 0 && mountainDestinations.length === 0 && (
+                ) : (
                     <div className="text-center py-12">
                         <p className="text-gray-600 text-lg">No destinations found matching your search.</p>
                     </div>

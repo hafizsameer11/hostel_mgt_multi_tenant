@@ -14,15 +14,12 @@ export interface EmailEntry {
 }
 
 export interface PersonalInfoFormData {
-  firstName: string;
-  middleInitial: string;
-  lastName: string;
-  company: string;
-  jobTitle: string;
-  joinReason: string;
-  goals: string;
-  accountingExperience: string;
+  username: string;
+  email: string;
+  phone: string;
+  alternativePhone: string;
   profilePicture?: string;
+  profilePhotoFile?: File | null;
   phones: PhoneEntry[];
   emails: EmailEntry[];
   street1: string;
@@ -39,7 +36,8 @@ export interface PersonalInfoModalProps {
 }
 
 export interface LoginPasswordFormData {
-  password: string;
+  currentPassword: string;
+  newPassword: string;
   confirmPassword: string;
 }
 
@@ -158,5 +156,7 @@ export interface NewUserRoleModalProps {
   onClose: () => void;
   roleData?: UserRoleFormData | null;
   isEdit?: boolean;
+  roleId?: number | null; // Role ID for edit mode
+  onSuccess?: () => void; // Callback when role is created/updated successfully
 }
 

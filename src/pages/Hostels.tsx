@@ -10,6 +10,7 @@ import type {
     HostelFilters as HostelFilterState,
     HostelPriceRange,
     HostelSortOption,
+    HostelStarRating,
     RoomFiltersState,
     Seat,
     SeatStatus,
@@ -75,54 +76,186 @@ const mockFloors: Floor[] = [
 ];
 
 const mockHostels: Hostel[] = [
-  {
-    id: '1',
-    name: 'City Center Hostel',
-    manager: 'John Smith',
-    phone: '+1 234-567-8900',
-    address: '123 Main Street, Downtown',
-    description: 'Modern hostel in the heart of the city with excellent amenities and easy access to public transport.',
-    amenities: ['WiFi', 'AC', 'Laundry', 'Kitchen'],
-    image: 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?w=800',
-    totalFloors: 3,
-    totalRooms: 24,
-    totalSeats: 96,
-    availableSeats: 42,
-    pricePerMonth: 22000,
-    gender: 'coed',
-  },
-  {
-    id: '2',
-    name: 'University Hostel',
-    manager: 'Sarah Johnson',
-    phone: '+1 234-567-8901',
-    address: '456 College Ave, University District',
-    description: 'Student-friendly hostel near the university campus with study areas and quiet zones.',
-    amenities: ['WiFi', 'Study Room', 'Gym', 'Cafeteria'],
-    image: 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800',
-    totalFloors: 4,
-    totalRooms: 32,
-    totalSeats: 128,
-    availableSeats: 67,
-    pricePerMonth: 25000,
-    gender: 'boys',
-  },
-  {
-    id: '3',
-    name: 'Green Valley Hostel',
-    manager: 'Mike Davis',
-    phone: '+1 234-567-8902',
-    address: '789 Park Road, Green Valley',
-    description: 'Eco-friendly hostel with garden spaces and sustainable practices.',
-    amenities: ['WiFi', 'Garden', 'Recycling', 'Bike Storage'],
-    image: 'https://images.unsplash.com/photo-1571055107559-3e67626fa8be?w=800',
-    totalFloors: 2,
-    totalRooms: 16,
-    totalSeats: 64,
-    availableSeats: 28,
-    pricePerMonth: 18000,
-    gender: 'girls',
-  },
+    {
+        id: 'pk-1',
+        name: 'Karachi Seaview Hostel',
+        city: 'Karachi',
+        manager: 'Ahsan Raza',
+        phone: '+92 21 3456 7890',
+        address: '12 Clifton Block 5, Karachi',
+        description:
+            'Bright coastal hostel a few minutes from Clifton Beach with a rooftop chai lounge and shared co-working corner.',
+        amenities: ['WiFi', 'AC', 'Laundry', 'Kitchen', 'Rooftop Café'],
+        image: '/images/hotel-image1.avif',
+        totalFloors: 4,
+        totalRooms: 28,
+        totalSeats: 112,
+        availableSeats: 34,
+        pricePerMonth: 24500,
+        gender: 'coed',
+        category: 'premium',
+        starRating: 4,
+    },
+    {
+        id: 'pk-2',
+        name: 'Lahore Heritage Stay',
+        city: 'Lahore',
+        manager: 'Sadia Khan',
+        phone: '+92 42 3895 4410',
+        address: '73 Mall Road, Lahore',
+        description:
+            'Tastefully restored colonial residence near the Lahore Museum with leafy courtyards and serene study rooms.',
+        amenities: ['WiFi', 'Study Lounge', 'Library', 'Breakfast Bar'],
+        image: '/images/hotel-image2.avif',
+        totalFloors: 3,
+        totalRooms: 24,
+        totalSeats: 96,
+        availableSeats: 48,
+        pricePerMonth: 21500,
+        gender: 'girls',
+        category: 'standard',
+        starRating: 3,
+    },
+    {
+        id: 'pk-3',
+        name: 'Islamabad Margalla Residency',
+        city: 'Islamabad',
+        manager: 'Usman Dar',
+        phone: '+92 51 2270 990',
+        address: '8 F-7/4 Kohsar Road, Islamabad',
+        description:
+            'Calm, sunlit hostel tucked under the Margalla Hills with yoga decks, organic breakfasts, and high-speed connectivity.',
+        amenities: ['WiFi', 'Yoga Deck', 'Gym', 'Organic Café', 'Laundry'],
+        image: '/images/hotel-image3.avif',
+        totalFloors: 5,
+        totalRooms: 36,
+        totalSeats: 144,
+        availableSeats: 59,
+        pricePerMonth: 28500,
+        gender: 'coed',
+        category: 'premium',
+        starRating: 5,
+    },
+    {
+        id: 'pk-4',
+        name: 'Hunza Valley Retreat',
+        city: 'Hunza',
+        manager: 'Noorjehan Karim',
+        phone: '+92 5813 740120',
+        address: 'Altit Fort Road, Hunza',
+        description:
+            'Boutique alpine lodge with panoramic valley views, heated rooms, and guided treks for an unforgettable escape.',
+        amenities: ['WiFi', 'Heated Rooms', 'Mountain Deck', 'Guided Treks', 'Bonfire Lounge'],
+        image: '/images/hotel-image4.avif',
+        totalFloors: 2,
+        totalRooms: 18,
+        totalSeats: 54,
+        availableSeats: 12,
+        pricePerMonth: 42000,
+        gender: 'coed',
+        category: 'luxury',
+        starRating: 7,
+    },
+    {
+        id: 'pk-5',
+        name: 'Gwadar Marina Residence',
+        city: 'Gwadar',
+        manager: 'Rehan Baluch',
+        phone: '+92 86 4501 223',
+        address: '35 Marine Drive, Gwadar',
+        description:
+            'Seaside luxury hostel with private balconies, seafood dining, and a sunset infinity pool overlooking the Arabian Sea.',
+        amenities: ['WiFi', 'Infinity Pool', 'Seafood Bistro', 'Concierge', 'Gym'],
+        image: '/images/hotel-image5.avif',
+        totalFloors: 6,
+        totalRooms: 40,
+        totalSeats: 160,
+        availableSeats: 22,
+        pricePerMonth: 45500,
+        gender: 'boys',
+        category: 'luxury',
+        starRating: 7,
+    },
+    {
+        id: 'pk-6',
+        name: 'Multan Sufi Suites',
+        city: 'Multan',
+        manager: 'Hassan Gillani',
+        phone: '+92 61 6200 145',
+        address: '19 Ghanta Ghar Road, Multan',
+        description:
+            'Warm, art-filled hostel inspired by Multan’s Sufi heritage with community dinners and handicraft workshops.',
+        amenities: ['WiFi', 'Community Kitchen', 'Prayer Room', 'Craft Studio'],
+        image: '/images/hotel-image1.avif',
+        totalFloors: 4,
+        totalRooms: 26,
+        totalSeats: 104,
+        availableSeats: 31,
+        pricePerMonth: 20500,
+        gender: 'girls',
+        category: 'standard',
+        starRating: 3,
+    },
+    {
+        id: 'pk-7',
+        name: 'Peshawar Frontier Lodge',
+        city: 'Peshawar',
+        manager: 'Shahid Afridi',
+        phone: '+92 91 2704 321',
+        address: '4 University Town, Peshawar',
+        description:
+            'Characterful stay near Qissa Khwani Bazaar with secure bike parking, tea nooks, and Pashtun-style hospitality.',
+        amenities: ['WiFi', 'Bike Storage', 'Tea Lounge', '24/7 Security'],
+        image: '/images/hotel-image2.avif',
+        totalFloors: 3,
+        totalRooms: 22,
+        totalSeats: 88,
+        availableSeats: 40,
+        pricePerMonth: 19000,
+        gender: 'boys',
+        category: 'standard',
+        starRating: 3,
+    },
+    {
+        id: 'pk-8',
+        name: 'Faisalabad Textile Hub Hostel',
+        city: 'Faisalabad',
+        manager: 'Sehrish Tariq',
+        phone: '+92 41 8712 887',
+        address: '27 Susan Road, Faisalabad',
+        description:
+            'Modern co-living for young professionals with dedicated work pods, laundry valet, and artisanal chai every evening.',
+        amenities: ['WiFi', 'Work Pods', 'Laundry Valet', 'Snack Bar'],
+        image: '/images/hotel-image3.avif',
+        totalFloors: 5,
+        totalRooms: 35,
+        totalSeats: 140,
+        availableSeats: 76,
+        pricePerMonth: 27500,
+        gender: 'coed',
+        category: 'premium',
+        starRating: 4,
+    },
+    {
+        id: 'pk-9',
+        name: 'Quetta Juniper House',
+        city: 'Quetta',
+        manager: 'Mahnoor Yousafzai',
+        phone: '+92 81 2840 567',
+        address: '6 Zarghoon Road, Quetta',
+        description:
+            'Cozy hill-station hostel with geothermal heating, dry fruit café, and curated excursions to Hanna Lake.',
+        amenities: ['WiFi', 'Geothermal Heating', 'Excursion Desk', 'Dry Fruit Café'],
+        image: '/images/hotel-image4.avif',
+        totalFloors: 3,
+        totalRooms: 20,
+        totalSeats: 80,
+        availableSeats: 18,
+        pricePerMonth: 26000,
+        gender: 'girls',
+        category: 'premium',
+        starRating: 4,
+    },
 ];
 
 const initialFilters: HostelFilterState = {
@@ -131,6 +264,7 @@ const initialFilters: HostelFilterState = {
     availability: false,
     priceRange: 'all',
     gender: 'all',
+    starRating: 'all',
 };
 
 const initialRoomFilters: RoomFiltersState = {
@@ -173,7 +307,11 @@ const Hostels = () => {
 
     const filteredHostels = useMemo(() => {
         const result = hostels.filter((hostel) => {
-            if (filters.city && !hostel.address.toLowerCase().includes(filters.city.toLowerCase())) {
+            if (filters.city && hostel.city !== filters.city) {
+                return false;
+            }
+
+            if (filters.starRating !== 'all' && hostel.starRating !== filters.starRating) {
                 return false;
             }
 
@@ -219,6 +357,13 @@ const Hostels = () => {
 
     const allAmenities = useMemo(
         () => Array.from(new Set(hostels.flatMap((hostel) => hostel.amenities))).sort(),
+        [hostels],
+    );
+
+    const cities = useMemo(() => Array.from(new Set(hostels.map((hostel) => hostel.city))).sort(), [hostels]);
+
+    const starRatings = useMemo(
+        () => Array.from(new Set(hostels.map((hostel) => hostel.starRating))).sort((a, b) => a - b) as HostelStarRating[],
         [hostels],
     );
 
@@ -278,12 +423,15 @@ const Hostels = () => {
                 filters={filters}
                 amenities={allAmenities}
                 sortBy={sortBy}
+                cities={cities}
+                starRatings={starRatings}
                 onCityChange={(value) => setFilters((prev) => ({ ...prev, city: value }))}
                 onToggleAmenity={toggleAmenity}
                 onAvailabilityChange={(checked) => setFilters((prev) => ({ ...prev, availability: checked }))}
                 onPriceRangeChange={(range) => setFilters((prev) => ({ ...prev, priceRange: range }))}
                 onGenderChange={(gender) => setFilters((prev) => ({ ...prev, gender }))}
                 onSortChange={setSortBy}
+                onStarRatingChange={(rating) => setFilters((prev) => ({ ...prev, starRating: rating }))}
             />
 
             <section className="flex-1 py-12">

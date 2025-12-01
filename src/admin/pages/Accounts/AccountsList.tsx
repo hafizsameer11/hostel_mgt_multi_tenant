@@ -16,7 +16,6 @@ import { Button } from '../../components/Button';
 import { Modal } from '../../components/Modal';
 import { Toast } from '../../components/Toast';
 import type { Transaction } from '../../types/accounts';
-import type { Hostel } from '../../types/hostel';
 import { formatDate, formatCurrency } from '../../types/common';
 import accountsData from '../../mock/accounts.json';
 import vendorsData from '../../mock/vendors.json';
@@ -79,7 +78,8 @@ const AccountsList: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('');
   const [hostelFilter, setHostelFilter] = useState('');
   const [vendorFilter, setVendorFilter] = useState('');
-  const [hostels, setHostels] = useState<Hostel[]>([]);
+  const [hostels, setHostels] = useState<Array<{ id: number; name: string; city: string }>>([]);
+  const [hostelsLoading, setHostelsLoading] = useState<boolean>(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditStatusModalOpen, setIsEditStatusModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
@@ -102,12 +102,6 @@ const AccountsList: React.FC = () => {
     type: 'success',
     message: '',
   });
-
-  // Load hostels on component mount
-  useEffect(() => {
-    const allHostels = hostelService.getAllHostels();
-    setHostels(allHostels);
-  }, []);
 
   // Reset vendor filter when switching away from Vendor tab
   useEffect(() => {
@@ -409,17 +403,38 @@ const AccountsList: React.FC = () => {
     { value: 'Deposit', label: 'Deposit' },
   ];
 
+  // Fetch hostels from API on component mount
+  useEffect(() => {
+    const fetchHostels = async () => {
+      try {
+        setHostelsLoading(true);
+        const hostelsData = await hostelService.getAllHostelsFromAPI();
+        setHostels(hostelsData);
+      } catch (err: any) {
+        console.error('Error fetching hostels:', err);
+        setHostels([]);
+      } finally {
+        setHostelsLoading(false);
+      }
+    };
+
+    fetchHostels();
+  }, []);
+
   // Prepare hostel options for dropdown
   const hostelOptions = useMemo(() => {
+    if (hostelsLoading) {
+      return [{ value: '', label: 'Loading hostels...' }];
+    }
     const options = [{ value: '', label: 'All Hostels' }];
     hostels.forEach((hostel) => {
       options.push({
         value: String(hostel.id),
-        label: hostel.name,
+        label: `${hostel.name} - ${hostel.city}`,
       });
     });
     return options;
-  }, [hostels]);
+  }, [hostels, hostelsLoading]);
 
   // Prepare vendor options for dropdown (only show when Vendor tab is active)
   const vendorOptions = useMemo(() => {
@@ -652,68 +667,78 @@ const AccountsList: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-slate-900">Accounts</h1>
-        <p className="text-slate-600 mt-1">Manage payables, receivables, and financial overview</p>
+      {/* Header with Hostel Filter */}
+      <div className="flex items-start justify-between gap-4 flex-col sm:flex-row">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900">Accounts</h1>
+          <p className="text-slate-600 mt-1">Manage payables, receivables, and financial overview</p>
+        </div>
+        
+        {/* Hostel Filter - Right side of heading */}
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-center gap-2 sm:mt-0 mt-2"
+        >
+          <label className="text-sm font-semibold text-slate-700 whitespace-nowrap">
+            Filter by Hostel:
+          </label>
+          <div className="w-64">
+            <Select
+              value={hostelFilter}
+              onChange={setHostelFilter}
+              options={hostelOptions}
+              placeholder={hostelsLoading ? "Loading hostels..." : "Select Hostel"}
+              disabled={hostelsLoading}
+            />
+          </div>
+        </motion.div>
       </div>
 
-      {/* Hostel Filter - At the top */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="glass rounded-xl p-4 border border-white/20 shadow-lg"
-      >
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <label className="text-sm font-semibold text-slate-700 whitespace-nowrap">
-              Filter by Hostel:
-            </label>
-            <div className="flex-1 sm:w-64">
-              <Select
-                value={hostelFilter}
-                onChange={setHostelFilter}
-                options={hostelOptions}
-                placeholder="Select Hostel"
-              />
-            </div>
-          </div>
-          
-          {/* Vendor Filter - Only show when Vendor tab is active */}
-          {activeMainTab === 'Payable' && activePayableTab === 'Vendor' && (
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <label className="text-sm font-semibold text-slate-700 whitespace-nowrap">
-                Filter by Vendor:
-              </label>
-              <div className="flex-1 sm:w-64">
-                <Select
-                  value={vendorFilter}
-                  onChange={setVendorFilter}
-                  options={vendorOptions}
-                  placeholder="Select Vendor"
-                />
+      {/* Vendor Filter and Selected Badges - Below header */}
+      {(activeMainTab === 'Payable' && activePayableTab === 'Vendor') || (selectedHostelName || selectedVendorName) ? (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass rounded-xl p-4 border border-white/20 shadow-lg"
+        >
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+            {/* Vendor Filter - Only show when Vendor tab is active */}
+            {activeMainTab === 'Payable' && activePayableTab === 'Vendor' && (
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <label className="text-sm font-semibold text-slate-700 whitespace-nowrap">
+                  Filter by Vendor:
+                </label>
+                <div className="flex-1 sm:w-64">
+                  <Select
+                    value={vendorFilter}
+                    onChange={setVendorFilter}
+                    options={vendorOptions}
+                    placeholder="Select Vendor"
+                  />
+                </div>
               </div>
-            </div>
-          )}
-          
-          {(selectedHostelName || selectedVendorName) && (
-            <div className="flex flex-wrap items-center gap-2">
-              {selectedHostelName && (
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-brand-100/50 rounded-lg border border-brand-200/50">
-                  <span className="text-xs text-brand-700 font-medium">Hostel:</span>
-                  <span className="text-sm text-brand-900 font-semibold">{selectedHostelName}</span>
-                </div>
-              )}
-              {selectedVendorName && (
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-100/50 rounded-lg border border-purple-200/50">
-                  <span className="text-xs text-purple-700 font-medium">Vendor:</span>
-                  <span className="text-sm text-purple-900 font-semibold">{selectedVendorName}</span>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </motion.div>
+            )}
+            
+            {(selectedHostelName || selectedVendorName) && (
+              <div className="flex flex-wrap items-center gap-2">
+                {selectedHostelName && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-brand-100/50 rounded-lg border border-brand-200/50">
+                    <span className="text-xs text-brand-700 font-medium">Hostel:</span>
+                    <span className="text-sm text-brand-900 font-semibold">{selectedHostelName}</span>
+                  </div>
+                )}
+                {selectedVendorName && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-100/50 rounded-lg border border-purple-200/50">
+                    <span className="text-xs text-purple-700 font-medium">Vendor:</span>
+                    <span className="text-sm text-purple-900 font-semibold">{selectedVendorName}</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </motion.div>
+      ) : null}
 
       {/* Summary Cards - Income, Expense, Profit, Bad Debt */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -913,6 +938,8 @@ const AccountsList: React.FC = () => {
               value={payableForm.hostelId}
               onChange={(value) => setPayableForm({ ...payableForm, hostelId: value })}
               options={hostelOptions.filter((opt) => opt.value !== '')} // Remove "All Hostels" option
+              disabled={hostelsLoading}
+              placeholder={hostelsLoading ? "Loading hostels..." : "Select Hostel"}
             />
           </div>
 

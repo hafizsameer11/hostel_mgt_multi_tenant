@@ -9,53 +9,33 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setIsLoading(true);
-    
+    setLoading(true);
+
     // Basic validation
     if (!email || !password) {
       setError('Please fill in all fields');
-      setIsLoading(false);
+      setLoading(false);
       return;
     }
 
     try {
-      // Call login API - THIS MUST COMPLETE BEFORE NAVIGATION
-      const userData = await login({
-        email: email.trim(),
-        password,
-      });
-
-      // Verify we got user data back
-      if (!userData || !userData.token) {
-        throw new Error('Invalid response from server. Please try again.');
-      }
+      // Call the actual login API
+      const userData = await login({ email, password });
       
-      // Only navigate if login was successful
+      
+      // Navigate to admin panel after successful login
       navigate('/admin/overview', { replace: true });
     } catch (err: any) {
-      let errorMessage = 'An unexpected error occurred. Please try again.';
-      
-      if (err instanceof Error) {
-        errorMessage = err.message;
-      } else if (err.statusCode) {
-        errorMessage = err.message || 'Login failed. Please check your credentials.';
-      } else if (err.response) {
-        const apiError = err.response.data;
-        errorMessage = apiError?.message || 'Login failed. Please check your credentials.';
-      } else if (err.request) {
-        // Network error - request was made but no response
-        errorMessage = 'Network error. Please check your internet connection and ensure the backend server is running.';
-      }
-      
-      setError(errorMessage);
-      setIsLoading(false);
-      // DO NOT navigate on error
+      // Set error message for display
+      setError(err?.message || 'Login failed. Please check your credentials and try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -68,7 +48,7 @@ const Login = () => {
           {/* Header */}
           <div className="text-center">
             <div className="flex justify-center mb-4">
-              <div className="w-16 h-16 bg-[#2176FF] rounded-lg flex items-center justify-center shadow-md">
+              <div className="w-16 h-16 bg-gradient-primary rounded-lg flex items-center justify-center shadow-blue">
                 <span className="text-white font-bold text-2xl">H</span>
               </div>
             </div>
@@ -98,7 +78,7 @@ const Login = () => {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-[#2176FF] transition-colors"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
                   placeholder="Enter your email"
                 />
               </div>
@@ -116,7 +96,7 @@ const Login = () => {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-[#2176FF] transition-colors"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
                   placeholder="Enter your password"
                 />
               </div>
@@ -130,7 +110,7 @@ const Login = () => {
                     type="checkbox"
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
-                    className="h-4 w-4 text-[#2176FF] focus:ring-[#2176FF] border-gray-300 rounded"
+                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
                   />
                   <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-700">
                     Remember me
@@ -138,7 +118,7 @@ const Login = () => {
                 </div>
                 <Link
                   to="/forgot-password"
-                  className="text-sm text-[#2176FF] hover:text-[#1d4ed8] font-medium"
+                  className="text-sm text-primary-600 hover:text-primary-700 font-medium"
                 >
                   Forgot password?
                 </Link>
@@ -152,10 +132,17 @@ const Login = () => {
               {/* Submit Button */}
               <button
                 type="submit"
-                disabled={isLoading}
-                className="w-full bg-[#2176FF] hover:bg-[#1d4ed8] disabled:bg-gray-400 disabled:cursor-not-allowed text-white py-3 px-4 rounded-lg font-semibold transition-all shadow-md hover:shadow-lg transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-[#2176FF] focus:ring-offset-2"
+                disabled={loading}
+                className="w-full bg-primary-600 hover:bg-primary-700 text-gray-700 border-2 border-gray-300 py-3 px-4 rounded-lg font-semibold transition-all shadow-blue hover:shadow-blue-md transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center gap-2"
               >
-                {isLoading ? 'Logging in...' : 'Log In'}
+                {loading ? (
+                  <>
+                    <div className="inline-block animate-spin rounded-full h-5 w-5 border-b-2 border-gray-700"></div>
+                    <span>Logging in...</span>
+                  </>
+                ) : (
+                  'Log In'
+                )}
               </button>
             </form>
 
@@ -163,9 +150,9 @@ const Login = () => {
             <div className="mt-6 text-center">
               <p className="text-sm text-gray-600">
                 Don't have an account?{' '}
-                  <Link
+                <Link
                   to="/register"
-                  className="text-[#2176FF] hover:text-[#1d4ed8] font-semibold"
+                  className="text-primary-600 hover:text-primary-700 font-semibold"
                 >
                   Register
                 </Link>

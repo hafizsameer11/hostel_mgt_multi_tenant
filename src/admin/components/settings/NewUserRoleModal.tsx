@@ -7,14 +7,156 @@ import {
   GlobeAltIcon,
 } from '@heroicons/react/24/outline';
 import type { NewUserRoleModalProps, UserRoleFormData } from '../../types/settings';
+import { createRole, updateRole, updateRolePermissions, getRoleById, getRolePermissions, type Permission } from '../../services/role.service';
+
+/**
+ * Helper function to extract permission IDs from form data
+ * This maps the form permission structure to permission IDs
+ * Note: This is a placeholder mapping - you may need to adjust based on your permission system
+ */
+const extractPermissionIds = (formData: UserRoleFormData): number[] => {
+  const permissionIds: number[] = [];
+  
+  // Map people permissions to permission IDs
+  // Format: {resource}_{action} -> permission ID
+  // Example: owners_view_list -> 1, owners_view_one -> 2, vendors_view_list -> 6
+  const permissionMapping: { [key: string]: number } = {
+    // Owners permissions
+    'owners_view_list': 1,
+    'owners_view_one': 2,
+    'owners_create': 3,
+    'owners_edit': 4,
+    'owners_delete': 5,
+    // Vendors permissions
+    'vendors_view_list': 6,
+    'vendors_view_one': 7,
+    'vendors_create': 8,
+    'vendors_edit': 9,
+    'vendors_delete': 10,
+    // Tenants permissions
+    'tenants_view_list': 11,
+    'tenants_view_one': 12,
+    'tenants_create': 13,
+    'tenants_edit': 14,
+    'tenants_delete': 15,
+    // Add more mappings as needed
+  };
+  
+  // Extract people permissions
+  Object.entries(formData.permissions.people).forEach(([entity, perms]) => {
+    if (perms.viewList && permissionMapping[`${entity}_view_list`]) {
+      permissionIds.push(permissionMapping[`${entity}_view_list`]);
+    }
+    if (perms.viewOne && permissionMapping[`${entity}_view_one`]) {
+      permissionIds.push(permissionMapping[`${entity}_view_one`]);
+    }
+    if (perms.create && permissionMapping[`${entity}_create`]) {
+      permissionIds.push(permissionMapping[`${entity}_create`]);
+    }
+    if (perms.edit && permissionMapping[`${entity}_edit`]) {
+      permissionIds.push(permissionMapping[`${entity}_edit`]);
+    }
+    if (perms.delete && permissionMapping[`${entity}_delete`]) {
+      permissionIds.push(permissionMapping[`${entity}_delete`]);
+    }
+  });
+  
+  // Extract tasks and maintenance permissions
+  Object.entries(formData.permissions.tasksAndMaintenance).forEach(([entity, perms]) => {
+    // Handle viewList/viewOne which can be 'none' | 'view' | 'edit'
+    if (perms.viewList && perms.viewList !== 'none') {
+      const key = `${entity}_view_list_${perms.viewList}`;
+      if (permissionMapping[key]) {
+        permissionIds.push(permissionMapping[key]);
+      }
+    }
+    if (perms.viewOne && perms.viewOne !== 'none') {
+      const key = `${entity}_view_one_${perms.viewOne}`;
+      if (permissionMapping[key]) {
+        permissionIds.push(permissionMapping[key]);
+      }
+    }
+    if (perms.create) {
+      const key = `${entity}_create`;
+      if (permissionMapping[key]) {
+        permissionIds.push(permissionMapping[key]);
+      }
+    }
+    if (perms.edit) {
+      const key = `${entity}_edit`;
+      if (permissionMapping[key]) {
+        permissionIds.push(permissionMapping[key]);
+      }
+    }
+    if (perms.delete) {
+      const key = `${entity}_delete`;
+      if (permissionMapping[key]) {
+        permissionIds.push(permissionMapping[key]);
+      }
+    }
+  });
+  
+  return permissionIds;
+};
+
+/**
+ * Helper function to map permissions array to form structure (same as ViewRoleModal)
+ */
+const mapPermissionsToForm = (permissions: Permission[]): UserRoleFormData['permissions'] => {
+  const formPermissions: UserRoleFormData['permissions'] = {
+    people: {
+      prospects: { viewList: false, viewOne: false, create: false, edit: false, delete: false },
+      owners: { viewList: false, viewOne: false, create: false, edit: false, delete: false },
+      vendors: { viewList: false, viewOne: false, create: false, edit: false, delete: false },
+      tenants: { viewList: false, viewOne: false, create: false, edit: false, delete: false },
+      users: { viewList: false, viewOne: false, create: false, edit: false, delete: false },
+      userRoles: { viewList: false, viewOne: false, create: false, edit: false, delete: false },
+      apiKeys: { viewList: false, viewOne: false, create: false, edit: false, delete: false },
+    },
+    tasksAndMaintenance: {
+      tasks: { viewList: 'none', viewOne: 'none', create: false, edit: false, delete: false },
+      workOrders: { viewList: 'none', viewOne: 'none', create: false, edit: false, delete: false },
+      tenantRequests: { viewList: 'none', viewOne: 'none', create: false, edit: false, delete: false },
+      ownerRequests: { viewList: 'none', viewOne: 'none', create: false, edit: false, delete: false },
+    },
+  };
+
+  permissions.forEach((perm) => {
+    const { resource, action } = perm;
+    
+    if (formPermissions.people[resource as keyof typeof formPermissions.people]) {
+      const entityPerms = formPermissions.people[resource as keyof typeof formPermissions.people];
+      
+      // Map action to form field
+      if (action === 'view_list') {
+        entityPerms.viewList = true;
+      } else if (action === 'view_one') {
+        entityPerms.viewOne = true;
+      } else if (action === 'create') {
+        entityPerms.create = true;
+      } else if (action === 'edit') {
+        entityPerms.edit = true;
+      } else if (action === 'delete') {
+        entityPerms.delete = true;
+      }
+    }
+  });
+
+  return formPermissions;
+};
 
 export const NewUserRoleModal: React.FC<NewUserRoleModalProps> = ({
   isOpen,
   onClose,
-  roleData,
+  roleData: propRoleData,
   isEdit = false,
+  roleId,
+  onSuccess,
 }) => {
   const [activeTab, setActiveTab] = useState<'general' | 'objects'>('general');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [formData, setFormData] = useState<UserRoleFormData>({
     roleName: '',
     roleDescription: '',
@@ -61,10 +203,42 @@ export const NewUserRoleModal: React.FC<NewUserRoleModalProps> = ({
     },
   });
 
+  // Fetch role data when editing
   useEffect(() => {
-    if (isOpen) {
-      if (roleData && isEdit) {
-        setFormData(roleData);
+    if (isOpen && isEdit && roleId) {
+      const fetchRoleData = async () => {
+        setLoading(true);
+        setError(null);
+        try {
+          // Fetch role details
+          const roleDetails = await getRoleById(roleId);
+          
+          // Fetch permissions
+          const permissions = await getRolePermissions(roleId);
+          
+          // Map permissions to form structure
+          const mappedPermissions = mapPermissionsToForm(permissions);
+          
+          setFormData({
+            roleName: roleDetails.roleName,
+            roleDescription: roleDetails.description || '',
+            permissions: mappedPermissions,
+          });
+        } catch (err: any) {
+          console.error('Error fetching role data:', err);
+          setError(err?.message || 'Failed to load role data');
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      fetchRoleData();
+    } else if (isOpen) {
+      setError(null);
+      setSuccess(null);
+      setLoading(false);
+      if (propRoleData && isEdit) {
+        setFormData(propRoleData);
       } else {
         setFormData({
           roleName: '',
@@ -114,9 +288,9 @@ export const NewUserRoleModal: React.FC<NewUserRoleModalProps> = ({
         setActiveTab('general');
       }
     }
-  }, [isOpen, roleData, isEdit]);
+  }, [isOpen, propRoleData, isEdit, roleId]);
 
-  const handleSubmit = (e?: React.FormEvent) => {
+  const handleSubmit = async (e?: React.FormEvent) => {
     if (e) {
       e.preventDefault();
     }
@@ -128,19 +302,93 @@ export const NewUserRoleModal: React.FC<NewUserRoleModalProps> = ({
     }
 
     if (errors.length > 0) {
-      alert('Please fill in all required fields:\n' + errors.join('\n'));
+      setError('Please fill in all required fields:\n' + errors.join('\n'));
       return;
     }
 
-    console.log('Submitting user role data:', formData);
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
 
     try {
-      localStorage.setItem('userRoleData', JSON.stringify(formData));
-    } catch (error) {
-      console.error('Failed to save to localStorage:', error);
-    }
+      let currentRoleId: number;
 
-    onClose();
+      if (isEdit && roleId) {
+        // Step 1: Update the role
+        console.log('🔐 [EDIT ROLE] Updating role...');
+        await updateRole(roleId, {
+          rolename: formData.roleName,
+          description: formData.roleDescription || '',
+        });
+
+        console.log('✅ [EDIT ROLE] Role updated with ID:', roleId);
+        currentRoleId = roleId;
+      } else {
+        // Step 1: Create the role
+        console.log('🔐 [NEW ROLE] Creating role...');
+        const roleData = await createRole({
+          rolename: formData.roleName,
+          description: formData.roleDescription || '',
+        });
+
+        console.log('✅ [NEW ROLE] Role created with ID:', roleData.id);
+        currentRoleId = roleData.id;
+      }
+
+      // Step 2: Extract permission IDs from form data
+      const permissionIds = extractPermissionIds(formData);
+      
+      console.log('📋 [ROLE] Extracted permission IDs:', permissionIds);
+
+      // Step 3: Update role permissions if there are any selected
+      if (permissionIds.length > 0) {
+        console.log('🔐 [ROLE] Updating permissions...');
+        await updateRolePermissions(currentRoleId, {
+          permissions: permissionIds,
+        });
+      }
+
+      setSuccess(isEdit ? 'User role updated successfully!' : 'User role created successfully!');
+      
+      // Trigger refresh callback if provided
+      if (onSuccess) {
+        onSuccess();
+      }
+      
+      // Close modal after a short delay
+      setTimeout(() => {
+        onClose();
+        // Reset form
+        setFormData({
+          roleName: '',
+          roleDescription: '',
+          permissions: {
+            people: {
+              prospects: { viewList: false, viewOne: false, create: false, edit: false, delete: false },
+              owners: { viewList: true, viewOne: true, create: false, edit: false, delete: false },
+              vendors: { viewList: true, viewOne: true, create: false, edit: false, delete: false },
+              tenants: { viewList: true, viewOne: true, create: false, edit: false, delete: false },
+              users: { viewList: true, viewOne: false, create: false, edit: false, delete: false },
+              userRoles: { viewList: false, viewOne: false, create: false, edit: false, delete: false },
+              apiKeys: { viewList: false, viewOne: false, create: false, edit: false, delete: false },
+            },
+            tasksAndMaintenance: {
+              tasks: { viewList: 'none', viewOne: 'none', create: false, edit: false, delete: false },
+              workOrders: { viewList: 'none', viewOne: 'none', create: false, edit: false, delete: false },
+              tenantRequests: { viewList: 'none', viewOne: 'none', create: false, edit: false, delete: false },
+              ownerRequests: { viewList: 'none', viewOne: 'none', create: false, edit: false, delete: false },
+            },
+          },
+        });
+        setError(null);
+        setSuccess(null);
+      }, 1500);
+    } catch (err: any) {
+      console.error('❌ [NEW ROLE] Error:', err);
+      setError(err?.message || 'Failed to create user role. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleInputChange = (field: keyof UserRoleFormData, value: string) => {
@@ -286,6 +534,20 @@ export const NewUserRoleModal: React.FC<NewUserRoleModalProps> = ({
                 </div>
 
                 <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">
+                  {/* Error Message */}
+                  {error && (
+                    <div className="mx-6 mt-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+                      <p className="text-sm whitespace-pre-line">{error}</p>
+                    </div>
+                  )}
+
+                  {/* Success Message */}
+                  {success && (
+                    <div className="mx-6 mt-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg">
+                      <p className="text-sm">{success}</p>
+                    </div>
+                  )}
+
                   <div className="flex-1 overflow-y-auto p-6">
                     {activeTab === 'general' && (
                       <div className="space-y-6">
@@ -545,9 +807,17 @@ export const NewUserRoleModal: React.FC<NewUserRoleModalProps> = ({
                     </button>
                     <button
                       type="submit"
-                      className="px-6 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors"
+                      disabled={loading}
+                      className="px-6 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                     >
-                      Save
+                      {loading ? (
+                        <>
+                          <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                          <span>{isEdit ? 'Updating...' : 'Creating...'}</span>
+                        </>
+                      ) : (
+                        isEdit ? 'Update' : 'Save'
+                      )}
                     </button>
                   </div>
                 </form>

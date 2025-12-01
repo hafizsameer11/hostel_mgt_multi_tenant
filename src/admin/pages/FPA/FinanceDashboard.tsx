@@ -3,7 +3,8 @@
  * Financial Planning & Analysis with comprehensive reporting
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   ArrowDownTrayIcon,
   ChartBarIcon,
@@ -11,10 +12,9 @@ import {
   ArrowTrendingUpIcon,
 } from '@heroicons/react/24/outline';
 import { StatCard } from '../../components/StatCard';
-import { Tabs } from '../../components/Tabs';
-import type { Tab } from '../../components/Tabs';
 import { Button } from '../../components/Button';
 import { formatCurrency } from '../../types/common';
+import ROUTES from '../../routes/routePaths';
 import {
   ComposedChart,
   Bar,
@@ -29,11 +29,14 @@ import {
   Pie,
   Cell,
 } from 'recharts';
-import financeMonthlyData from '../../mock/finance-monthly.json';
-import financeYearlyData from '../../mock/finance-yearly.json';
-import accountsData from '../../mock/accounts.json';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+import {
+  getFPASummary,
+  getMonthlyComparison,
+  getCategoryBreakdown,
+  getCashFlow,
+  getFinancialRatios,
+  downloadFPAPDF,
+} from '../../services/fpa.service';
 
 type ViewType = 'monthly' | 'yearly';
 
@@ -41,272 +44,249 @@ type ViewType = 'monthly' | 'yearly';
  * Finance dashboard page
  */
 const FinanceDashboard: React.FC = () => {
-  const [viewType, setViewType] = useState<ViewType>('monthly');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const currentYear = new Date().getFullYear();
 
-  const tabs: Tab[] = [
-    { id: 'monthly', label: 'Monthly' },
-    { id: 'yearly', label: 'Yearly' },
-  ];
+  // State management
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [summaryData, setSummaryData] = useState<any>(null);
+  const [monthlyData, setMonthlyData] = useState<any[]>([]);
+  const [categoryData, setCategoryData] = useState<any>(null);
+  const [cashFlowData, setCashFlowData] = useState<any[]>([]);
+  const [ratiosData, setRatiosData] = useState<any>(null);
+  const [selectedYear, setSelectedYear] = useState(currentYear);
 
-  // Calculate category breakdowns from accounts data
-  const categoryBreakdown = useMemo(() => {
-    const incomeCategories: Record<string, number> = {};
-    const expenseCategories: Record<string, number> = {};
+  // Get active view type from route
+  const getActiveViewType = (): ViewType => {
+    if (location.pathname.includes('/fpa/yearly')) return 'yearly';
+    return 'monthly'; // default to monthly
+  };
 
-    accountsData.forEach((account) => {
-      if (account.type === 'Rent' || account.type === 'Deposit') {
-        incomeCategories[account.type] = (incomeCategories[account.type] || 0) + account.amount;
-      } else if (account.type === 'Expense') {
-        // Categorize expenses by description keywords
-        const desc = (account.description || '').toLowerCase();
-        let category = 'Other';
-        if (desc.includes('plumb') || desc.includes('repair')) category = 'Maintenance';
-        else if (desc.includes('clean') || desc.includes('supplies')) category = 'Supplies';
-        else if (desc.includes('hvac') || desc.includes('heating') || desc.includes('cooling')) category = 'HVAC';
-        else if (desc.includes('internet') || desc.includes('utilities')) category = 'Utilities';
-        else if (desc.includes('security')) category = 'Security';
-        else if (desc.includes('furniture')) category = 'Furniture';
-        
-        expenseCategories[category] = (expenseCategories[category] || 0) + account.amount;
+  const viewType = getActiveViewType();
+
+  // Redirect /admin/fpa to /admin/fpa/monthly
+  useEffect(() => {
+    if (location.pathname === ROUTES.FPA) {
+      navigate(ROUTES.FPA_MONTHLY, { replace: true });
+    }
+  }, [location.pathname, navigate]);
+
+  // Fetch all FP&A data
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        // Fetch all data in parallel
+        const [summary, monthly, categories, cashFlow, ratios] = await Promise.all([
+          getFPASummary({ year: selectedYear }),
+          getMonthlyComparison({ year: selectedYear }),
+          getCategoryBreakdown({ year: selectedYear }),
+          getCashFlow({ year: selectedYear }),
+          getFinancialRatios({ year: selectedYear }),
+        ]);
+
+        setSummaryData(summary.data);
+        setMonthlyData(monthly.data.monthlyData);
+        setCategoryData(categories.data);
+        setCashFlowData(cashFlow.data.cashFlow);
+        setRatiosData(ratios.data);
+      } catch (err: any) {
+        console.error('Error fetching FP&A data:', err);
+        setError(err?.message || 'Failed to load financial data. Please try again.');
+      } finally {
+        setLoading(false);
       }
-    });
+    };
+
+    fetchData();
+  }, [selectedYear, viewType]);
+
+  // Map category breakdown for charts
+  const categoryBreakdown = useMemo(() => {
+    if (!categoryData) {
+      return { income: [], expenses: [] };
+    }
+
+    const incomeCategories = (categoryData.income.categories || []).map((cat: any) => ({
+      name: cat.name || cat.category || 'Unknown',
+      value: cat.value || cat.amount || 0,
+    }));
+
+    const expenseCategories = (categoryData.expenses.categories || []).map((cat: any) => ({
+      name: cat.name || cat.category || 'Unknown',
+      value: cat.value || cat.amount || 0,
+    }));
 
     return {
-      income: Object.entries(incomeCategories).map(([name, value]) => ({ name, value })),
-      expenses: Object.entries(expenseCategories).map(([name, value]) => ({ name, value })),
+      income: incomeCategories,
+      expenses: expenseCategories,
     };
-  }, []);
+  }, [categoryData]);
 
   // Calculate monthly data with comparisons
   const monthlyDataWithComparison = useMemo(() => {
-    return financeMonthlyData.map((month, index) => {
-      const prevMonth = index > 0 ? financeMonthlyData[index - 1] : null;
+    return monthlyData.map((month, index) => {
+      const prevMonth = index > 0 ? monthlyData[index - 1] : null;
       return {
-        ...month,
-        net: month.income - month.expenses,
+        month: month.monthName,
+        income: month.income,
+        expenses: month.expense,
+        net: month.netIncome,
         incomeChange: prevMonth ? month.income - prevMonth.income : 0,
-        expenseChange: prevMonth ? month.expenses - prevMonth.expenses : 0,
-        netChange: prevMonth ? (month.income - month.expenses) - (prevMonth.income - prevMonth.expenses) : 0,
+        expenseChange: prevMonth ? month.expense - prevMonth.expense : 0,
+        netChange: prevMonth ? month.netIncome - prevMonth.netIncome : 0,
       };
     });
-  }, []);
+  }, [monthlyData]);
 
-  // Calculate yearly data with comparisons
-  const yearlyDataWithComparison = useMemo(() => {
-    return financeYearlyData.map((year, index) => {
-      const prevYear = index > 0 ? financeYearlyData[index - 1] : null;
-      return {
-        ...year,
-        net: year.income - year.expenses,
-        incomeChange: prevYear ? year.income - prevYear.income : 0,
-        expenseChange: prevYear ? year.expenses - prevYear.expenses : 0,
-        netChange: prevYear ? (year.income - year.expenses) - (prevYear.income - prevYear.expenses) : 0,
-        incomeGrowth: prevYear ? ((year.income - prevYear.income) / prevYear.income) * 100 : 0,
-        expenseGrowth: prevYear ? ((year.expenses - prevYear.expenses) / prevYear.expenses) * 100 : 0,
-      };
-    });
-  }, []);
-
-  // Calculate KPIs
+  // Calculate KPIs from summary data
   const kpis = useMemo(() => {
-    const currentYear = financeYearlyData[financeYearlyData.length - 1];
-    const currentMonth = financeMonthlyData[financeMonthlyData.length - 1];
-    const netIncome = currentYear.income - currentYear.expenses;
-    const monthlyNet = currentMonth.income - currentMonth.expenses;
-    
-    const totalIncome = viewType === 'monthly' 
-      ? financeMonthlyData.reduce((sum, m) => sum + m.income, 0)
-      : currentYear.income;
-    const totalExpenses = viewType === 'monthly'
-      ? financeMonthlyData.reduce((sum, m) => sum + m.expenses, 0)
-      : currentYear.expenses;
+    if (!summaryData) {
+      return {
+        netIncome: 0,
+        monthlyNet: 0,
+        totalIncome: 0,
+        totalExpenses: 0,
+        yoyGrowth: 0,
+      };
+    }
 
-    // Year-over-year growth
-    const previousYear = financeYearlyData[financeYearlyData.length - 2];
-    const yoyGrowth = previousYear
-      ? ((currentYear.income - previousYear.income) / previousYear.income) * 100
-      : 0;
+    const keyMetrics = summaryData.keyMetrics || {};
+    const summary = summaryData.summary || {};
 
     return {
-      netIncome,
-      monthlyNet,
-      totalIncome,
-      totalExpenses,
-      yoyGrowth,
+      netIncome: keyMetrics.netIncome?.value || summary.netIncome || 0,
+      monthlyNet: summary.netIncome || 0,
+      totalIncome: keyMetrics.totalRevenue?.value || summary.totalIncome || 0,
+      totalExpenses: keyMetrics.totalExpenses?.value || summary.totalExpense || 0,
+      yoyGrowth: keyMetrics.netIncome?.yoyGrowth || summary.yoyGrowth || 0,
     };
-  }, [viewType]);
+  }, [summaryData]);
 
-  // Break even analysis
+  // Break even analysis from summary
   const breakEven = useMemo(() => {
-    const avgMonthlyIncome = financeMonthlyData.reduce((sum, m) => sum + m.income, 0) / financeMonthlyData.length;
-    const avgMonthlyExpenses = financeMonthlyData.reduce((sum, m) => sum + m.expenses, 0) / financeMonthlyData.length;
-    const fixedCosts = avgMonthlyExpenses * 0.6; // Assume 60% fixed
-    const variableCosts = avgMonthlyExpenses * 0.4; // Assume 40% variable
-    const contributionMargin = avgMonthlyIncome - variableCosts;
-    const breakEvenUnits = contributionMargin > 0 ? fixedCosts / contributionMargin : 0;
-    const breakEvenRevenue = breakEvenUnits * avgMonthlyIncome;
-    const contributionMarginRatio = avgMonthlyIncome > 0
-      ? (contributionMargin / avgMonthlyIncome) * 100
-      : 0;
+    if (!summaryData?.breakEvenAnalysis) {
+      return {
+        breakEvenRevenue: 0,
+        marginOfSafety: 0,
+        marginOfSafetyPercent: 0,
+        contributionMargin: 0,
+        contributionMarginRatio: 0,
+      };
+    }
 
+    const bea = summaryData.breakEvenAnalysis;
     return {
-      fixedCosts,
-      variableCosts,
-      contributionMargin,
-      breakEvenUnits: breakEvenUnits.toFixed(2),
-      breakEvenRevenue,
-      marginOfSafety: avgMonthlyIncome - breakEvenRevenue,
-      marginOfSafetyPercent: avgMonthlyIncome > 0
-        ? ((avgMonthlyIncome - breakEvenRevenue) / avgMonthlyIncome) * 100
-        : 0,
-      contributionMarginRatio,
+      breakEvenRevenue: bea.breakEvenRevenue || 0,
+      marginOfSafety: bea.marginOfSafety?.value || 0,
+      marginOfSafetyPercent: bea.marginOfSafety?.percentage || 0,
+      contributionMargin: bea.contributionMargin || 0,
+      contributionMarginRatio: bea.contributionMarginRatio || 0,
     };
-  }, []);
+  }, [summaryData]);
 
-  // Cash flow analysis
+  // Cash flow analysis - map API data
   const cashFlow = useMemo(() => {
-    const monthlyCashFlow = financeMonthlyData.map((month) => ({
-      month: month.month,
-      income: month.income,
-      expenses: month.expenses,
-      netCashFlow: month.income - month.expenses,
-      cumulative: 0,
+    return cashFlowData.map((item) => ({
+      month: item.monthAbbr || item.monthName,
+      income: item.income,
+      expenses: item.expense,
+      netCashFlow: item.netIncome,
+      cumulative: item.cumulativeCashFlow,
     }));
+  }, [cashFlowData]);
 
-    let cumulative = 0;
-    monthlyCashFlow.forEach((item) => {
-      cumulative += item.netCashFlow;
-      item.cumulative = cumulative;
-    });
-
-    return monthlyCashFlow;
-  }, []);
-
-  // Financial ratios with safety checks
+  // Financial ratios from API
   const ratios = useMemo(() => {
-    const currentYear = financeYearlyData[financeYearlyData.length - 1];
-    const netIncome = currentYear.income - currentYear.expenses;
-    
-    // Safe division helper to prevent division by zero
-    const safeDivide = (numerator: number, denominator: number) => 
-      denominator > 0 ? numerator / denominator : 0;
-    
-    return {
-      profitMargin: safeDivide(netIncome, currentYear.income) * 100,
-      expenseRatio: safeDivide(currentYear.expenses, currentYear.income) * 100,
-      currentRatio: currentYear.expenses > 0 
-        ? (currentYear.income / currentYear.expenses).toFixed(2)
-        : 'N/A',
-      operatingExpenseRatio: safeDivide(currentYear.expenses, currentYear.income) * 100,
-      returnOnRevenue: safeDivide(netIncome, currentYear.income) * 100,
-    };
-  }, []);
+    if (!ratiosData?.ratios) {
+      return {
+        profitMargin: 0,
+        expenseRatio: 0,
+        currentRatio: 'N/A',
+        operatingExpenseRatio: 0,
+        returnOnRevenue: 0,
+      };
+    }
 
-  // Additional KPIs
-  const additionalKPIs = useMemo(() => {
-    const currentYear = financeYearlyData[financeYearlyData.length - 1];
-    const previousYear = financeYearlyData[financeYearlyData.length - 2];
-    const currentMonth = financeMonthlyData[financeMonthlyData.length - 1];
-    
-    // Net Profit Growth
-    const currentNet = currentYear.income - currentYear.expenses;
-    const previousNet = previousYear 
-      ? previousYear.income - previousYear.expenses 
-      : 0;
-    const netProfitGrowth = previousNet > 0
-      ? ((currentNet - previousNet) / previousNet) * 100
-      : 0;
-    
-    // Collection Efficiency
-    const totalRentDue = accountsData
-      .filter(a => a.type === 'Rent')
-      .reduce((sum, a) => sum + a.amount, 0);
-    const collectedRent = accountsData
-      .filter(a => a.type === 'Rent' && a.status === 'Paid')
-      .reduce((sum, a) => sum + a.amount, 0);
-    const collectionEfficiency = totalRentDue > 0
-      ? (collectedRent / totalRentDue) * 100
-      : 100;
-    
-    // Revenue per Available Unit (assuming 100 units)
-    const totalUnits = 100;
-    const revPAU = totalUnits > 0 ? currentYear.income / totalUnits : 0;
-    const monthlyRevPAU = totalUnits > 0 ? currentMonth.income / totalUnits : 0;
-    
-    // Contribution Margin Ratio
-    const avgMonthlyIncome = financeMonthlyData.reduce((sum, m) => sum + m.income, 0) / financeMonthlyData.length;
-    const avgMonthlyExpenses = financeMonthlyData.reduce((sum, m) => sum + m.expenses, 0) / financeMonthlyData.length;
-    const variableCosts = avgMonthlyExpenses * 0.4;
-    const contributionMargin = avgMonthlyIncome - variableCosts;
-    const contributionMarginRatio = avgMonthlyIncome > 0
-      ? (contributionMargin / avgMonthlyIncome) * 100
-      : 0;
-    
+    const r = ratiosData.ratios;
     return {
-      netProfitGrowth,
-      collectionEfficiency,
-      revPAU,
-      monthlyRevPAU,
-      contributionMarginRatio,
+      profitMargin: r.profitMargin?.value || 0,
+      expenseRatio: r.expenseRatio?.value || 0,
+      currentRatio: r.currentRatio?.value || 0,
+      operatingExpenseRatio: r.operatingExpenseRatio?.value || 0,
+      returnOnRevenue: r.returnOnRevenue?.value || 0,
     };
-  }, []);
+  }, [ratiosData]);
+
+  // Additional KPIs from summary
+  const additionalKPIs = useMemo(() => {
+    if (!summaryData?.performanceMetrics) {
+      return {
+        netProfitGrowth: 0,
+        collectionEfficiency: 0,
+        revPAU: 0,
+        monthlyRevPAU: 0,
+        contributionMarginRatio: 0,
+      };
+    }
+
+    const pm = summaryData.performanceMetrics;
+    return {
+      netProfitGrowth: pm.netProfitGrowth || 0,
+      collectionEfficiency: pm.collectionEfficiency || 0,
+      revPAU: pm.annualRevPAU || 0,
+      monthlyRevPAU: pm.monthlyRevPAU || 0,
+      contributionMarginRatio: pm.contributionMarginRatio || 0,
+    };
+  }, [summaryData]);
 
   const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
-  // PDF Export function
+  // PDF Export function - use API endpoint
   const handleExportPDF = async () => {
-    const element = document.getElementById('fpa-report');
-    if (!element) return;
-
     try {
-      const canvas = await html2canvas(element, {
-        useCORS: true,
-        logging: false,
+      await downloadFPAPDF({
+        year: selectedYear,
+        viewType: viewType,
       });
-      
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const imgWidth = 210;
-      const pageHeight = 297;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      let heightLeft = imgHeight;
-      let position = 0;
-
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-
-      while (heightLeft >= 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
-      }
-
-      // Add watermark
-      const totalPages = (pdf as any).internal.pages.length || 1;
-      for (let i = 1; i <= totalPages; i++) {
-        pdf.setPage(i);
-        pdf.setTextColor(200, 200, 200);
-        pdf.setFontSize(50);
-        pdf.text('CONFIDENTIAL', 105, 148, {
-          align: 'center',
-          angle: 45,
-        });
-      }
-
-      // Add logo (you can add your logo image here)
-      // For now, we'll add a text logo
-      pdf.setPage(1);
-      pdf.setTextColor(33, 118, 255);
-      pdf.setFontSize(20);
-      pdf.text('Hostel Manager', 15, 15);
-
-      pdf.save(`FP&A-Report-${viewType}-${new Date().toISOString().split('T')[0]}.pdf`);
     } catch (error) {
-      console.error('Error generating PDF:', error);
-      alert('Error generating PDF. Please try again.');
+      console.error('Error downloading PDF:', error);
+      alert('Error downloading PDF. Please try again.');
     }
   };
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-slate-500">Loading financial data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+          <p className="text-sm">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-2 text-sm text-red-600 hover:text-red-800 underline"
+          >
+            Try again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6" id="fpa-report">
@@ -320,14 +300,54 @@ const FinanceDashboard: React.FC = () => {
             Comprehensive financial overview and insights
           </p>
         </div>
-        <Button
-          variant="primary"
-          onClick={handleExportPDF}
-          icon={ArrowDownTrayIcon}
-        >
-          Export PDF
-        </Button>
+        <div className="flex items-center gap-4">
+          {/* Year Selector */}
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(Number(e.target.value))}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {Array.from({ length: 5 }, (_, i) => currentYear - i).map((year) => (
+              <option key={year} value={year}>
+                {year}
+              </option>
+            ))}
+          </select>
+          <Button
+            variant="primary"
+            onClick={handleExportPDF}
+            icon={ArrowDownTrayIcon}
+          >
+            Export PDF
+          </Button>
+        </div>
       </div>
+
+      {/* View Type Tabs */}
+      {/*<div className="bg-white rounded-xl border border-gray-200 shadow-sm p-1">
+        <div className="flex gap-2">
+          <button
+            onClick={() => navigate(ROUTES.FPA_MONTHLY)}
+            className={`flex-1 px-4 py-2 rounded-lg font-semibold transition-all ${
+              viewType === 'monthly'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-slate-600 hover:bg-gray-100'
+            }`}
+          >
+            Monthly View
+          </button>
+          <button
+            onClick={() => navigate(ROUTES.FPA_YEARLY)}
+            className={`flex-1 px-4 py-2 rounded-lg font-semibold transition-all ${
+              viewType === 'yearly'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-slate-600 hover:bg-gray-100'
+            }`}
+          >
+            Yearly View
+          </button>
+        </div>
+      </div> */}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -361,16 +381,8 @@ const FinanceDashboard: React.FC = () => {
         />
       </div>
 
-      {/* Tabs */}
+      {/* Content */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-        <div className="px-6 pt-4">
-          <Tabs
-            tabs={tabs}
-            activeTab={viewType}
-            onChange={(id) => setViewType(id as ViewType)}
-          />
-        </div>
-
         <div className="p-6">
           {/* Monthly View */}
           {viewType === 'monthly' && (
@@ -413,77 +425,93 @@ const FinanceDashboard: React.FC = () => {
                 {/* Income Categories */}
                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
                   <h3 className="text-lg font-bold text-slate-900 mb-4">Income Categories</h3>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <PieChart>
-                      <Pie
-                        data={categoryBreakdown.income}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={(entry: any) => `${entry.name}: ${(entry.percent * 100).toFixed(0)}%`}
-                        outerRadius={100}
-                        fill="#8884d8"
-                        dataKey="value"
-                      >
-                        {categoryBreakdown.income.map((_, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  {categoryBreakdown.income.length > 0 ? (
+                    <>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                          <Pie
+                            data={categoryBreakdown.income}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={(entry: any) => `${entry.name}: ${(entry.percent * 100).toFixed(0)}%`}
+                            outerRadius={100}
+                            fill="#8884d8"
+                            dataKey="value"
+                          >
+                            {categoryBreakdown.income.map((_, index) => (
+                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className="mt-4 space-y-2">
+                        {categoryBreakdown.income.map((item, index) => (
+                          <div key={item.name} className="flex items-center justify-between text-sm">
+                            <div className="flex items-center gap-2">
+                              <div
+                                className="w-4 h-4 rounded"
+                                style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                              />
+                              <span className="text-slate-600">{item.name}</span>
+                            </div>
+                            <span className="font-medium text-slate-900">{formatCurrency(item.value)}</span>
+                          </div>
                         ))}
-                      </Pie>
-                      <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="mt-4 space-y-2">
-                    {categoryBreakdown.income.map((item, index) => (
-                      <div key={item.name} className="flex items-center justify-between text-sm">
-                        <div className="flex items-center gap-2">
-                          <div
-                            className="w-4 h-4 rounded"
-                            style={{ backgroundColor: COLORS[index % COLORS.length] }}
-                          />
-                          <span className="text-slate-600">{item.name}</span>
-                        </div>
-                        <span className="font-medium text-slate-900">{formatCurrency(item.value)}</span>
                       </div>
-                    ))}
-                  </div>
+                    </>
+                  ) : (
+                    <div className="text-center py-12 text-slate-500">
+                      No income categories available
+                    </div>
+                  )}
                 </div>
 
                 {/* Expense Categories */}
                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
                   <h3 className="text-lg font-bold text-slate-900 mb-4">Expense Categories</h3>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <PieChart>
-                      <Pie
-                        data={categoryBreakdown.expenses}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={(entry: any) => `${entry.name}: ${(entry.percent * 100).toFixed(0)}%`}
-                        outerRadius={100}
-                        fill="#8884d8"
-                        dataKey="value"
-                      >
-                        {categoryBreakdown.expenses.map((_, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  {categoryBreakdown.expenses.length > 0 ? (
+                    <>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                          <Pie
+                            data={categoryBreakdown.expenses}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={(entry: any) => `${entry.name}: ${(entry.percent * 100).toFixed(0)}%`}
+                            outerRadius={100}
+                            fill="#8884d8"
+                            dataKey="value"
+                          >
+                            {categoryBreakdown.expenses.map((_, index) => (
+                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className="mt-4 space-y-2">
+                        {categoryBreakdown.expenses.map((item, index) => (
+                          <div key={item.name} className="flex items-center justify-between text-sm">
+                            <div className="flex items-center gap-2">
+                              <div
+                                className="w-4 h-4 rounded"
+                                style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                              />
+                              <span className="text-slate-600">{item.name}</span>
+                            </div>
+                            <span className="font-medium text-slate-900">{formatCurrency(item.value)}</span>
+                          </div>
                         ))}
-                      </Pie>
-                      <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="mt-4 space-y-2">
-                    {categoryBreakdown.expenses.map((item, index) => (
-                      <div key={item.name} className="flex items-center justify-between text-sm">
-                        <div className="flex items-center gap-2">
-                          <div
-                            className="w-4 h-4 rounded"
-                            style={{ backgroundColor: COLORS[index % COLORS.length] }}
-                          />
-                          <span className="text-slate-600">{item.name}</span>
-                        </div>
-                        <span className="font-medium text-slate-900">{formatCurrency(item.value)}</span>
                       </div>
-                    ))}
-                  </div>
+                    </>
+                  ) : (
+                    <div className="text-center py-12 text-slate-500">
+                      No expense categories available
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -492,15 +520,15 @@ const FinanceDashboard: React.FC = () => {
           {/* Yearly View */}
           {viewType === 'yearly' && (
             <div className="space-y-6">
-              {/* Year-to-Year Comparison */}
+              {/* Year-to-Year Comparison - Using monthly data aggregated */}
               <div>
                 <h2 className="text-xl font-bold text-slate-900 mb-4">
-                  Year-to-Year Comparison
+                  Year Overview - Monthly Breakdown
                 </h2>
                 <ResponsiveContainer width="100%" height={400}>
-                  <ComposedChart data={yearlyDataWithComparison}>
+                  <ComposedChart data={monthlyDataWithComparison}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                    <XAxis dataKey="year" stroke="#64748b" style={{ fontSize: '12px' }} />
+                    <XAxis dataKey="month" stroke="#64748b" style={{ fontSize: '12px' }} />
                     <YAxis stroke="#64748b" style={{ fontSize: '12px' }} />
                     <Tooltip
                       formatter={(value: number) => formatCurrency(value)}
@@ -523,64 +551,6 @@ const FinanceDashboard: React.FC = () => {
                     />
                   </ComposedChart>
                 </ResponsiveContainer>
-              </div>
-
-              {/* Year-over-Year Growth */}
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-                <h3 className="text-lg font-bold text-slate-900 mb-4">Year-over-Year Growth</h3>
-                <div className="space-y-4">
-                  {yearlyDataWithComparison.slice(1).map((year) => (
-                    <div key={year.year} className="bg-gray-50 p-4 rounded-lg">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-semibold text-slate-900">{year.year}</span>
-                        <div className="flex items-center gap-4">
-                          <div className="text-right">
-                            <p className="text-xs text-slate-600">Income Growth</p>
-                            <p
-                              className={`font-bold ${
-                                year.incomeGrowth > 0 ? 'text-green-600' : 'text-red-600'
-                              }`}
-                            >
-                              {year.incomeGrowth > 0 ? '+' : ''}
-                              {year.incomeGrowth.toFixed(1)}%
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-xs text-slate-600">Expense Growth</p>
-                            <p
-                              className={`font-bold ${
-                                year.expenseGrowth > 0 ? 'text-red-600' : 'text-green-600'
-                              }`}
-                            >
-                              {year.expenseGrowth > 0 ? '+' : ''}
-                              {year.expenseGrowth.toFixed(1)}%
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-3 gap-4 mt-2 text-sm">
-                        <div>
-                          <p className="text-slate-600">Income</p>
-                          <p className="font-semibold text-slate-900">{formatCurrency(year.income)}</p>
-                        </div>
-                        <div>
-                          <p className="text-slate-600">Expenses</p>
-                          <p className="font-semibold text-slate-900">{formatCurrency(year.expenses)}</p>
-                        </div>
-                        <div>
-                          <p className="text-slate-600">Net Income</p>
-                          <p
-                            className={`font-semibold ${
-                              year.net > 0 ? 'text-green-600' : 'text-red-600'
-                            }`}
-                          >
-                            {formatCurrency(year.net)}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
               </div>
             </div>
           )}
@@ -718,7 +688,9 @@ const FinanceDashboard: React.FC = () => {
           </div>
           <div className="bg-gray-50 p-4 rounded-lg">
             <p className="text-sm text-slate-600 mb-2">Current Ratio</p>
-            <p className="text-3xl font-bold text-slate-900">{ratios.currentRatio}</p>
+            <p className="text-3xl font-bold text-slate-900">
+              {typeof ratios.currentRatio === 'number' ? ratios.currentRatio.toFixed(2) : ratios.currentRatio}
+            </p>
             <p className="text-xs text-slate-500 mt-1">Income / Expenses</p>
           </div>
           <div className="bg-gray-50 p-4 rounded-lg">

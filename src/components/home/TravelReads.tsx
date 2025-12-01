@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import { Link } from 'react-router-dom';
 
 interface TravelRead {
     id: number;
@@ -50,9 +51,10 @@ const TravelReads = ({ reads }: TravelReadsProps) => {
                         }}
                     >
                         {reads.map((read) => (
-                            <div
+                            <Link
+                                to="/hostels"
                                 key={read.id}
-                                className="read-card flex-shrink-0 w-80 bg-white rounded-xl overflow-hidden shadow-lg hover:shadow-xl transition-all"
+                                className="read-card flex-shrink-0 w-80 bg-white rounded-xl overflow-hidden shadow-lg hover:shadow-xl transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
                             >
                                 {/* Image Container */}
                                 <div className="relative h-56 overflow-hidden">
@@ -92,7 +94,7 @@ const TravelReads = ({ reads }: TravelReadsProps) => {
                                     </h3>
                                     <p className="text-sm text-gray-600">{read.author}</p>
                                 </div>
-                            </div>
+                            </Link>
                         ))}
                     </div>
 

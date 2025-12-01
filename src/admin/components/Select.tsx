@@ -23,6 +23,8 @@ interface SelectProps {
   placeholder?: string;
   /** Optional label */
   label?: string;
+  /** Disabled state */
+  disabled?: boolean;
 }
 
 /**
@@ -34,6 +36,7 @@ export const Select: React.FC<SelectProps> = ({
   options,
   placeholder = 'Select...',
   label,
+  disabled = false,
 }) => {
   return (
     <motion.div
@@ -50,7 +53,8 @@ export const Select: React.FC<SelectProps> = ({
         <select
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="block w-full px-4 py-3 glass border border-white/30 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent bg-white/50 appearance-none cursor-pointer text-sm font-medium shadow-md"
+          disabled={disabled}
+          className="block w-full px-4 py-3 glass border border-white/30 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent bg-white/50 appearance-none cursor-pointer text-sm font-medium shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {placeholder && <option value="">{placeholder}</option>}
           {options.map((option) => (

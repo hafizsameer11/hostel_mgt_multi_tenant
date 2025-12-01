@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import { Link } from 'react-router-dom';
 
 interface PartyEscape {
     id: number;
@@ -51,7 +52,8 @@ const PartyEscapes = ({ escapes }: PartyEscapesProps) => {
                         }}
                     >
                         {escapes.map((escape) => (
-                            <div
+                            <Link
+                                to="/hostels"
                                 key={escape.id}
                                 className="escape-card flex-shrink-0 w-80 bg-white rounded-xl overflow-hidden shadow-lg hover:shadow-xl transition-all"
                             >
@@ -64,8 +66,8 @@ const PartyEscapes = ({ escapes }: PartyEscapesProps) => {
                                     />
                                     {/* Badge Icon */}
                                     <div className={`absolute top-3 right-3 rounded-full p-2 shadow-md ${escape.badgeType === 'snowflake'
-                                            ? 'bg-pink-500'
-                                            : 'bg-gray-800'
+                                        ? 'bg-pink-500'
+                                        : 'bg-gray-800'
                                         }`}>
                                         {escape.badgeType === 'snowflake' ? (
                                             <svg
@@ -99,7 +101,7 @@ const PartyEscapes = ({ escapes }: PartyEscapesProps) => {
                                     <p className="text-gray-600 text-sm mb-2">{escape.location}</p>
                                     <p className="text-lg font-semibold text-gray-900">{escape.price}</p>
                                 </div>
-                            </div>
+                            </Link>
                         ))}
                     </div>
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 interface Property {
     id: number;
@@ -16,7 +16,7 @@ interface PropertyType {
 }
 
 interface DiscoverWorldProps {
-    properties: Property[];
+    properties: Array<Property & { type?: string }>;
     propertyTypes: PropertyType[];
 }
 
@@ -24,6 +24,25 @@ const DiscoverWorld = ({ properties, propertyTypes }: DiscoverWorldProps) => {
     const [activeType, setActiveType] = useState<string>(
         propertyTypes.length > 0 ? propertyTypes[0].name : ''
     );
+    const navigate = useNavigate();
+
+    const handleTypeClick = (typeName: string) => {
+        setActiveType(typeName);
+        if (typeName === 'All Hotels') {
+            navigate('/hostels');
+        }
+    };
+
+    const filteredProperties =
+        activeType && activeType !== 'All Hotels'
+            ? properties.filter((property) => {
+                const propertyType = property.type
+                    ? property.type.replace(/\s+/g, '').toLowerCase()
+                    : '';
+                const targetType = activeType.replace(/\s+/g, '').toLowerCase();
+                return propertyType === targetType;
+            })
+            : properties;
 
     return (
         <section className="py-10 bg-white">
@@ -53,8 +72,8 @@ const DiscoverWorld = ({ properties, propertyTypes }: DiscoverWorldProps) => {
                     {propertyTypes.map((type) => (
                         <button
                             key={type.id}
-                            onClick={() => setActiveType(type.name)}
-                            className={`px-4 py-2 rounded-full text-xs sm:text-sm font-semibold tracking-wide transition-colors border flex items-center gap-2 ${activeType === type.name
+                            onClick={() => handleTypeClick(type.name)}
+                            className={`px-6 sm:px-8 py-3 rounded-full text-xs sm:text-sm font-semibold tracking-wide transition-colors border flex items-center gap-3 min-w-[160px] sm:min-w-[200px] justify-center ${activeType === type.name
                                 ? 'bg-gray-900 text-white border-gray-900 shadow-sm'
                                 : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300 shadow-sm'
                                 }`}
@@ -79,10 +98,11 @@ const DiscoverWorld = ({ properties, propertyTypes }: DiscoverWorldProps) => {
 
                 {/* Properties Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                    {properties.map((property) => (
-                        <div
+                    {filteredProperties.map((property) => (
+                        <Link
+                            to="/hostels"
                             key={property.id}
-                            className="bg-white rounded-xl overflow-hidden shadow-lg hover:shadow-xl transition-all"
+                            className="bg-white rounded-xl overflow-hidden shadow-lg hover:shadow-xl transition-all block"
                         >
                             <div className="relative h-48 overflow-hidden">
                                 <img
@@ -103,7 +123,7 @@ const DiscoverWorld = ({ properties, propertyTypes }: DiscoverWorldProps) => {
                                 <p className="text-sm text-gray-600 mb-2">{property.location}</p>
                                 <p className="text-sm text-gray-500">{property.price}</p>
                             </div>
-                        </div>
+                        </Link>
                     ))}
                 </div>
 

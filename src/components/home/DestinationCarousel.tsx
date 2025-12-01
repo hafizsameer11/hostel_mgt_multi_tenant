@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import { Link } from 'react-router-dom';
 
 interface Destination {
     id: number;
@@ -47,9 +48,10 @@ const DestinationCarousel = ({ title, destinations }: DestinationCarouselProps) 
                         }}
                     >
                         {destinations.map((destination) => (
-                            <div
+                            <Link
+                                to={`/hostels?city=${encodeURIComponent(destination.city)}`}
                                 key={destination.id}
-                                className="destination-card flex-shrink-0 flex flex-col items-center cursor-pointer hover:scale-105 transition-transform"
+                                className="destination-card flex-shrink-0 flex flex-col items-center cursor-pointer hover:scale-105 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white rounded-full"
                             >
                                 {/* Circular Image */}
                                 <div className="relative w-32 h-32 md:w-40 md:h-40 rounded-full overflow-hidden shadow-lg mb-3">
@@ -67,7 +69,7 @@ const DestinationCarousel = ({ title, destinations }: DestinationCarouselProps) 
                                 <p className="text-sm text-gray-600 text-center">
                                     {destination.region}
                                 </p>
-                            </div>
+                            </Link>
                         ))}
                     </div>
 

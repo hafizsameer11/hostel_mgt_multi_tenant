@@ -20,9 +20,12 @@ import * as messService from '../../services/mess.service';
 import { Tabs } from '../../components/Tabs';
 import { ArchitectureDiagram } from '../../components/ArchitectureDiagram';
 import { AddRoomForm } from '../../components/AddRoomForm';
+import { AddBlockForm } from '../../components/AddBlockForm';
 import { MessManagement } from '../../components/MessManagement';
 import { Button } from '../../components/Button';
 import { Toast } from '../../components/Toast';
+import { api } from '../../../services/apiClient';
+import { API_ROUTES, API_BASE_URL } from '../../../services/api.config';
 import type { Hostel, ArchitectureData, RoomFormData } from '../../types/hostel';
 import type { ToastType } from '../../types/common';
 import ROUTES from '../../routes/routePaths';
@@ -42,6 +45,9 @@ const HostelView: React.FC = () => {
     'details'
   );
   const [isAddRoomOpen, setIsAddRoomOpen] = useState(false);
+  const [isAddBlockOpen, setIsAddBlockOpen] = useState(false);
+  const [floors, setFloors] = useState<any[]>([]);
+  const [rooms, setRooms] = useState<any[]>([]);
   const [toast, setToast] = useState<{
     open: boolean;
     type: ToastType;
@@ -93,13 +99,11 @@ const HostelView: React.FC = () => {
 
   useEffect(() => {
     if (!id) {
-      // Use dummy data if no ID
-      loadDummyData();
+      setLoading(false);
       return;
     }
     
-    // Load dummy data directly
-    loadDummyData(Number(id));
+    loadHostelData(Number(id));
     
     // Check if we should open Add Room modal
     if (location.state && (location.state as { showAddRoom?: boolean }).showAddRoom) {
@@ -108,105 +112,158 @@ const HostelView: React.FC = () => {
     }
   }, [id, location.state]);
 
-  const loadDummyData = (hostelId?: number) => {
-    // Use dummy data - get first hostel if no ID provided
-    const selectedId = hostelId || (hostelsData as Hostel[])[0]?.id || 1;
-    
-    // Find hostel or use first one
-    const hostelData = (hostelsData as Hostel[]).find((h: Hostel) => Number(h.id) === Number(selectedId)) || (hostelsData as Hostel[])[0];
-    
-    if (hostelData) {
-      setHostel(hostelData);
+  const loadHostelData = async (hostelId: number) => {
+    try {
+      setLoading(true);
       
-      // Generate architecture data directly
-      const archData = generateArchitectureData(hostelData);
-      setArchitectureData(archData);
+      // Load hostel details
+      const hostelResponse = await api.get(API_ROUTES.HOSTEL.BY_ID(hostelId));
+      if (hostelResponse.success && hostelResponse.data) {
+        const hostelData = hostelResponse.data;
+        // Map backend response to frontend Hostel type
+        const mappedHostel: Hostel = {
+          id: String(hostelData.id),
+          name: hostelData.name,
+          city: hostelData.address?.city || hostelData.city || '',
+          totalFloors: hostelData.statistics?.totalFloors || 0,
+          roomsPerFloor: hostelData.statistics?.roomsPerFloor || 0,
+          managerName: hostelData.manager?.username || hostelData.manager?.name || 'N/A',
+          managerPhone: hostelData.contactInfo?.phone || 'N/A',
+          notes: hostelData.description,
+        };
+        setHostel(mappedHostel);
+      }
+      
+      // Load architecture data
+      await loadArchitectureData(hostelId);
+      
+    } catch (error: any) {
+      console.error('Error loading hostel:', error);
+      setToast({
+        open: true,
+        type: 'error',
+        message: error.message || 'Failed to load hostel details',
+      });
+    } finally {
+      setLoading(false);
     }
-    
-    setLoading(false);
   };
 
-  const generateArchitectureData = (hostel: Hostel): ArchitectureData => {
+  const loadArchitectureData = async (hostelId: number) => {
+    try {
+      // Load floors (blocks)
+      const floorsResponse = await api.get(API_ROUTES.FLOOR.BY_HOSTEL(hostelId));
+      const floorsData = floorsResponse.success && floorsResponse.data 
+        ? (Array.isArray(floorsResponse.data) ? floorsResponse.data : floorsResponse.data.items || [])
+        : [];
+      setFloors(floorsData);
+
+      // Load rooms
+      const roomsResponse = await api.get(API_ROUTES.ROOM.BY_HOSTEL(hostelId));
+      const roomsData = roomsResponse.success && roomsResponse.data
+        ? (Array.isArray(roomsResponse.data) ? roomsResponse.data : roomsResponse.data.items || [])
+        : [];
+      setRooms(roomsData);
+
+      // Transform backend data to ArchitectureData format
+      const transformedFloors: import('../../types/hostel').Floor[] = floorsData.map((floor: any) => {
+        const floorRooms = roomsData.filter((room: any) => room.floorId === floor.id);
+        return {
+          floorNumber: floor.floorNumber,
+          rooms: floorRooms.map((room: any) => ({
+            id: String(room.id),
+            floorNumber: floor.floorNumber,
+            roomNumber: room.roomNumber,
+            totalSeats: room.totalBeds || 0,
+            seats: Array.from({ length: room.totalBeds || 0 }, (_, i) => ({
+              id: `${floor.floorNumber}-${room.roomNumber}-${String.fromCharCode(65 + i)}`,
+              seatNumber: String.fromCharCode(65 + i),
+              isOccupied: false, // TODO: Check bed occupancy from backend
+              tenantName: undefined,
+              tenantId: undefined,
+            })),
+          })),
+        };
+      });
+
+      const totalRooms = roomsData.length;
+      const totalSeats = roomsData.reduce((sum: number, room: any) => sum + (room.totalBeds || 0), 0);
+      const occupiedSeats = 0; // TODO: Calculate from bed occupancy
+
+      setArchitectureData({
+        hostelId,
+        floors: transformedFloors,
+        totalRooms,
+        totalSeats,
+        occupiedSeats,
+        availableSeats: totalSeats - occupiedSeats,
+      });
+    } catch (error: any) {
+      console.error('Error loading architecture:', error);
+    }
+  };
+
+
+  const handleAddRoom = async (roomData: RoomFormData & { floorId?: number }) => {
+    if (!hostel || !id) return;
     
-    const floors: import('../../types/hostel').Floor[] = [];
-    let totalRooms = 0;
-    let totalSeats = 0;
-    let occupiedSeats = 0;
-
-    // Create floors
-    for (let floorNum = 1; floorNum <= hostel.totalFloors; floorNum++) {
-      const rooms: import('../../types/hostel').Room[] = [];
-
-      // Create rooms for this floor
-      for (let roomIndex = 1; roomIndex <= hostel.roomsPerFloor; roomIndex++) {
-        const roomNumber = `${floorNum}${String(roomIndex).padStart(2, '0')}`;
-        const totalSeatsPerRoom = 4; // Default 4 seats per room
-        const seats: import('../../types/hostel').Seat[] = [];
-
-        // Create seats (A, B, C, D)
-        const seatLetters = ['A', 'B', 'C', 'D'];
-        for (let i = 0; i < totalSeatsPerRoom; i++) {
-          const seatId = `${floorNum}-${String(roomIndex).padStart(2, '0')}-${seatLetters[i]}`;
-          
-          // Find tenant assigned to this room and seat
-          const tenant = (tenantsData as any[]).find(
-            (t: any) => t.room === roomNumber && t.bed === seatLetters[i]
-          );
-
-          seats.push({
-            id: seatId,
-            seatNumber: seatLetters[i],
-            isOccupied: !!tenant && tenant.status === 'Active',
-            tenantName: tenant?.name,
-            tenantId: tenant?.id,
-          });
-
-          if (tenant && tenant.status === 'Active') {
-            occupiedSeats++;
-          }
-          totalSeats++;
+    try {
+      // Use floorId if available (from form), otherwise find by floorNumber
+      let floorId: number;
+      if (roomData.floorId) {
+        floorId = roomData.floorId;
+      } else {
+        const floor = floors.find((f: any) => f.floorNumber === roomData.floorNumber);
+        if (!floor) {
+          throw new Error('Block not found. Please create the block first.');
         }
-
-        rooms.push({
-          id: `${floorNum}-${String(roomIndex).padStart(2, '0')}`,
-          floorNumber: floorNum,
-          roomNumber: String(roomIndex).padStart(2, '0'),
-          totalSeats: totalSeatsPerRoom,
-          seats,
-        });
-        totalRooms++;
+        floorId = floor.id;
       }
 
-      floors.push({
-        floorNumber: floorNum,
-        rooms,
+      const payload = {
+        hostel: Number(id),
+        floor: floorId,
+        roomNumber: roomData.roomNumber.trim(),
+        roomType: roomData.roomType || 'single',
+        totalBeds: roomData.totalSeats,
+        pricePerBed: roomData.pricePerSeat || 0,
+        furnishing: roomData.furnishing || 'furnished',
+      };
+
+      console.log('📡 Creating room:', payload);
+      console.log('📡 Room CREATE route:', API_ROUTES.ROOM.CREATE);
+      console.log('📡 Full URL will be:', `${API_BASE_URL}${API_ROUTES.ROOM.CREATE}`);
+
+      const response = await api.post(API_ROUTES.ROOM.CREATE, payload);
+
+      if (response.success) {
+        console.log('✅ Room created successfully:', response);
+        setToast({
+          open: true,
+          type: 'success',
+          message: response.message || 'Room added successfully!',
+        });
+        
+        // Reload architecture data
+        await loadArchitectureData(Number(id));
+        setIsAddRoomOpen(false);
+      } else {
+        throw new Error(response.message || 'Failed to create room');
+      }
+    } catch (error: any) {
+      console.error('❌ Error creating room:', error);
+      setToast({
+        open: true,
+        type: 'error',
+        message: error.message || 'Failed to add room. Please try again.',
       });
     }
-
-    return {
-      hostelId: Number(hostel.id),
-      floors,
-      totalRooms,
-      totalSeats,
-      occupiedSeats,
-      availableSeats: totalSeats - occupiedSeats,
-    };
   };
 
-  const handleAddRoom = (roomData: RoomFormData) => {
-    if (!hostel) return;
-    
-    // Just show success message - in real app this would call API
-    console.log('Adding room:', roomData);
-    setToast({
-      open: true,
-      type: 'success',
-      message: 'Room added successfully!',
-    });
-    
-    // Reload architecture data
-    const archData = generateArchitectureData(hostel);
-    setArchitectureData(archData);
+  const handleAddBlock = async () => {
+    if (!id) return;
+    // Reload architecture data after block is created
+    await loadArchitectureData(Number(id));
   };
 
   // Handle adding a seat to a room
@@ -352,6 +409,13 @@ const HostelView: React.FC = () => {
         <div className="flex gap-3">
           <Button
             variant="primary"
+            onClick={() => setIsAddBlockOpen(true)}
+            icon={PlusIcon}
+          >
+            Add Block
+          </Button>
+          <Button
+            variant="primary"
             onClick={() => setIsAddRoomOpen(true)}
             icon={PlusIcon}
           >
@@ -436,27 +500,27 @@ const HostelView: React.FC = () => {
               </div>
             </div>
 
-            {/* Total Floors */}
+            {/* Total Blocks */}
             <div className="flex items-start gap-4">
               <div className="p-3 bg-indigo-100 rounded-lg">
                 <BuildingOfficeIcon className="w-6 h-6 text-indigo-600" />
               </div>
               <div>
-                <p className="text-sm text-slate-600 font-medium">Total Floors</p>
+                <p className="text-sm text-slate-600 font-medium">Total Blocks</p>
                 <p className="text-lg font-semibold text-slate-900 mt-1">
-                  {hostel.totalFloors}
+                  {architectureData?.floors.length || hostel.totalFloors}
                 </p>
               </div>
             </div>
 
-            {/* Rooms per Floor */}
+            {/* Rooms per Block */}
             <div className="flex items-start gap-4">
               <div className="p-3 bg-pink-100 rounded-lg">
                 <BuildingOfficeIcon className="w-6 h-6 text-pink-600" />
               </div>
               <div>
                 <p className="text-sm text-slate-600 font-medium">
-                  Rooms per Floor
+                  Rooms per Block
                 </p>
                 <p className="text-lg font-semibold text-slate-900 mt-1">
                   {hostel.roomsPerFloor}
@@ -839,12 +903,21 @@ const HostelView: React.FC = () => {
         </motion.div>
       )}
 
+      {/* Add Block Modal */}
+      <AddBlockForm
+        isOpen={isAddBlockOpen}
+        onClose={() => setIsAddBlockOpen(false)}
+        hostelId={Number(id || hostel.id)}
+        onSubmit={handleAddBlock}
+      />
+
       {/* Add Room Modal */}
       <AddRoomForm
         isOpen={isAddRoomOpen}
         onClose={() => setIsAddRoomOpen(false)}
-        hostelId={Number(hostel.id)}
-        maxFloors={hostel.totalFloors}
+        hostelId={Number(id || hostel.id)}
+        maxFloors={architectureData?.floors.length || hostel.totalFloors}
+        floors={floors}
         onSubmit={handleAddRoom}
       />
 

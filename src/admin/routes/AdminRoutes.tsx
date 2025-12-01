@@ -73,6 +73,8 @@ export const AdminRoutes: React.FC = () => {
 
           {/* Alerts */}
           <Route path="alerts" element={<AlertsList />} />
+          <Route path="alerts/bills" element={<AlertsList />} />
+          <Route path="alerts/maintenance" element={<AlertsList />} />
 
           {/* Vendor */}
           <Route path="vendor" element={<VendorList />} />
@@ -87,6 +89,8 @@ export const AdminRoutes: React.FC = () => {
 
           {/* FP&A */}
           <Route path="fpa" element={<FinanceDashboard />} />
+          <Route path="fpa/monthly" element={<FinanceDashboard />} />
+          <Route path="fpa/yearly" element={<FinanceDashboard />} />
 
           {/* Settings */}
           <Route path="settings" element={<SettingsForm />} />

@@ -197,6 +197,7 @@ export const discoverProperties = [
         location: 'Karachi',
         price: 'From PKR 2,500/night',
         image: hotelImage1,
+        type: 'Second Home',
     },
     {
         id: 2,
@@ -204,6 +205,7 @@ export const discoverProperties = [
         location: 'Lahore',
         price: 'From PKR 2,200/night',
         image: hotelImage2,
+        type: 'Bag Pack',
     },
     {
         id: 3,
@@ -211,6 +213,7 @@ export const discoverProperties = [
         location: 'Islamabad',
         price: 'From PKR 2,800/night',
         image: hotelImage3,
+        type: 'Luxery Stays',
     },
     {
         id: 4,
@@ -218,6 +221,7 @@ export const discoverProperties = [
         location: 'Murree',
         price: 'From PKR 2,400/night',
         image: hotelImage4,
+        type: 'Second Home',
     },
     {
         id: 5,
@@ -225,6 +229,7 @@ export const discoverProperties = [
         location: 'Swat',
         price: 'From PKR 2,100/night',
         image: hotelImage5,
+        type: 'Bag Pack',
     },
     {
         id: 6,
@@ -232,6 +237,7 @@ export const discoverProperties = [
         location: 'Hunza',
         price: 'From PKR 3,000/night',
         image: hotelImage1,
+        type: 'Luxery Stays',
     },
     {
         id: 7,
@@ -239,6 +245,7 @@ export const discoverProperties = [
         location: 'Naran',
         price: 'From PKR 2,300/night',
         image: hotelImage2,
+        type: 'Second Home',
     },
     {
         id: 8,
@@ -246,14 +253,15 @@ export const discoverProperties = [
         location: 'Peshawar',
         price: 'From PKR 2,000/night',
         image: hotelImage3,
+        type: 'Bag Pack',
     },
 ];
 
 export const propertyTypes = [
-    { id: 1, name: 'THE CITY HOTLING', icon: '✱' },
-    { id: 2, name: 'THE CITY HOTLING PLUS', icon: '✱' },
-    { id: 3, name: 'THE CITY HOTLING HOMES', icon: '✕' },
-    { id: 4, name: 'THE CITY HOTLING TRIPS', icon: '#' },
+    { id: 4, name: 'All Hotels', icon: '#' },
+    { id: 1, name: 'Second Home', icon: '✱' },
+    { id: 2, name: 'Bag Pack', icon: '✈' },
+    { id: 3, name: 'Luxery Stays', icon: '★' },
 ];
 
 export const limitedTimeOffers = {

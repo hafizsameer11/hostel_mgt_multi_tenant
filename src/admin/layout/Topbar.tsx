@@ -3,7 +3,7 @@
  * Beautiful gradient topbar with search and notifications
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -12,6 +12,7 @@ import {
   ArrowRightOnRectangleIcon,
 } from '@heroicons/react/24/outline';
 import ROUTES from '../routes/routePaths';
+import { logout } from '../../services/auth.service';
 
 interface TopbarProps {
   onToggleSidebar: () => void;
@@ -23,15 +24,27 @@ interface TopbarProps {
 export const Topbar: React.FC<TopbarProps> = ({ onToggleSidebar }) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   // Handle logout
-  const handleLogout = () => {
-    // Clear any stored authentication data
-    // localStorage.removeItem('token');
-    // sessionStorage.clear();
+  const handleLogout = async () => {
+    if (isLoggingOut) return; // Prevent multiple clicks
     
-    // Navigate to home page
-    navigate('/');
+    setIsLoggingOut(true);
+    
+    try {
+      // Call logout API endpoint to destroy session on server
+      await logout();
+      
+      // Navigate to login page after successful logout
+      navigate('/login');
+    } catch (error) {
+      // Even if API call fails, clear local storage and navigate
+      console.error('Logout error:', error);
+      navigate('/login');
+    } finally {
+      setIsLoggingOut(false);
+    }
   };
 
   // Generate page title from route
@@ -147,18 +160,28 @@ export const Topbar: React.FC<TopbarProps> = ({ onToggleSidebar }) => {
 
           {/* Logout Button */}
           <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: isLoggingOut ? 1 : 1.05 }}
+            whileTap={{ scale: isLoggingOut ? 1 : 0.95 }}
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ delay: 0.5 }}
             onClick={handleLogout}
-            className="flex items-center gap-2 p-10 rounded-xl bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold shadow-md hover:shadow-lg transition-all group"
+            disabled={isLoggingOut}
+            className="flex items-center gap-2 p-10 rounded-xl bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold shadow-md hover:shadow-lg transition-all group disabled:opacity-50 disabled:cursor-not-allowed"
             aria-label="Logout"
             style={{ padding: "5px 5px" }}
           >
-            <ArrowRightOnRectangleIcon className="w-5 h-5" />
-            <span className="hidden sm:inline text-sm">Logout</span>
+            {isLoggingOut ? (
+              <>
+                <div className="inline-block animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                <span className="hidden sm:inline text-sm">Logging out...</span>
+              </>
+            ) : (
+              <>
+                <ArrowRightOnRectangleIcon className="w-5 h-5" />
+                <span className="hidden sm:inline text-sm">Logout</span>
+              </>
+            )}
           </motion.button>
         </div>
       </div>

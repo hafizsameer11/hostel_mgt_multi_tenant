@@ -1,8 +1,8 @@
 import Header from '../components/Header';
 import Footer from '../components/Footer';
-import PromoBanner from '../components/PromoBanner';
 import HeroBanner from '../components/home/HeroBanner';
 import WhatsNew from '../components/home/WhatsNew';
+import Services from '../components/home/Services';
 import Destinations from '../components/home/Destinations';
 import MountainExperiences from '../components/home/MountainExperiences';
 import LongStays from '../components/home/LongStays';
@@ -43,8 +43,8 @@ const Home = () => {
   return (
     <div className="min-h-screen bg-white flex flex-col">
       <Header />
-      <PromoBanner />
       <HeroBanner images={hotelImages} />
+      <Services />
       <WhatsNew hotelCards={hotelCards} />
       <Destinations destinations={pakistanDestinations} filterCategories={filterCategories} />
       <MountainExperiences experiences={mountainExperiences} />

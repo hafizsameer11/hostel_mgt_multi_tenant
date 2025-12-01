@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 interface Destination {
     id: number;
@@ -23,20 +23,44 @@ interface LimitedTimeOffersProps {
 
 const LimitedTimeOffers = ({ mainOffer, destinations }: LimitedTimeOffersProps) => {
     const [currentDestinationIndex, setCurrentDestinationIndex] = useState(0);
+    const [activeOffer, setActiveOffer] = useState(mainOffer);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        setActiveOffer(mainOffer);
+        setCurrentDestinationIndex(0);
+    }, [mainOffer]);
+
+    const applyDestination = (index: number) => {
+        const destination = destinations[index];
+        if (!destination) return;
+
+        setActiveOffer({
+            ...mainOffer,
+            title: `The City Hotling ${destination.name}`,
+            location: destination.name,
+            image: destination.image,
+        });
+        setCurrentDestinationIndex(index);
+    };
 
     const scrollDestinations = (direction: 'left' | 'right') => {
         if (scrollContainerRef.current) {
             const container = scrollContainerRef.current;
             const cardWidth = 200; // Approximate card width with gap
             const scrollAmount = cardWidth;
+            let newIndex = currentDestinationIndex;
 
             if (direction === 'right') {
                 container.scrollBy({ left: scrollAmount, behavior: 'smooth' });
-                setCurrentDestinationIndex((prev) => Math.min(prev + 1, destinations.length - 1));
+                newIndex = Math.min(currentDestinationIndex + 1, destinations.length - 1);
             } else {
                 container.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
-                setCurrentDestinationIndex((prev) => Math.max(prev - 1, 0));
+                newIndex = Math.max(currentDestinationIndex - 1, 0);
+            }
+
+            if (newIndex !== currentDestinationIndex) {
+                applyDestination(newIndex);
             }
         }
     };
@@ -60,8 +84,8 @@ const LimitedTimeOffers = ({ mainOffer, destinations }: LimitedTimeOffersProps) 
                         {/* Background Image */}
                         <div className="absolute inset-0">
                             <img
-                                src={mainOffer.image}
-                                alt={mainOffer.title}
+                                src={activeOffer.image}
+                                alt={activeOffer.title}
                                 className="w-full h-full object-cover"
                             />
                             <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/40 to-transparent"></div>
@@ -75,7 +99,7 @@ const LimitedTimeOffers = ({ mainOffer, destinations }: LimitedTimeOffersProps) 
                                     className="text-4xl md:text-6xl font-bold text-white mb-4"
                                     style={{ fontFamily: 'cursive, serif' }}
                                 >
-                                    {mainOffer.title}
+                                    {activeOffer.title}
                                 </h3>
                             </div>
 
@@ -89,17 +113,17 @@ const LimitedTimeOffers = ({ mainOffer, destinations }: LimitedTimeOffersProps) 
 
                                     {/* Price Details */}
                                     <div className="text-white">
-                                        <p className="text-lg md:text-xl mb-2">{mainOffer.location}</p>
+                                        <p className="text-lg md:text-xl mb-2">{activeOffer.location}</p>
                                         <div className="flex flex-wrap items-baseline gap-2 md:gap-3">
                                             <span className="text-sm md:text-base">Offers from</span>
                                             <span className="text-lg md:text-xl line-through opacity-75">
-                                                ₹{mainOffer.originalPrice}
+                                                ₹{activeOffer.originalPrice}
                                             </span>
                                             <span className="text-3xl md:text-4xl font-bold">
-                                                ₹{mainOffer.discountedPrice}
+                                                ₹{activeOffer.discountedPrice}
                                             </span>
                                             <span className="bg-yellow-400 text-black px-3 py-1 rounded-lg text-sm md:text-base font-bold">
-                                                {mainOffer.discount}% OFF
+                                                {activeOffer.discount}% OFF
                                             </span>
                                         </div>
                                     </div>
@@ -154,10 +178,26 @@ const LimitedTimeOffers = ({ mainOffer, destinations }: LimitedTimeOffersProps) 
                                     msOverflowStyle: 'none',
                                 }}
                             >
-                                {destinations.map((destination) => (
+                                {destinations.map((destination, index) => (
                                     <div
                                         key={destination.id}
-                                        className="flex-shrink-0 w-36 h-36 md:w-44 md:h-44 rounded-xl overflow-hidden shadow-lg cursor-pointer hover:scale-105 transition-transform"
+                                        className={`flex-shrink-0 w-36 h-36 md:w-44 md:h-44 rounded-xl overflow-hidden shadow-lg cursor-pointer transition-transform ${index === currentDestinationIndex ? 'ring-2 ring-offset-2 ring-white scale-105' : 'hover:scale-105'}`}
+                                        onClick={() => {
+                                            applyDestination(index);
+                                            if (scrollContainerRef.current) {
+                                                const cards = scrollContainerRef.current.children;
+                                                const card = cards[index] as HTMLElement | undefined;
+                                                card?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+                                            }
+                                        }}
+                                        role="button"
+                                        tabIndex={0}
+                                        onKeyDown={(event) => {
+                                            if (event.key === 'Enter' || event.key === ' ') {
+                                                event.preventDefault();
+                                                applyDestination(index);
+                                            }
+                                        }}
                                     >
                                         <div className="relative h-full">
                                             <img

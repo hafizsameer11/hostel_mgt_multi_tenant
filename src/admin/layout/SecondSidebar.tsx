@@ -44,6 +44,18 @@ interface CommunicationSection {
   path: string;
 }
 
+interface FPASection {
+  id: string;
+  label: string;
+  path: string;
+}
+
+interface AlertsSection {
+  id: string;
+  label: string;
+  path: string;
+}
+
 const SecondSidebar: React.FC<SecondSidebarProps> = ({ isVisible }) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -52,6 +64,8 @@ const SecondSidebar: React.FC<SecondSidebarProps> = ({ isVisible }) => {
   const isPeopleSection = location.pathname.startsWith(ROUTES.PEOPLE);
   const isAccountsSection = location.pathname.startsWith(ROUTES.ACCOUNTS);
   const isCommunicationSection = location.pathname.startsWith(ROUTES.COMM);
+  const isFPASection = location.pathname.startsWith(ROUTES.FPA);
+  const isAlertsSection = location.pathname.startsWith(ROUTES.ALERTS);
 
   // Get active section from URL for People
   const getActivePeopleSection = (): string | null => {
@@ -90,10 +104,26 @@ const SecondSidebar: React.FC<SecondSidebarProps> = ({ isVisible }) => {
     return null;
   };
 
+  // Get active section from URL for FP&A
+  const getActiveFPASection = (): string | null => {
+    if (location.pathname.includes('/fpa/monthly')) return 'Monthly';
+    if (location.pathname.includes('/fpa/yearly')) return 'Yearly';
+    return null;
+  };
+
+  // Get active section from URL for Alerts
+  const getActiveAlertsSection = (): string | null => {
+    if (location.pathname.includes('/alerts/bills')) return 'Bills';
+    if (location.pathname.includes('/alerts/maintenance')) return 'Maintenance';
+    return null;
+  };
+
   const activePeopleSection = getActivePeopleSection();
   const activeVendorSection = getActiveVendorSection();
   const activeAccountsSection = getActiveAccountsSection();
   const activeCommunicationSection = getActiveCommunicationSection();
+  const activeFPASection = getActiveFPASection();
+  const activeAlertsSection = getActiveAlertsSection();
 
   // Directory sections for People
   const peopleSections: PeopleSection[] = [
@@ -132,6 +162,18 @@ const SecondSidebar: React.FC<SecondSidebarProps> = ({ isVisible }) => {
     { id: 'Tenants', label: 'Tenants', path: ROUTES.COMM_TENANTS },
     { id: 'Employees', label: 'Employees', path: ROUTES.COMM_EMPLOYEES },
     { id: 'Vendors', label: 'Vendors', path: ROUTES.COMM_VENDORS },
+  ];
+
+  // Directory sections for FP&A
+  const fpaSections: FPASection[] = [
+    { id: 'Monthly', label: 'Monthly', path: ROUTES.FPA_MONTHLY },
+    { id: 'Yearly', label: 'Yearly', path: ROUTES.FPA_YEARLY },
+  ];
+
+  // Directory sections for Alerts
+  const alertsSections: AlertsSection[] = [
+    { id: 'Bills', label: 'Bills', path: ROUTES.ALERTS_BILLS },
+    { id: 'Maintenance', label: 'Maintenance', path: ROUTES.ALERTS_MAINTENANCE },
   ];
 
   /**
@@ -191,6 +233,8 @@ const SecondSidebar: React.FC<SecondSidebarProps> = ({ isVisible }) => {
                 {isPeopleSection ? 'PEOPLE' : 
                  isAccountsSection ? 'ACCOUNTS' : 
                  isCommunicationSection ? 'COMMUNICATION' : 
+                 isFPASection ? 'FP&A' :
+                 isAlertsSection ? 'ALERTS' :
                  'VENDOR'}
               </span>
             </button>
@@ -200,6 +244,8 @@ const SecondSidebar: React.FC<SecondSidebarProps> = ({ isVisible }) => {
               {isPeopleSection ? 'DIRECTORY' : 
                isAccountsSection ? 'ACCOUNTS SECTIONS' : 
                isCommunicationSection ? 'COMMUNICATION SECTIONS' : 
+               isFPASection ? 'FP&A SECTIONS' :
+               isAlertsSection ? 'ALERTS SECTIONS' :
                'VENDOR SECTIONS'}
             </h2>
 
@@ -294,6 +340,40 @@ const SecondSidebar: React.FC<SecondSidebarProps> = ({ isVisible }) => {
               ) : isCommunicationSection ? (
                 communicationSections.map((section) => {
                   const isSectionActive = activeCommunicationSection === section.id;
+                  return (
+                    <button
+                      key={section.id}
+                      onClick={() => navigate(section.path)}
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                        isSectionActive
+                          ? 'bg-[#2176FF] text-white shadow-sm'
+                          : 'text-white/80 hover:bg-white/10 hover:text-white'
+                      }`}
+                    >
+                      <span>{section.label}</span>
+                    </button>
+                  );
+                })
+              ) : isFPASection ? (
+                fpaSections.map((section) => {
+                  const isSectionActive = activeFPASection === section.id;
+                  return (
+                    <button
+                      key={section.id}
+                      onClick={() => navigate(section.path)}
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                        isSectionActive
+                          ? 'bg-[#2176FF] text-white shadow-sm'
+                          : 'text-white/80 hover:bg-white/10 hover:text-white'
+                      }`}
+                    >
+                      <span>{section.label}</span>
+                    </button>
+                  );
+                })
+              ) : isAlertsSection ? (
+                alertsSections.map((section) => {
+                  const isSectionActive = activeAlertsSection === section.id;
                   return (
                     <button
                       key={section.id}
