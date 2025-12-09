@@ -115,6 +115,7 @@ export const API_ROUTES = {
     LIST: '/admin/vendors',
     CREATE: '/admin/vendors',
     BY_ID: (id: string | number) => `/admin/vendors/${id}`,
+    BY_HOSTEL: (hostelId: string | number) => `/admin/vendors/hostel/${hostelId}`,
     UPDATE: (id: string | number) => `/admin/vendors/${id}`,
     DELETE: (id: string | number) => `/admin/vendors/${id}`,
     SEARCH: '/admin/vendors/search',

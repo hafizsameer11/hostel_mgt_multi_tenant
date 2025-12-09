@@ -11,6 +11,8 @@ export const ROUTES = {
   EMPLOYEES: '/admin/people/employees',
   OWNERS: '/admin/people/owners',
   VENDORS: '/admin/people/vendors',
+  VENDOR_LIST_PEOPLE: '/admin/people/vendors/list',
+  VENDOR_MANAGEMENT_PEOPLE: '/admin/people/vendors/management',
   PROSPECTS: '/admin/people/prospects',
   ACCOUNTS: '/admin/accounts',
   ACCOUNTS_PAYABLE: '/admin/accounts/payable',

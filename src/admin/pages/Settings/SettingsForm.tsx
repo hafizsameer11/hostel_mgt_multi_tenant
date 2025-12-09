@@ -39,7 +39,12 @@ import { NewUserModal } from '../../components/settings/NewUserModal';
 import { UserRolesList } from '../../components/settings/UserRolesList';
 import { NewUserRoleModal } from '../../components/settings/NewUserRoleModal';
 import { ViewRoleModal } from '../../components/settings/ViewRoleModal';
+import { HostelsList } from '../../components/settings/HostelsList';
+import { AddHostelForm } from '../../components/AddHostelForm';
 import { changePassword } from '../../services/settings.service';
+import * as hostelService from '../../services/hostel.service';
+import { api } from '../../../services/apiClient';
+import { API_ROUTES } from '../../../services/api.config';
 import type {
   PersonalInfoModalProps,
   HostelInfoModalProps,
@@ -49,6 +54,7 @@ import type {
   UserRole,
   UserRoleFormData,
 } from '../../types/settings';
+import type { Hostel, HostelFormData } from '../../types/hostel';
 
 interface SettingCard {
   id: string;
@@ -586,6 +592,10 @@ const SettingsForm: React.FC = () => {
   const [viewingRole, setViewingRole] = useState<UserRole | null>(null);
   const [isViewRoleOpen, setIsViewRoleOpen] = useState(false);
   const [rolesRefreshTrigger, setRolesRefreshTrigger] = useState(0);
+  const [showHostelsList, setShowHostelsList] = useState(false);
+  const [isAddHostelOpen, setIsAddHostelOpen] = useState(false);
+  const [editingHostel, setEditingHostel] = useState<Hostel | null>(null);
+  const [hostelsRefreshTrigger, setHostelsRefreshTrigger] = useState(0);
 
   // Personal settings cards
   const personalSettings: SettingCard[] = [
@@ -614,10 +624,10 @@ const SettingsForm: React.FC = () => {
     {
       id: 'company-info',
       title: 'Hostel Info',
-      description: 'Change your hostel name, logo, address, login URL, and account owner.',
+      description: 'Manage all your hostels, add new hostels, and edit existing ones.',
       icon: BuildingOfficeIcon,
       onClick: () => {
-        setIsHostelInfoOpen(true);
+        setShowHostelsList(true);
       },
     },
     // {
@@ -847,6 +857,97 @@ const SettingsForm: React.FC = () => {
     }
   };
 
+  // Handle new hostel
+  const handleNewHostel = () => {
+    setEditingHostel(null);
+    setIsAddHostelOpen(true);
+  };
+
+  // Handle edit hostel
+  const handleEditHostel = (hostel: Hostel) => {
+    setEditingHostel(hostel);
+    setIsAddHostelOpen(true);
+  };
+
+  // Handle delete hostel
+  const handleDeleteHostel = async (hostel: Hostel) => {
+    if (window.confirm(`Are you sure you want to delete "${hostel.name}"? This will remove all its rooms and related data.`)) {
+      try {
+        const hostelId = Number(hostel.id);
+        await api.delete(API_ROUTES.HOSTEL.DELETE(hostelId));
+        
+        setToast({
+          open: true,
+          type: 'success',
+          message: `Hostel "${hostel.name}" has been deleted successfully.`,
+        });
+        
+        // Refresh the hostels list
+        setHostelsRefreshTrigger(prev => prev + 1);
+      } catch (error: any) {
+        console.error('Error deleting hostel:', error);
+        setToast({
+          open: true,
+          type: 'error',
+          message: error?.message || `Failed to delete hostel "${hostel.name}". Please try again.`,
+        });
+      }
+    }
+  };
+
+  // Handle hostel form submission
+  const handleHostelSubmit = async (data: any) => {
+    try {
+      setIsAddHostelOpen(false);
+      
+      if (editingHostel) {
+        // Update existing hostel
+        const hostelId = Number(editingHostel.id);
+        const response = await api.put(API_ROUTES.HOSTEL.UPDATE(hostelId), data);
+        
+        if (response.success) {
+          setToast({
+            open: true,
+            type: 'success',
+            message: response.message || `Hostel "${data.name}" updated successfully!`,
+          });
+        } else {
+          throw new Error(response.message || 'Failed to update hostel');
+        }
+      } else {
+        // Create new hostel
+        const response = await api.post(API_ROUTES.HOSTEL.CREATE, data);
+        
+        if (response.success) {
+          setToast({
+            open: true,
+            type: 'success',
+            message: response.message || `Hostel "${data.name}" created successfully!`,
+          });
+        } else {
+          throw new Error(response.message || 'Failed to create hostel');
+        }
+      }
+      
+      // Refresh the hostels list
+      setHostelsRefreshTrigger(prev => prev + 1);
+      setEditingHostel(null);
+    } catch (error: any) {
+      console.error('Error saving hostel:', error);
+      setToast({
+        open: true,
+        type: 'error',
+        message: error?.message || `Failed to save hostel. Please try again.`,
+      });
+    }
+  };
+
+  // Handle hostel modal close
+  const handleHostelModalClose = () => {
+    setIsAddHostelOpen(false);
+    setEditingHostel(null);
+  };
+
   // Convert editingRole to form data
   const getRoleFormData = (): UserRoleFormData | null => {
     if (!editingRole) return null;
@@ -1028,6 +1129,28 @@ const SettingsForm: React.FC = () => {
             roleDescription={viewingRole.description}
           />
         )}
+      </>
+    );
+  }
+
+  // If showing hostels list, render that instead
+  if (showHostelsList) {
+    return (
+      <>
+        <HostelsList
+          onBack={() => setShowHostelsList(false)}
+          onNewHostel={handleNewHostel}
+          onEditHostel={handleEditHostel}
+          onDeleteHostel={handleDeleteHostel}
+          refreshTrigger={hostelsRefreshTrigger}
+        />
+        {/* Add/Edit Hostel Modal */}
+        <AddHostelForm
+          isOpen={isAddHostelOpen}
+          onClose={handleHostelModalClose}
+          onSubmit={handleHostelSubmit}
+          editingHostel={editingHostel}
+        />
       </>
     );
   }

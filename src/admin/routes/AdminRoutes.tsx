@@ -50,8 +50,9 @@ export const AdminRoutes: React.FC = () => {
           <Route path="people" element={<PeopleHub />} />
           <Route path="people/tenants" element={<PeopleHub />} />
           <Route path="people/employees" element={<PeopleHub />} />
-          <Route path="people/owners" element={<PeopleHub />} />
-          <Route path="people/vendors" element={<PeopleHub />} />
+          <Route path="people/vendors/list" element={<PeopleHub />} />
+          <Route path="people/vendors/management" element={<PeopleHub />} />
+          <Route path="people/vendors" element={<Navigate to="/admin/people/vendors/list" replace />} />
           <Route path="people/prospects" element={<PeopleHub />} />
 
           {/* Accounts */}

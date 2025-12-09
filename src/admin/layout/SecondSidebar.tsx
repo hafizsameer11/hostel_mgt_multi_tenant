@@ -71,8 +71,14 @@ const SecondSidebar: React.FC<SecondSidebarProps> = ({ isVisible }) => {
   const getActivePeopleSection = (): string | null => {
     if (location.pathname.includes('/tenants')) return 'Tenants';
     if (location.pathname.includes('/employees')) return 'Employees';
-    if (location.pathname.includes('/owners')) return 'Owners';
+    if (location.pathname.includes('/vendors')) return 'Vendors';
     if (location.pathname.includes('/prospects')) return 'Prospects';
+    return null;
+  };
+
+  const getActiveVendorSubSection = (): string | null => {
+    if (location.pathname.includes('/people/vendors/management')) return 'Vendor Management';
+    if (location.pathname.includes('/people/vendors/list')) return 'Vendor List';
     return null;
   };
 
@@ -85,13 +91,13 @@ const SecondSidebar: React.FC<SecondSidebarProps> = ({ isVisible }) => {
 
   // Get active section from URL for Accounts
   const getActiveAccountsSection = (): string | null => {
+    // Check for base accounts route first (All)
+    if (location.pathname === ROUTES.ACCOUNTS || location.pathname === ROUTES.ACCOUNTS + '/') return 'All';
     if (location.pathname.includes('/accounts/payable/bills')) return 'Bills';
     if (location.pathname.includes('/accounts/payable/vendor')) return 'Vendor';
     if (location.pathname.includes('/accounts/payable/laundry')) return 'Laundry';
-    if (location.pathname.includes('/accounts/payable/all')) return 'All';
     if (location.pathname.includes('/accounts/payable')) return 'Payable';
     if (location.pathname.includes('/accounts/receivable/received')) return 'Received';
-    if (location.pathname.includes('/accounts/receivable/all')) return 'All';
     if (location.pathname.includes('/accounts/receivable')) return 'Receivable';
     return null;
   };
@@ -119,6 +125,7 @@ const SecondSidebar: React.FC<SecondSidebarProps> = ({ isVisible }) => {
   };
 
   const activePeopleSection = getActivePeopleSection();
+  const activeVendorSubSection = getActiveVendorSubSection();
   const activeVendorSection = getActiveVendorSection();
   const activeAccountsSection = getActiveAccountsSection();
   const activeCommunicationSection = getActiveCommunicationSection();
@@ -129,8 +136,14 @@ const SecondSidebar: React.FC<SecondSidebarProps> = ({ isVisible }) => {
   const peopleSections: PeopleSection[] = [
     { id: 'Tenants', label: 'Tenants', path: ROUTES.TENANTS },
     { id: 'Employees', label: 'Employees', path: ROUTES.EMPLOYEES },
-    { id: 'Owners', label: 'Owners', path: ROUTES.OWNERS },
-    // { id: 'Prospects', label: 'Prospects', path: ROUTES.PROSPECTS },
+    { id: 'Vendors', label: 'Vendor', path: ROUTES.VENDOR_LIST_PEOPLE },
+    { id: 'Prospects', label: 'Prospects', path: ROUTES.PROSPECTS },
+  ];
+
+  // Vendor sub-sections (when Vendor is selected in People)
+  const vendorSubSections: Array<{ id: string; label: string; path: string }> = [
+    { id: 'Vendor List', label: 'Vendor List', path: ROUTES.VENDOR_LIST_PEOPLE },
+    { id: 'Vendor Management', label: 'Vendor Management', path: ROUTES.VENDOR_MANAGEMENT_PEOPLE },
   ];
 
   // Directory sections for Vendor
@@ -141,19 +154,18 @@ const SecondSidebar: React.FC<SecondSidebarProps> = ({ isVisible }) => {
 
   // Directory sections for Accounts - Hierarchical structure
   const accountsMainSections: AccountsSection[] = [
+    { id: 'All', label: 'All', path: ROUTES.ACCOUNTS },
     { id: 'Payable', label: 'Payable', path: ROUTES.ACCOUNTS_PAYABLE },
     { id: 'Receivable', label: 'Receivable', path: ROUTES.ACCOUNTS_RECEIVABLE },
   ];
 
   const accountsPayableSubSections: AccountsSection[] = [
-    { id: 'All', label: 'All', path: ROUTES.ACCOUNTS_PAYABLE_ALL },
     { id: 'Bills', label: 'Bills', path: ROUTES.ACCOUNTS_PAYABLE_BILLS },
     { id: 'Vendor', label: 'Vendor', path: ROUTES.ACCOUNTS_PAYABLE_VENDOR },
     { id: 'Laundry', label: 'Laundry', path: ROUTES.ACCOUNTS_PAYABLE_LAUNDRY },
   ];
 
   const accountsReceivableSubSections: AccountsSection[] = [
-    { id: 'All', label: 'All', path: ROUTES.ACCOUNTS_RECEIVABLE_ALL },
     { id: 'Received', label: 'Received', path: ROUTES.ACCOUNTS_RECEIVABLE_RECEIVED },
   ];
 
@@ -253,30 +265,63 @@ const SecondSidebar: React.FC<SecondSidebarProps> = ({ isVisible }) => {
             <nav className="space-y-1">
               {isPeopleSection ? (
                 peopleSections.map((section) => {
-                  const isSectionActive = activePeopleSection === section.id;
+                  const isSectionActive = activePeopleSection === section.id || 
+                    (section.id === 'Vendors' && activeVendorSubSection !== null);
+                  const isVendor = section.id === 'Vendors';
+                  
                   return (
-                    <button
-                      key={section.id}
-                      onClick={() => navigate(section.path)}
-                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                        isSectionActive
-                          ? 'bg-[#2176FF] text-white shadow-sm'
-                          : 'text-white/80 hover:bg-white/10 hover:text-white'
-                      }`}
-                    >
-                      <span>{section.label}</span>
-                    </button>
+                    <div key={section.id} className="space-y-1">
+                      <button
+                        onClick={() => navigate(section.path)}
+                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                          isSectionActive
+                            ? 'bg-[#2176FF] text-white shadow-sm'
+                            : 'text-white/90 hover:bg-white/10 hover:text-white'
+                        }`}
+                      >
+                        <span>{section.label}</span>
+                      </button>
+                      
+                      {/* Vendor Sub-sections */}
+                      {isVendor && (
+                        <div className="ml-4 space-y-1 border-l border-white/20 pl-2">
+                          {vendorSubSections.map((subSection) => {
+                            const isSubSectionActive = activeVendorSubSection === subSection.id;
+                            return (
+                              <button
+                                key={subSection.id}
+                                onClick={() => navigate(subSection.path)}
+                                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                                  isSubSectionActive
+                                    ? 'bg-[#2176FF]/80 text-white shadow-sm'
+                                    : 'text-white/70 hover:bg-white/10 hover:text-white'
+                                }`}
+                              >
+                                <span>{subSection.label}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   );
                 })
               ) : isAccountsSection ? (
                 <>
-                  {/* Main Sections - Payable and Receivable */}
+                  {/* Main Sections - All, Payable, and Receivable */}
                   {accountsMainSections.map((section) => {
-                    const isSectionActive = activeAccountsSection === section.id || 
-                      (section.id === 'Payable' && ['Bills', 'Vendor', 'Laundry'].includes(activeAccountsSection || '')) ||
-                      (section.id === 'Receivable' && ['All', 'Received'].includes(activeAccountsSection || ''));
+                    const isAll = section.id === 'All';
                     const isPayable = section.id === 'Payable';
                     const isReceivable = section.id === 'Receivable';
+                    
+                    // Determine if this section is active
+                    const isSectionActive = isAll 
+                      ? activeAccountsSection === 'All'
+                      : isPayable
+                      ? (activeAccountsSection === 'Payable' || ['Bills', 'Vendor', 'Laundry'].includes(activeAccountsSection || ''))
+                      : isReceivable
+                      ? (activeAccountsSection === 'Receivable' || activeAccountsSection === 'Received')
+                      : false;
                     
                     return (
                       <div key={section.id} className="space-y-1">
@@ -291,7 +336,7 @@ const SecondSidebar: React.FC<SecondSidebarProps> = ({ isVisible }) => {
                           <span>{section.label}</span>
                         </button>
                         
-                        {/* Sub-sections with indentation */}
+                        {/* Sub-sections with indentation - Only for Payable and Receivable, not All */}
                         {isPayable && (
                           <div className="ml-4 space-y-1 border-l border-white/20 pl-2">
                             {accountsPayableSubSections.map((subSection) => {

@@ -17,6 +17,15 @@ import { Modal } from '../../components/Modal';
 import { Toast } from '../../components/Toast';
 import type { Transaction } from '../../types/accounts';
 import { formatDate, formatCurrency } from '../../types/common';
+
+// Helper function to format date as MM/DD/YYYY for display
+const formatDateDisplay = (dateString: string): string => {
+  const date = new Date(dateString);
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${month}/${day}/${year}`;
+};
 import accountsData from '../../mock/accounts.json';
 import vendorsData from '../../mock/vendors.json';
 import * as hostelService from '../../services/hostel.service';
@@ -27,9 +36,11 @@ import {
   PlusIcon,
   PencilIcon,
   BanknotesIcon,
+  CalendarIcon,
+  Cog6ToothIcon,
 } from '@heroicons/react/24/outline';
 
-type MainTab = 'Payable' | 'Receivable';
+type MainTab = 'Payable' | 'Receivable' | 'All';
 type PayableSubTab = 'All' | 'Bills' | 'Vendor' | 'Laundry';
 type ReceivableSubTab = 'All' | 'Received';
 type ReceivableCategory = 'Rent' | 'Deposit';
@@ -43,8 +54,13 @@ const AccountsList: React.FC = () => {
   
   // Determine active sections from route
   const getActiveMainTab = (): MainTab => {
+    // Check if we're on the base /accounts route (All view)
+    if (location.pathname === ROUTES.ACCOUNTS || location.pathname === ROUTES.ACCOUNTS + '/') {
+      return 'All';
+    }
     if (location.pathname.includes('/accounts/receivable')) return 'Receivable';
-    return 'Payable'; // Default to Payable
+    if (location.pathname.includes('/accounts/payable')) return 'Payable';
+    return 'All'; // Default to All
   };
   
   const getActivePayableTab = (): PayableSubTab => {
@@ -65,12 +81,10 @@ const AccountsList: React.FC = () => {
   const activePayableTab = getActivePayableTab();
   const activeReceivableTab = getActiveReceivableTab();
   
-  // Redirect to /accounts/payable/all if just /accounts or /accounts/payable
+  // Redirect to /accounts/payable/all if just /accounts/payable (but keep /accounts as "All" view)
   useEffect(() => {
-    if (location.pathname === ROUTES.ACCOUNTS) {
-      navigate(ROUTES.ACCOUNTS_PAYABLE_ALL, { replace: true });
-    } else if (location.pathname === ROUTES.ACCOUNTS_PAYABLE) {
-      navigate(ROUTES.ACCOUNTS_PAYABLE_ALL, { replace: true });
+    if (location.pathname === ROUTES.ACCOUNTS_PAYABLE) {
+      navigate(ROUTES.ACCOUNTS_PAYABLE_BILLS, { replace: true }); // Redirect to first sub-item
     }
   }, [location.pathname, navigate]);
   const [activeReceivableCategory, setActiveReceivableCategory] = useState<ReceivableCategory | ''>('');
@@ -78,7 +92,20 @@ const AccountsList: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('');
   const [hostelFilter, setHostelFilter] = useState('');
   const [vendorFilter, setVendorFilter] = useState('');
-  const [hostels, setHostels] = useState<Array<{ id: number; name: string; city: string }>>([]);
+  
+  // Report Period filters
+  const [reportPeriod, setReportPeriod] = useState<string>('Last 7 days');
+  const [dateFrom, setDateFrom] = useState<string>(() => {
+    const date = new Date();
+    date.setDate(date.getDate() - 7);
+    return date.toISOString().split('T')[0];
+  });
+  const [dateTo, setDateTo] = useState<string>(() => {
+    return new Date().toISOString().split('T')[0];
+  });
+  const [groupBy, setGroupBy] = useState<string>('');
+  const [typeFilter, setTypeFilter] = useState<string>('All');
+  const [hostels, setHostels] = useState<Array<{ id: string | number; name: string; city: string }>>([]);
   const [hostelsLoading, setHostelsLoading] = useState<boolean>(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditStatusModalOpen, setIsEditStatusModalOpen] = useState(false);
@@ -109,6 +136,17 @@ const AccountsList: React.FC = () => {
       setVendorFilter('');
     }
   }, [activeMainTab, activePayableTab]);
+
+  // Reset type filter when switching tabs
+  useEffect(() => {
+    if (activeMainTab === 'All') {
+      setTypeFilter('All');
+    } else if (activeMainTab === 'Payable') {
+      setTypeFilter('All');
+    } else if (activeMainTab === 'Receivable') {
+      setTypeFilter('All');
+    }
+  }, [activeMainTab]);
 
   // Base filtered data by hostel (applies to ALL calculations)
   // Includes both original accounts data and manually added payables
@@ -156,7 +194,18 @@ const AccountsList: React.FC = () => {
   const filteredData = useMemo(() => {
     let data = [...baseFilteredData]; // Start with hostel-filtered data
 
-    if (activeMainTab === 'Payable') {
+    // Handle "All" view - show both Payable and Receivable
+    if (activeMainTab === 'All') {
+      // Show all transactions (both Expense and Rent/Deposit) - no type filtering
+      // Apply Type filter if selected
+      if (typeFilter && typeFilter !== 'All') {
+        if (typeFilter === 'Expense') {
+          data = data.filter((t) => t.type === 'Expense');
+        } else if (typeFilter === 'Income') {
+          data = data.filter((t) => t.type === 'Rent' || t.type === 'Deposit');
+        }
+      }
+    } else if (activeMainTab === 'Payable') {
       // Payable = Expenses, Bills, Vendor payments, Laundry
       data = data.filter((t) => t.type === 'Expense');
       
@@ -260,10 +309,36 @@ const AccountsList: React.FC = () => {
       data = data.filter((t) => t.status === statusFilter);
     }
 
+    // Date range filter
+    if (dateFrom && dateTo) {
+      data = data.filter((t) => {
+        const transactionDate = new Date(t.date);
+        const fromDate = new Date(dateFrom);
+        const toDate = new Date(dateTo);
+        toDate.setHours(23, 59, 59, 999); // Include the entire end date
+        return transactionDate >= fromDate && transactionDate <= toDate;
+      });
+    }
+
+    // Type filter (Expense/Income/All) - Only apply if not already filtered by tab
+    // This filter is mainly useful for the "All" view
+    if (activeMainTab === 'All' && typeFilter && typeFilter !== 'All') {
+      if (typeFilter === 'Expense') {
+        data = data.filter((t) => t.type === 'Expense');
+      } else if (typeFilter === 'Income') {
+        data = data.filter((t) => t.type === 'Rent' || t.type === 'Deposit');
+      } else if (typeFilter === 'Rent') {
+        data = data.filter((t) => t.type === 'Rent');
+      } else if (typeFilter === 'Deposit') {
+        data = data.filter((t) => t.type === 'Deposit');
+      }
+    }
+
     // Note: Hostel filter is already applied in baseFilteredData
+    // Note: Group by functionality can be implemented for displaying grouped data later
 
     return data;
-  }, [activeMainTab, activePayableTab, activeReceivableTab, activeReceivableCategory, searchQuery, statusFilter, vendorFilter, baseFilteredData]);
+  }, [activeMainTab, activePayableTab, activeReceivableTab, activeReceivableCategory, searchQuery, statusFilter, vendorFilter, dateFrom, dateTo, typeFilter, baseFilteredData]);
 
   // Define columns
   const columns: Column<Transaction>[] = [
@@ -409,7 +484,12 @@ const AccountsList: React.FC = () => {
       try {
         setHostelsLoading(true);
         const hostelsData = await hostelService.getAllHostelsFromAPI();
-        setHostels(hostelsData);
+        // Map hostels to match the expected format
+        setHostels(hostelsData.map(h => ({
+          id: h.id,
+          name: h.name,
+          city: h.city || '',
+        })));
       } catch (err: any) {
         console.error('Error fetching hostels:', err);
         setHostels([]);
@@ -740,6 +820,173 @@ const AccountsList: React.FC = () => {
         </motion.div>
       ) : null}
 
+      {/* Report Period Filter Section */}
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="glass rounded-xl p-4 border border-white/20 shadow-lg mb-6"
+      >
+        <div className="space-y-4">
+          {/* Report Period Heading */}
+          <h3 className="text-sm font-bold text-slate-900">Report Period</h3>
+          
+          {/* Filter Controls Row */}
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Period Dropdown */}
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-slate-700 whitespace-nowrap">Period:</label>
+              <Select
+                value={reportPeriod}
+                onChange={(value) => {
+                  setReportPeriod(value);
+                  const today = new Date();
+                  const todayStr = today.toISOString().split('T')[0];
+                  
+                  if (value === 'Today') {
+                    setDateFrom(todayStr);
+                    setDateTo(todayStr);
+                  } else if (value === 'Last 7 days') {
+                    const last7Days = new Date(today);
+                    last7Days.setDate(last7Days.getDate() - 7);
+                    setDateFrom(last7Days.toISOString().split('T')[0]);
+                    setDateTo(todayStr);
+                  } else if (value === 'Last 30 days') {
+                    const last30Days = new Date(today);
+                    last30Days.setDate(last30Days.getDate() - 30);
+                    setDateFrom(last30Days.toISOString().split('T')[0]);
+                    setDateTo(todayStr);
+                  } else if (value === 'This Month') {
+                    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+                    setDateFrom(firstDay.toISOString().split('T')[0]);
+                    setDateTo(todayStr);
+                  } else if (value === 'This Year') {
+                    const firstDayOfYear = new Date(today.getFullYear(), 0, 1);
+                    setDateFrom(firstDayOfYear.toISOString().split('T')[0]);
+                    setDateTo(todayStr);
+                  } else if (value === 'Custom Range') {
+                    // Keep current dates for custom range
+                  }
+                }}
+                options={[
+                  { value: 'Today', label: 'Today' },
+                  { value: 'Last 7 days', label: 'Last 7 days' },
+                  { value: 'Last 30 days', label: 'Last 30 days' },
+                  { value: 'This Month', label: 'This Month' },
+                  { value: 'This Year', label: 'This Year' },
+                  { value: 'Custom Range', label: 'Custom Range' },
+                ]}
+              />
+            </div>
+            
+            {/* From Date Input */}
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-slate-700 whitespace-nowrap">From:</label>
+              <div className="relative">
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => {
+                    setDateFrom(e.target.value);
+                    setReportPeriod('Custom Range');
+                  }}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+                <CalendarIcon className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+              </div>
+            </div>
+            
+            {/* To Date Input */}
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-slate-700 whitespace-nowrap">To:</label>
+              <div className="relative">
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => {
+                    setDateTo(e.target.value);
+                    setReportPeriod('Custom Range');
+                  }}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+                <CalendarIcon className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+              </div>
+            </div>
+            
+            {/* Group by Dropdown */}
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-slate-700 whitespace-nowrap">Group by:</label>
+              <Select
+                value={groupBy}
+                onChange={setGroupBy}
+                options={[
+                  { value: '', label: 'Group by' },
+                  { value: 'day', label: 'Day' },
+                  { value: 'week', label: 'Week' },
+                  { value: 'month', label: 'Month' },
+                  { value: 'year', label: 'Year' },
+                  { value: 'hostel', label: 'Hostel' },
+                  { value: 'type', label: 'Type' },
+                ]}
+              />
+            </div>
+            
+            {/* Type Dropdown */}
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-slate-700 whitespace-nowrap">Type:</label>
+              <Select
+                value={typeFilter}
+                onChange={setTypeFilter}
+                options={
+                  activeMainTab === 'All'
+                    ? [
+                        { value: 'All', label: 'All' },
+                        { value: 'Expense', label: 'Expense' },
+                        { value: 'Income', label: 'Income' },
+                      ]
+                    : activeMainTab === 'Payable'
+                    ? [
+                        { value: 'Expense', label: 'Expense' },
+                        { value: 'All', label: 'All' },
+                      ]
+                    : [
+                        { value: 'Income', label: 'Income' },
+                        { value: 'Rent', label: 'Rent' },
+                        { value: 'Deposit', label: 'Deposit' },
+                        { value: 'All', label: 'All' },
+                      ]
+                }
+              />
+            </div>
+            
+            {/* Settings Button */}
+            <button
+              onClick={() => {
+                // Settings functionality can be added later
+                setToast({
+                  open: true,
+                  type: 'info',
+                  message: 'Settings panel coming soon',
+                });
+              }}
+              className="p-2 hover:bg-slate-100 rounded-lg transition-colors border border-slate-300"
+              title="Settings"
+            >
+              <Cog6ToothIcon className="w-5 h-5 text-slate-600" />
+            </button>
+          </div>
+          
+          {/* Selected Report Period Display */}
+          <div className="mt-3">
+            <button
+              type="button"
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg border border-slate-300 transition-colors text-sm font-medium text-slate-700"
+            >
+              Report Period: {formatDateDisplay(dateFrom)} - {formatDateDisplay(dateTo)}
+            </button>
+          </div>
+        </div>
+      </motion.div>
+
       {/* Summary Cards - Income, Expense, Profit, Bad Debt */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Income Card */}
@@ -844,17 +1091,21 @@ const AccountsList: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">
-                  {activeMainTab === 'Payable' 
+                  {activeMainTab === 'All'
+                    ? 'All Accounts'
+                    : activeMainTab === 'Payable' 
                     ? `Total Payable - ${activePayableTab}` 
                     : 'Total Receivable'}
                 </p>
                 <p className="text-2xl font-bold text-gray-900 mt-1">
-                  {formatCurrency(activeMainTab === 'Payable' ? payableTotal : receivableTotal)}
+                  {activeMainTab === 'All'
+                    ? formatCurrency(payableTotal + receivableTotal)
+                    : formatCurrency(activeMainTab === 'Payable' ? payableTotal : receivableTotal)}
                 </p>
               </div>
               <div className="flex items-center gap-4">
-                <Badge variant={activeMainTab === 'Payable' ? 'warning' : 'info'}>
-                  {filteredData.length} {activeMainTab === 'Payable' ? 'Bills' : 'Invoices'}
+                <Badge variant={activeMainTab === 'Payable' ? 'warning' : activeMainTab === 'Receivable' ? 'info' : 'default'}>
+                  {filteredData.length} {activeMainTab === 'All' ? 'Transactions' : activeMainTab === 'Payable' ? 'Bills' : 'Invoices'}
                 </Badge>
                 {/* Add Button - Show different text based on active tab */}
                 {activeMainTab === 'Payable' && (
@@ -888,7 +1139,7 @@ const AccountsList: React.FC = () => {
             columns={activeMainTab === 'Receivable' ? receivableColumns : columns}
             data={filteredData}
             toolbar={toolbar}
-            emptyMessage={`No ${activeMainTab === 'Payable' ? activePayableTab.toLowerCase() : 'receivable'} records found. Try adjusting your search or filters.`}
+            emptyMessage={`No ${activeMainTab === 'All' ? 'accounts' : activeMainTab === 'Payable' ? activePayableTab.toLowerCase() : 'receivable'} records found. Try adjusting your search or filters.`}
           />
         </div>
       </div>

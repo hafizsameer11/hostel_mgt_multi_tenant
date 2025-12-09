@@ -5,7 +5,16 @@
 
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { XMarkIcon, UserPlusIcon } from '@heroicons/react/24/outline';
+import { 
+  XMarkIcon, 
+  UserPlusIcon, 
+  UserIcon,
+  EnvelopeIcon,
+  PhoneIcon,
+  EyeIcon,
+  PencilIcon,
+  TrashIcon
+} from '@heroicons/react/24/outline';
 import { DataTable } from '../../components/DataTable';
 import type { Column } from '../../components/DataTable';
 import { SearchInput } from '../../components/SearchInput';
@@ -57,52 +66,95 @@ const TenantsList: React.FC = () => {
     return data;
   }, [searchQuery, statusFilter]);
 
-  // Define columns
+  // Define columns matching image 2 structure
   const columns: Column<Tenant>[] = [
     {
-      key: 'name',
-      label: 'Name',
+      key: 'tenant',
+      label: 'Tenant',
       sortable: true,
+      render: (row) => {
+        const propertyAddress = row.hostelName 
+          ? `${row.hostelName} | ${row.room || 'Room'} ${row.bed || ''}`.trim()
+          : `${row.room || ''}-${row.bed || ''}`.trim() || 'N/A';
+        
+        return (
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0 mt-1">
+              <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
+                <UserIcon className="w-6 h-6 text-gray-600" />
+              </div>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="font-medium text-gray-900 truncate">{row.name}</span>
+                <Badge
+                  variant={
+                    row.status === 'Active'
+                      ? 'success'
+                      : row.status === 'Pending'
+                      ? 'warning'
+                      : 'default'
+                  }
+                  className="text-xs"
+                >
+                  {row.status === 'Active' ? 'Current' : row.status}
+                </Badge>
+              </div>
+              <p className="text-sm text-gray-600 truncate">{propertyAddress}</p>
+            </div>
+          </div>
+        );
+      },
     },
     {
-      key: 'email',
-      label: 'Email',
-      sortable: true,
-    },
-    {
-      key: 'phone',
-      label: 'Phone',
-    },
-    {
-      key: 'room',
-      label: 'Room',
-      render: (row) => `${row.room}-${row.bed}`,
-    },
-    {
-      key: 'leaseStart',
-      label: 'Lease Start',
-      render: (row) => formatDate(row.leaseStart),
-    },
-    {
-      key: 'leaseEnd',
-      label: 'Lease End',
-      render: (row) => formatDate(row.leaseEnd),
-    },
-    {
-      key: 'status',
-      label: 'Status',
+      key: 'contact',
+      label: 'Contact Info',
       render: (row) => (
-        <Badge
-          variant={
-            row.status === 'Active'
-              ? 'success'
-              : row.status === 'Pending'
-              ? 'warning'
-              : 'default'
-          }
-        >
-          {row.status}
-        </Badge>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <EnvelopeIcon className="w-4 h-4 text-gray-400 flex-shrink-0" />
+            <span className="text-sm text-gray-700">{row.email || 'N/A'}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <PhoneIcon className="w-4 h-4 text-gray-400 flex-shrink-0" />
+            {row.phone ? (
+              <span className="text-sm text-gray-700">{row.phone}</span>
+            ) : (
+              <button className="text-sm text-blue-600 hover:text-blue-700">
+                Add Phone Number
+              </button>
+            )}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'actions',
+      label: 'Actions',
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => console.log('View', row.id)}
+            className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+            title="View"
+          >
+            <EyeIcon className="w-5 h-5" />
+          </button>
+          <button
+            onClick={() => console.log('Edit', row.id)}
+            className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+            title="Edit"
+          >
+            <PencilIcon className="w-5 h-5" />
+          </button>
+          <button
+            onClick={() => console.log('Delete', row.id)}
+            className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            title="Delete"
+          >
+            <TrashIcon className="w-5 h-5" />
+          </button>
+        </div>
       ),
     },
   ];

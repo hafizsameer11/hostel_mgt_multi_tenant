@@ -233,8 +233,8 @@ const Overview: React.FC = () => {
     const checkIns = dashboardData.checkInCheckOut.checkIns.count;
     const checkOuts = dashboardData.checkInCheckOut.checkOuts.count;
     const total = checkIns + checkOuts;
-    const checkInPercentage = total > 0 ? (checkIns / total) * 100 : 0;
-    const checkOutPercentage = total > 0 ? (checkOuts / total) * 100 : 0;
+    const checkInPercentage = total > 0 ? Math.round((checkIns / total) * 100) : 0;
+    const checkOutPercentage = total > 0 ? Math.round((checkOuts / total) * 100) : 0;
 
     return [
       {
@@ -833,10 +833,16 @@ const Overview: React.FC = () => {
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={checkInCheckOutData} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis type="number" stroke="#64748b" style={{ fontSize: '12px' }} />
+              <XAxis 
+                type="number" 
+                stroke="#64748b" 
+                style={{ fontSize: '12px' }}
+                domain={[0, 'dataMax']}
+                allowDecimals={false}
+              />
               <YAxis dataKey="type" type="category" stroke="#64748b" style={{ fontSize: '12px' }} width={100} />
               <Tooltip
-                formatter={(value: number) => [value, 'Count']}
+                formatter={(value: number) => [Math.round(value), 'Count']}
                 contentStyle={{
                   backgroundColor: 'white',
                   border: '1px solid #e2e8f0',
@@ -855,7 +861,7 @@ const Overview: React.FC = () => {
               <div key={item.type} className="flex items-center justify-between text-sm">
                 <span className="text-slate-600">{item.type}</span>
                 <span className="font-medium text-slate-900">
-                  {item.count} ({item.percentage.toFixed(2)}%)
+                  {item.count} ({item.percentage}%)
                 </span>
               </div>
             ))}

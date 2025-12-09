@@ -15,12 +15,14 @@ interface AddHostelFormProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (data: any) => void;
+  editingHostel?: any; // Hostel data for editing
 }
 
 export const AddHostelForm: React.FC<AddHostelFormProps> = ({
   isOpen,
   onClose,
   onSubmit,
+  editingHostel,
 }) => {
   const [activeTab, setActiveTab] = useState<'hostelInfo' | 'hostelSettings'>('hostelInfo');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -42,6 +44,52 @@ export const AddHostelForm: React.FC<AddHostelFormProps> = ({
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Reset form when modal opens/closes or editingHostel changes
+  useEffect(() => {
+    if (isOpen) {
+      if (editingHostel) {
+        // Populate form with editing hostel data
+        // Note: You may need to fetch full hostel details from API
+        setFormData({
+          name: editingHostel.name || '',
+          email: '', // May need to fetch from API
+          phone: editingHostel.managerPhone || '',
+          country: '', // May need to fetch from API
+          state: '', // May need to fetch from API
+          city: editingHostel.city || '',
+          street: '', // May need to fetch from API
+          description: editingHostel.notes || '',
+          hostelImage: null,
+          hostelImagePreview: '',
+          category: '', // May need to fetch from API
+          type: '', // May need to fetch from API
+          checkInTime: '9:00AM', // Default or fetch from API
+          checkOutTime: '6:00PM', // Default or fetch from API
+        });
+      } else {
+        // Reset form for new hostel
+        setFormData({
+    name: '',
+          email: '',
+          phone: '',
+          country: '',
+          state: '',
+    city: '',
+          street: '',
+          description: '',
+          hostelImage: null,
+          hostelImagePreview: '',
+          category: '',
+          type: '',
+          checkInTime: '9:00AM',
+          checkOutTime: '6:00PM',
+  });
+      }
+      setActiveTab('hostelInfo');
+      setErrors({});
+    }
+  }, [isOpen, editingHostel]);
 
   // Category options
   const categoryOptions = [
@@ -296,22 +344,22 @@ export const AddHostelForm: React.FC<AddHostelFormProps> = ({
                     {activeTab === 'hostelInfo' && (
                       <div className="space-y-6">
                         {/* Hostel Name */}
-                        <div>
-                          <label className="block text-sm font-medium text-slate-700 mb-2">
-                            Hostel Name <span className="text-red-500">*</span>
-                          </label>
-                          <input
-                            type="text"
-                            value={formData.name}
-                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-2">
+            Hostel Name <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            value={formData.name}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                             placeholder="Enter hostel name"
                             className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             required
-                          />
-                          {errors.name && (
-                            <p className="mt-1 text-sm text-red-600">{errors.name}</p>
-                          )}
-                        </div>
+          />
+          {errors.name && (
+            <p className="mt-1 text-sm text-red-600">{errors.name}</p>
+          )}
+        </div>
 
                         {/* Email and Phone Row */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -389,46 +437,46 @@ export const AddHostelForm: React.FC<AddHostelFormProps> = ({
 
                           {/* City and Street Row */}
                           <div className="grid grid-cols-2 gap-6">
-                            <div>
-                              <label className="block text-sm font-medium text-slate-700 mb-2">
-                                City <span className="text-red-500">*</span>
-                              </label>
-                              <input
-                                type="text"
-                                value={formData.city}
-                                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-2">
+            City <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            value={formData.city}
+            onChange={(e) => setFormData({ ...formData, city: e.target.value })}
                                 placeholder="Enter city"
                                 className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 required
-                              />
-                              {errors.city && (
-                                <p className="mt-1 text-sm text-red-600">{errors.city}</p>
-                              )}
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-slate-700 mb-2">
+          />
+          {errors.city && (
+            <p className="mt-1 text-sm text-red-600">{errors.city}</p>
+          )}
+        </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
                                 Street <span className="text-red-500">*</span>
-                              </label>
-                              <input
+            </label>
+            <input
                                 type="text"
                                 value={formData.street}
                                 onChange={(e) => setFormData({ ...formData, street: e.target.value })}
                                 placeholder="Enter street address"
                                 className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 required
-                              />
+            />
                               {errors.street && (
                                 <p className="mt-1 text-sm text-red-600">{errors.street}</p>
-                              )}
-                            </div>
+            )}
+          </div>
                           </div>
                         </div>
 
                         {/* Description */}
-                        <div>
-                          <label className="block text-sm font-medium text-slate-700 mb-2">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
                             Description
-                          </label>
+            </label>
                           <textarea
                             value={formData.description}
                             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
@@ -479,7 +527,7 @@ export const AddHostelForm: React.FC<AddHostelFormProps> = ({
                               <PhotoIcon className="w-5 h-5" />
                               <span className="font-medium">Upload Hostel Image</span>
                             </button>
-                            <input
+            <input
                               ref={fileInputRef}
                               type="file"
                               accept="image/*"
@@ -505,11 +553,11 @@ export const AddHostelForm: React.FC<AddHostelFormProps> = ({
                             value={formData.category}
                             onChange={(value) => setFormData({ ...formData, category: value })}
                             options={categoryOptions}
-                          />
+            />
                           {errors.category && (
                             <p className="mt-1 text-sm text-red-600">{errors.category}</p>
-                          )}
-                        </div>
+            )}
+          </div>
 
                         {/* Type */}
                         <div>
@@ -524,7 +572,7 @@ export const AddHostelForm: React.FC<AddHostelFormProps> = ({
                           {errors.type && (
                             <p className="mt-1 text-sm text-red-600">{errors.type}</p>
                           )}
-                        </div>
+        </div>
 
                         {/* Operating Hours */}
                         <div>
@@ -533,51 +581,51 @@ export const AddHostelForm: React.FC<AddHostelFormProps> = ({
                             Operating Hours
                           </h4>
                           <div className="grid grid-cols-2 gap-6">
-                            <div>
-                              <label className="block text-sm font-medium text-slate-700 mb-2">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
                                 Check-in Time <span className="text-red-500">*</span>
-                              </label>
-                              <input
+            </label>
+            <input
                                 type="time"
                                 value={formData.checkInTime}
                                 onChange={(e) => setFormData({ ...formData, checkInTime: e.target.value })}
                                 className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 required
-                              />
+            />
                               {errors.checkInTime && (
                                 <p className="mt-1 text-sm text-red-600">{errors.checkInTime}</p>
-                              )}
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-slate-700 mb-2">
+            )}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
                                 Check-out Time <span className="text-red-500">*</span>
-                              </label>
-                              <input
+            </label>
+            <input
                                 type="time"
                                 value={formData.checkOutTime}
                                 onChange={(e) => setFormData({ ...formData, checkOutTime: e.target.value })}
                                 className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 required
-                              />
+            />
                               {errors.checkOutTime && (
                                 <p className="mt-1 text-sm text-red-600">{errors.checkOutTime}</p>
-                              )}
-                            </div>
-                          </div>
+            )}
+          </div>
+        </div>
                         </div>
                       </div>
                     )}
-                  </div>
+        </div>
 
                   {/* Footer Buttons */}
                   <div className="p-6 border-t border-slate-200 bg-white flex justify-end gap-3">
                     <button
-                      type="button"
-                      onClick={handleClose}
+            type="button"
+            onClick={handleClose}
                       disabled={isSubmitting}
                       className="px-6 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Cancel
+          >
+            Cancel
                     </button>
                     <button
                       type="submit"
@@ -589,8 +637,8 @@ export const AddHostelForm: React.FC<AddHostelFormProps> = ({
                       )}
                       {isSubmitting ? 'Creating...' : 'Create Hostel'}
                     </button>
-                  </div>
-                </form>
+        </div>
+      </form>
               </div>
             </div>
           </motion.div>

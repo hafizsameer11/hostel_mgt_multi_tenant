@@ -6,33 +6,42 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import * as alertService from '../../services/alert.service';
-import { motion, AnimatePresence } from 'framer-motion';
 import { Select } from '../../components/Select';
 import { Button } from '../../components/Button';
-import { Modal } from '../../components/Modal';
 import { Toast } from '../../components/Toast';
-import tenantsData from '../../mock/tenants.json';
-import employeesData from '../../mock/employees.json';
-import ownersData from '../../mock/owners.json';
 import * as hostelService from '../../services/hostel.service';
 import * as tenantService from '../../services/tenant.service';
-import * as ownerService from '../../services/owner.service';
 import * as employeeService from '../../services/employee.service';
 import * as roleService from '../../services/role.service';
+import * as prospectService from '../../services/prospect.service';
 import { API_BASE_URL } from '../../../services/api.config';
-import { TenantCard } from './components/TenantCard';
-import { EmployeeCard } from './components/EmployeeCard';
-import { OwnerCard } from './components/OwnerCard';
 import { 
   BriefcaseIcon, 
   HomeIcon,
   UserPlusIcon,
-  TrophyIcon,
-  StarIcon,
-  DocumentTextIcon
 } from '@heroicons/react/24/outline';
 
-type PeopleSection = 'Tenants' | 'Employees' | 'Owners' | 'Vendors' | 'Prospects';
+// Import components
+import TenantForm, { type TenantFormData } from './components/TenantForm';
+import EmployeeForm, { type EmployeeFormData } from './components/EmployeeForm';
+import ProspectForm, { type ProspectFormData } from './components/ProspectForm';
+import TenantTable from './components/TenantTable';
+import EmployeeTable from './components/EmployeeTable';
+import ProspectTable from './components/ProspectTable';
+import ViewModal from './components/ViewModal';
+import ScoreModal from './components/ScoreModal';
+import EditForm from './components/EditForm';
+
+// Lazy load VendorList
+const VendorListLazy = React.lazy(() => import('../Vendor/VendorList'));
+
+// Wrapper component to pass props to lazy-loaded VendorList
+const VendorListWrapper: React.FC<{ selectedHostelId: string; onHostelChange: (id: string) => void }> = ({ selectedHostelId, onHostelChange }) => {
+  return <VendorListLazy selectedHostelId={selectedHostelId} onHostelChange={onHostelChange} />;
+};
+
+type PeopleSection = 'Tenants' | 'Employees' | 'Vendors' | 'Prospects';
+type VendorSubSection = 'Vendor List' | 'Vendor Management';
 
 const PeopleHub: React.FC = () => {
   const location = useLocation();
@@ -41,25 +50,32 @@ const PeopleHub: React.FC = () => {
   const getActiveSection = (): PeopleSection | null => {
     if (location.pathname.includes('/tenants')) return 'Tenants';
     if (location.pathname.includes('/employees')) return 'Employees';
-    if (location.pathname.includes('/owners')) return 'Owners';
     if (location.pathname.includes('/vendors')) return 'Vendors';
     if (location.pathname.includes('/prospects')) return 'Prospects';
     return null; // On base route
   };
   
+  // Get active vendor sub-section from URL
+  const getActiveVendorSubSection = (): VendorSubSection | null => {
+    if (location.pathname.includes('/people/vendors/management')) return 'Vendor Management';
+    if (location.pathname.includes('/people/vendors/list')) return 'Vendor List';
+    return null;
+  };
+  
   const activeSection = getActiveSection();
+  const activeVendorSubSection = getActiveVendorSubSection();
   const [selectedHostelId, setSelectedHostelId] = useState<string>('');
-  const [hostels, setHostels] = useState<Array<{ id: number; name: string; city: string }>>([]);
+  const [hostels, setHostels] = useState<Array<{ id: string | number; name: string; city: string }>>([]);
   const [hostelsLoading, setHostelsLoading] = useState<boolean>(true);
   const [tenants, setTenants] = useState<any[]>([]);
   const [tenantsLoading, setTenantsLoading] = useState<boolean>(false);
   const [employees, setEmployees] = useState<any[]>([]);
   const [employeesLoading, setEmployeesLoading] = useState<boolean>(false);
-  const [owners, setOwners] = useState<any[]>([]);
-  const [ownersLoading, setOwnersLoading] = useState<boolean>(false);
+  const [prospects, setProspects] = useState<any[]>([]);
+  const [prospectsLoading, setProspectsLoading] = useState<boolean>(false);
   const [roles, setRoles] = useState<Array<{ value: string; label: string; id: number }>>([]);
   const [rolesLoading, setRolesLoading] = useState<boolean>(false);
-  const [modal, setModal] = useState<{ mode: 'view' | 'edit'; type: 'Tenant' | 'Employee' | 'Owner'; data: any } | null>(null);
+  const [modal, setModal] = useState<{ mode: 'view' | 'edit'; type: 'Tenant' | 'Employee' | 'Prospect'; data: any } | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [detailTab, setDetailTab] = useState<'details' | 'scorecard'>('details');
   const [isScoreModalOpen, setIsScoreModalOpen] = useState(false);
@@ -75,70 +91,13 @@ const PeopleHub: React.FC = () => {
     type: 'success',
     message: '',
   });
-  // Multi-step form state for Tenant
-  const [currentStep, setCurrentStep] = useState(1);
+  // Form state for Tenant, Employee, and Prospect (for editing/pre-filling)
   const [editingTenantId, setEditingTenantId] = useState<number | null>(null);
-  const [tenantFormData, setTenantFormData] = useState({
-    // Step 1: Personal Information
-    firstName: '',
-    lastName: '',
-    email: '',
-    phone: '',
-    gender: '',
-    dateOfBirth: '',
-    cnicNumber: '',
-    profilePhoto: null as File | null,
-    previousProfilePhoto: null as string | null,
-    previousDocuments: null as any[] | null,
-    // Step 2: Room Allocation
-    hostelId: '',
-    floorId: '',
-    roomId: '',
-    bedId: '',
-    // Step 3: Lease Information
-    leaseStartDate: '',
-    leaseEndDate: '',
-    monthlyRent: '',
-    securityDeposit: '',
-    documents: null as File | null,
-  });
-
-  // Multi-step form state for Employee
-  const [employeeCurrentStep, setEmployeeCurrentStep] = useState(1);
   const [editingEmployeeId, setEditingEmployeeId] = useState<number | null>(null);
-  const [employeeFormData, setEmployeeFormData] = useState({
-    // Step 1: Personal Information
-    name: '',
-    email: '',
-    phone: '',
-    username: '',
-    password: '',
-    profilePhoto: null as File | null,
-    previousProfilePhoto: null as string | null,
-    previousDocuments: null as any[] | null,
-    address: {
-      street: '',
-      city: '',
-      country: '',
-    },
-    // Step 2: Employment Details
-    roleId: '', // Store role ID instead of role name
-    hostelId: '',
-    joinDate: '',
-    salary: '',
-    salaryType: 'monthly',
-    workingHours: '',
-    document: null as File | null,
-    notes: '',
-  });
-
-  // Architecture data for selected hostel
-  const [availableFloors, setAvailableFloors] = useState<{ value: string; label: string }[]>([]);
-  const [availableRooms, setAvailableRooms] = useState<{ value: string; label: string }[]>([]);
-  const [availableBeds, setAvailableBeds] = useState<{ value: string; label: string }[]>([]);
-  const [floorsLoading, setFloorsLoading] = useState<boolean>(false);
-  const [roomsLoading, setRoomsLoading] = useState<boolean>(false);
-  const [bedsLoading, setBedsLoading] = useState<boolean>(false);
+  const [editingProspectId, setEditingProspectId] = useState<number | null>(null);
+  const [tenantFormData, setTenantFormData] = useState<Partial<TenantFormData>>({});
+  const [employeeFormData, setEmployeeFormData] = useState<Partial<EmployeeFormData>>({});
+  const [prospectFormData, setProspectFormData] = useState<Partial<ProspectFormData>>({});
 
 
   // Fetch hostels from API on component mount
@@ -147,7 +106,13 @@ const PeopleHub: React.FC = () => {
       try {
         setHostelsLoading(true);
         const hostelsData = await hostelService.getAllHostelsFromAPI();
-        setHostels(hostelsData);
+        // Map hostels to expected format - handle both string and number IDs
+        const mappedHostels = hostelsData.map(h => ({
+          id: typeof h.id === 'string' ? Number(h.id) : h.id,
+          name: h.name,
+          city: h.city,
+        }));
+        setHostels(mappedHostels);
       } catch (err: any) {
         console.error('Error fetching hostels:', err);
         // Set empty array on error to prevent crashes
@@ -245,153 +210,54 @@ const PeopleHub: React.FC = () => {
     fetchEmployees();
   }, [selectedHostelId, activeSection]);
 
-  // Fetch owners when hostel is selected (only for Owners section)
+  // Fetch prospects when Prospects section is active (no hostel filter needed)
   useEffect(() => {
-    const fetchOwners = async () => {
-      if (activeSection === 'Owners' && selectedHostelId) {
+    const fetchProspects = async () => {
+      if (activeSection === 'Prospects') {
         try {
-          setOwnersLoading(true);
-          const ownersData = await ownerService.getOwnersByHostel(Number(selectedHostelId));
-          setOwners(ownersData);
+          setProspectsLoading(true);
+          const prospectsData = await prospectService.getAllProspects();
+          setProspects(prospectsData);
         } catch (error) {
-          console.error('Error fetching owners:', error);
-          setOwners([]);
+          console.error('Error fetching prospects:', error);
+          setProspects([]);
         } finally {
-          setOwnersLoading(false);
+          setProspectsLoading(false);
         }
-      } else if (activeSection === 'Owners' && !selectedHostelId) {
-        // Clear owners when no hostel is selected
-        setOwners([]);
+      } else {
+        // Clear prospects when not on Prospects section
+        setProspects([]);
       }
     };
 
-    fetchOwners();
-  }, [selectedHostelId, activeSection]);
+    fetchProspects();
+  }, [activeSection]);
 
   // Use fetched tenants for Tenants section, otherwise use mock data filtering
   const filteredTenants = useMemo(() => {
-    if (activeSection === 'Tenants') {
-      return tenants;
+    if (activeSection !== 'Tenants') {
+      return [];
     }
-    // For other sections, use mock data filtering (if needed)
-    let data = tenantsData as any[];
-    if (selectedHostelId) {
-      data = data.filter((t) => String(t.hostelId) === selectedHostelId);
-    }
-    return data;
-  }, [tenants, selectedHostelId, activeSection]);
+    return tenants;
+  }, [tenants, activeSection]);
 
   const filteredEmployees = useMemo(() => {
-    if (activeSection === 'Employees') {
-      return employees;
+    if (activeSection !== 'Employees') {
+      return [];
     }
-    // For other sections, use mock data filtering (if needed)
-    let data = employeesData as any[];
-    if (selectedHostelId) {
-      data = data.filter((e) => String(e.hostelId) === selectedHostelId);
+    return employees;
+  }, [employees, activeSection]);
+
+  const filteredProspects = useMemo(() => {
+    if (activeSection !== 'Prospects') {
+      return [];
     }
-    return data;
-  }, [employees, selectedHostelId, activeSection]);
-
-  const filteredOwners = useMemo(() => {
-    if (activeSection === 'Owners') {
-      return owners;
-    }
-    // For other sections, use mock data filtering (if needed)
-    let data = ownersData as any[];
-    if (selectedHostelId) {
-      data = data.filter((o) => String(o.hostelId) === selectedHostelId);
-    }
-    return data;
-  }, [owners, selectedHostelId, activeSection]);
+    return prospects;
+  }, [prospects, activeSection]);
 
 
-  // Load floors when hostel is selected
-  useEffect(() => {
-    const fetchFloors = async () => {
-      if (tenantFormData.hostelId) {
-        try {
-          setFloorsLoading(true);
-          const floors = await tenantService.getFloors();
-          // Filter floors by hostel if needed, or use all floors
-          const floorOptions = floors.map(floor => ({
-            value: String(floor.id),
-            label: floor.floorName || `Floor ${floor.number}`,
-          }));
-          setAvailableFloors(floorOptions);
-        } catch (error) {
-          console.error('Error loading floors:', error);
-          setAvailableFloors([]);
-        } finally {
-          setFloorsLoading(false);
-        }
-      } else {
-        setAvailableFloors([]);
-        setAvailableRooms([]);
-        setAvailableBeds([]);
-      }
-    };
 
-    fetchFloors();
-  }, [tenantFormData.hostelId]);
-
-  // Update rooms when floor is selected
-  useEffect(() => {
-    const fetchRooms = async () => {
-      if (tenantFormData.floorId) {
-        try {
-          setRoomsLoading(true);
-          const rooms = await tenantService.getRoomsByFloor(Number(tenantFormData.floorId));
-          const roomOptions = rooms.map(room => ({
-            value: String(room.id),
-            label: `Room ${room.roomNumber}`,
-          }));
-          setAvailableRooms(roomOptions);
-        } catch (error) {
-          console.error('Error loading rooms:', error);
-          setAvailableRooms([]);
-        } finally {
-          setRoomsLoading(false);
-        }
-      } else {
-        setAvailableRooms([]);
-        setAvailableBeds([]);
-      }
-      setTenantFormData(prev => ({ ...prev, roomId: '', bedId: '' }));
-    };
-
-    fetchRooms();
-  }, [tenantFormData.floorId]);
-
-  // Update beds when room is selected
-  useEffect(() => {
-    const fetchBeds = async () => {
-      if (tenantFormData.roomId) {
-        try {
-          setBedsLoading(true);
-          const beds = await tenantService.getBedsByRoom(Number(tenantFormData.roomId));
-          // Only show unoccupied beds
-          const unoccupiedBeds = beds
-            .filter(bed => !bed.isOccupied)
-            .map(bed => ({
-              value: String(bed.id),
-              label: `Bed ${bed.bedNumber} (Available)`,
-            }));
-          setAvailableBeds(unoccupiedBeds);
-        } catch (error) {
-          console.error('Error loading beds:', error);
-          setAvailableBeds([]);
-        } finally {
-          setBedsLoading(false);
-        }
-      } else {
-        setAvailableBeds([]);
-      }
-      setTenantFormData(prev => ({ ...prev, bedId: '' }));
-    };
-
-    fetchBeds();
-  }, [tenantFormData.roomId]);
+  // Floors, rooms, and beds are now managed inside TenantForm component
 
   // Score management functions
   const getScoreKey = (type: 'Tenant' | 'Employee', id: number) => `score_${type.toLowerCase()}_${id}`;
@@ -449,64 +315,8 @@ const PeopleHub: React.FC = () => {
 
 
   // Action handlers
-  const handleView = async (id: number, type: 'Tenant' | 'Employee' | 'Owner') => {
-    if (type === 'Owner') {
-      // Fetch full owner details from API
-      try {
-        setOwnersLoading(true);
-        console.log('Fetching owner details for ID:', id);
-        const ownerData = await ownerService.getOwnerById(id);
-        console.log('Owner data received:', ownerData);
-        if (ownerData) {
-          // Map API response to display format
-          const mappedData = {
-            id: ownerData.id,
-            name: ownerData.name,
-            email: ownerData.user?.email || '',
-            phone: ownerData.user?.phone || ownerData.alternatePhone || null,
-            alternatePhone: ownerData.alternatePhone,
-            status: ownerData.status,
-            profilePhoto: ownerData.profilePhoto,
-            ownerCode: ownerData.ownerCode,
-            HostelName: ownerData.HostelName,
-            taxId: ownerData.taxId,
-            registrationNumber: ownerData.registrationNumber,
-            address: ownerData.address,
-            bankDetails: ownerData.bankDetails,
-            documents: ownerData.documents,
-            emergencyContact: ownerData.emergencyContact,
-            notes: ownerData.notes,
-            createdAt: ownerData.createdAt,
-            updatedAt: ownerData.updatedAt,
-            hostelCount: ownerData.hostelCount || ownerData._count?.hostels || 0,
-            userId: ownerData.userId,
-            user: ownerData.user,
-          };
-          console.log('Setting modal with data:', mappedData);
-          setModal({ mode: 'view', type, data: mappedData });
-          setDetailTab('details');
-        } else {
-          console.error('No owner data received');
-          setToast({
-            open: true,
-            type: 'error',
-            message: 'Owner data not found. Please try again.',
-          });
-        }
-      } catch (error: any) {
-        console.error('Error fetching owner details:', error);
-        console.error('Error response data:', error?.response?.data);
-        console.error('Error status:', error?.response?.status);
-        const errorMessage = error?.response?.data?.message || error?.message || 'Failed to load owner details. Please try again.';
-        setToast({
-          open: true,
-          type: 'error',
-          message: errorMessage,
-        });
-      } finally {
-        setOwnersLoading(false);
-      }
-    } else if (type === 'Tenant') {
+  const handleView = async (id: number, type: 'Tenant' | 'Employee' | 'Prospect') => {
+    if (type === 'Tenant') {
       // Fetch full tenant details from API
       try {
         setTenantsLoading(true);
@@ -604,10 +414,49 @@ const PeopleHub: React.FC = () => {
       } finally {
         setEmployeesLoading(false);
       }
+    } else if (type === 'Prospect') {
+      // Fetch full prospect details from API
+      try {
+        setProspectsLoading(true);
+        const prospectData = await prospectService.getProspectById(id);
+        if (prospectData && prospectData.prospect) {
+          // Map API response to display format
+          const mappedData = {
+            id: prospectData.prospect.id,
+            firstName: prospectData.prospect.firstName || '',
+            lastName: prospectData.prospect.lastName || '',
+            name: prospectData.prospect.name || `${prospectData.prospect.firstName} ${prospectData.prospect.lastName}`,
+            email: prospectData.prospect.email || '',
+            phone: prospectData.prospect.phone || '',
+            gender: prospectData.prospect.gender || '',
+            dateOfBirth: prospectData.prospect.dateOfBirth || '',
+            cnicNumber: prospectData.prospect.cnicNumber || '',
+            status: prospectData.prospect.status || 'pending',
+            profilePhoto: prospectData.prospect.profilePhoto,
+            documents: prospectData.prospect.documents || [],
+            profession: prospectData.prospect.profession || '',
+            professionDetails: prospectData.prospect.professionDetails || '',
+            professionDocuments: prospectData.prospect.professionDocuments || [],
+            createdAt: prospectData.prospect.createdAt,
+            updatedAt: prospectData.prospect.updatedAt,
+          };
+          setModal({ mode: 'view', type, data: mappedData });
+          setDetailTab('details');
+        }
+      } catch (error) {
+        console.error('Error fetching prospect details:', error);
+        setToast({
+          open: true,
+          type: 'error',
+          message: 'Failed to load prospect details. Please try again.',
+        });
+      } finally {
+        setProspectsLoading(false);
+      }
     }
   };
 
-  const handleEdit = async (id: number, type: 'Tenant' | 'Employee') => {
+  const handleEdit = async (id: number, type: 'Tenant' | 'Employee' | 'Prospect') => {
     if (type === 'Tenant') {
       // Fetch tenant data from API and populate form
       try {
@@ -629,6 +478,13 @@ const PeopleHub: React.FC = () => {
             profilePhoto: null, // Keep as null, user can upload new one if needed
             previousProfilePhoto: tenantData.profilePhoto || null,
             previousDocuments: tenantData.documents || null,
+            profession: tenantData.profession || '',
+            professionDetails: tenantData.professionDetails || '',
+            professionDocuments: null,
+            previousProfessionDocuments: tenantData.professionDocuments || null,
+            emergencyContactName: tenantData.emergencyContactName || '',
+            emergencyContactNumber: tenantData.emergencyContactNumber || '',
+            emergencyContactRelation: tenantData.emergencyContactRelation || '',
             hostelId: tenantData.activeAllocation?.hostel?.id?.toString() || '',
             floorId: tenantData.activeAllocation?.floor?.id?.toString() || '',
             roomId: tenantData.activeAllocation?.room?.id?.toString() || '',
@@ -640,32 +496,10 @@ const PeopleHub: React.FC = () => {
             documents: null, // Keep as null, user can upload new one if needed
           });
           
-          // Fetch floors, rooms, and beds if hostel is selected
-          if (tenantData.activeAllocation?.hostel?.id) {
-            try {
-              const floors = await tenantService.getFloors();
-              // Filter floors by hostel if hostelId is available
-              const filteredFloors = tenantData.activeAllocation.hostel.id 
-                ? floors.filter(f => f.hostelId === tenantData.activeAllocation.hostel.id)
-                : floors;
-              setAvailableFloors(filteredFloors.map(f => ({ value: f.id.toString(), label: f.floorName })));
-              
-              if (tenantData.activeAllocation?.floor?.id) {
-                const rooms = await tenantService.getRoomsByFloor(tenantData.activeAllocation.floor.id);
-                setAvailableRooms(rooms.map(r => ({ value: r.id.toString(), label: r.roomNumber })));
-                
-                if (tenantData.activeAllocation?.room?.id) {
-                  const beds = await tenantService.getBedsByRoom(tenantData.activeAllocation.room.id);
-                  setAvailableBeds(beds.map(b => ({ value: b.id.toString(), label: b.bedNumber })));
-                }
-              }
-            } catch (error) {
-              console.error('Error fetching allocation data:', error);
-            }
-          }
+          // Floors, rooms, and beds will be loaded automatically by TenantForm component
+          // when it opens with the hostelId from initialData
           
-          // Open the add modal in edit mode
-          setCurrentStep(1);
+          // Open the add modal in edit mode - form will load data from initialData prop
           setIsAddModalOpen(true);
         }
       } catch (error) {
@@ -679,9 +513,8 @@ const PeopleHub: React.FC = () => {
         setTenantsLoading(false);
       }
     } else if (type === 'Employee') {
-      // Set editing employee ID and open modal first
+      // Set editing employee ID and open modal first - form will reset itself
       setEditingEmployeeId(id);
-      setEmployeeCurrentStep(1);
       setIsAddModalOpen(true);
       
       // Then fetch employee data from API and populate form
@@ -749,10 +582,51 @@ const PeopleHub: React.FC = () => {
       } finally {
         setEmployeesLoading(false);
       }
+    } else if (type === 'Prospect') {
+      // Fetch prospect data from API and populate form
+      try {
+        setProspectsLoading(true);
+        const prospectData = await prospectService.getProspectForEdit(id);
+        if (prospectData && prospectData.prospect) {
+          // Set editing prospect ID
+          setEditingProspectId(id);
+          
+          // Populate form with prospect data
+          setProspectFormData({
+            firstName: prospectData.prospect.firstName || '',
+            lastName: prospectData.prospect.lastName || '',
+            email: prospectData.prospect.email || '',
+            phone: prospectData.prospect.phone || '',
+            gender: prospectData.prospect.gender || '',
+            dateOfBirth: prospectData.prospect.dateOfBirth ? new Date(prospectData.prospect.dateOfBirth).toISOString().split('T')[0] : '',
+            cnicNumber: prospectData.prospect.cnicNumber || '',
+            profilePhoto: null, // Keep as null, user can upload new one if needed
+            previousProfilePhoto: prospectData.prospect.profilePhoto || null,
+            previousDocuments: prospectData.prospect.documents || null,
+            profession: prospectData.prospect.profession || '',
+            professionDetails: prospectData.prospect.professionDetails || '',
+            professionDocuments: null,
+            previousProfessionDocuments: prospectData.prospect.professionDocuments || null,
+            documents: null, // Keep as null, user can upload new one if needed
+          });
+          
+          // Open the add modal in edit mode - form will load data from initialData prop
+          setIsAddModalOpen(true);
+        }
+      } catch (error) {
+        console.error('Error fetching prospect for edit:', error);
+        setToast({
+          open: true,
+          type: 'error',
+          message: 'Failed to load prospect data for editing. Please try again.',
+        });
+      } finally {
+        setProspectsLoading(false);
+      }
     }
   };
 
-  const handleDelete = async (id: number, type: 'Tenant' | 'Employee', name: string) => {
+  const handleDelete = async (id: number, type: 'Tenant' | 'Employee' | 'Prospect', name: string) => {
     if (!window.confirm(`Are you sure you want to delete ${name}? This action cannot be undone.`)) {
       return;
     }
@@ -819,167 +693,118 @@ const PeopleHub: React.FC = () => {
       } finally {
         setEmployeesLoading(false);
       }
+    } else if (type === 'Prospect') {
+      try {
+        setProspectsLoading(true);
+        await prospectService.deleteProspect(id);
+        
+        setToast({
+          open: true,
+          type: 'success',
+          message: `Prospect "${name}" deleted successfully!`,
+        });
+
+        // Refresh prospects list
+        if (activeSection === 'Prospects') {
+          try {
+            const prospectsData = await prospectService.getAllProspects();
+            setProspects(prospectsData);
+          } catch (error) {
+            console.error('Error refreshing prospects list:', error);
+          }
+        }
+      } catch (error: any) {
+        console.error('Error deleting prospect:', error);
+        const errorMessage = error?.response?.data?.message || error?.message || 'Failed to delete prospect. Please try again.';
+        setToast({
+          open: true,
+          type: 'error',
+          message: errorMessage,
+        });
+      } finally {
+        setProspectsLoading(false);
+      }
     }
   };
 
   const handleAddClick = () => {
-    if (activeSection === 'Tenants') {
-      // Reset tenant form for multi-step wizard
-      setEditingTenantId(null);
-      setCurrentStep(1);
-      setTenantFormData({
-        firstName: '',
-        lastName: '',
-        email: '',
-        phone: '',
-        gender: '',
-        dateOfBirth: '',
-        cnicNumber: '',
-        profilePhoto: null,
-        previousProfilePhoto: null,
-        previousDocuments: null,
-        hostelId: '',
-        floorId: '',
-        roomId: '',
-        bedId: '',
-        leaseStartDate: '',
-        leaseEndDate: '',
-        monthlyRent: '',
-        securityDeposit: '',
-        documents: null,
-      });
-      setAvailableFloors([]);
-      setAvailableRooms([]);
-      setAvailableBeds([]);
-    } else if (activeSection === 'Employees') {
-      // Reset employee form for multi-step wizard
-      setEditingEmployeeId(null);
-      setEmployeeCurrentStep(1);
-      setEmployeeFormData({
-        name: '',
-        email: '',
-        phone: '',
-        username: '',
-        password: '',
-        profilePhoto: null,
-        previousProfilePhoto: null,
-        previousDocuments: null,
-        address: {
-          street: '',
-          city: '',
-          country: '',
-        },
-        roleId: '',
-        hostelId: '',
-        joinDate: '',
-        salary: '',
-        salaryType: 'monthly',
-        workingHours: '',
-        document: null,
-        notes: '',
-      });
-    }
+    // Reset editing IDs - forms will reset themselves when opened
+    setEditingTenantId(null);
+    setEditingEmployeeId(null);
+    setEditingProspectId(null);
+    setTenantFormData({});
+    setEmployeeFormData({});
+    setProspectFormData({});
     setIsAddModalOpen(true);
   };
 
-  // Validate current step
-  const validateStep = (step: number): boolean => {
-    if (step === 1) {
-      return !!(
-        tenantFormData.firstName &&
-        tenantFormData.lastName &&
-        tenantFormData.email &&
-        tenantFormData.phone &&
-        tenantFormData.gender &&
-        tenantFormData.dateOfBirth &&
-        tenantFormData.cnicNumber
-      );
-    } else if (step === 2) {
-      return !!(
-        tenantFormData.hostelId &&
-        tenantFormData.floorId &&
-        tenantFormData.roomId &&
-        tenantFormData.bedId
-      );
-    } else if (step === 3) {
-      return !!(
-        tenantFormData.leaseStartDate &&
-        tenantFormData.leaseEndDate
-      );
-    }
-    return false;
-  };
-
-  const handleNextStep = () => {
-    if (validateStep(currentStep)) {
-      setCurrentStep(prev => Math.min(prev + 1, 3));
-    } else {
-      setToast({
-        open: true,
-        type: 'warning',
-        message: 'Please fill in all required fields before proceeding.',
-      });
-    }
-  };
-
-  const handlePreviousStep = () => {
-    setCurrentStep(prev => Math.max(prev - 1, 1));
-  };
-
-  const handleTenantSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validateStep(3)) {
-      setToast({
-        open: true,
-        type: 'warning',
-        message: 'Please fill in all required fields.',
-      });
-      return;
-    }
-
-    const tenantName = `${tenantFormData.firstName} ${tenantFormData.lastName}`;
+  // Wrapper function for TenantForm onSubmit - receives formData from TenantForm component
+  const handleTenantSubmit = async (formDataFromComponent: TenantFormData): Promise<void> => {
+    const tenantName = `${formDataFromComponent.firstName} ${formDataFromComponent.lastName}`;
     const isEditing = editingTenantId !== null;
     
     // Create FormData for file uploads
     const formData = new FormData();
-    formData.append('firstName', tenantFormData.firstName);
-    formData.append('lastName', tenantFormData.lastName);
-    formData.append('email', tenantFormData.email);
-    formData.append('phone', tenantFormData.phone);
-    formData.append('gender', tenantFormData.gender);
-    if (tenantFormData.dateOfBirth) {
-      formData.append('dateOfBirth', tenantFormData.dateOfBirth);
+    formData.append('firstName', formDataFromComponent.firstName);
+    formData.append('lastName', formDataFromComponent.lastName);
+    formData.append('email', formDataFromComponent.email);
+    formData.append('phone', formDataFromComponent.phone);
+    formData.append('gender', formDataFromComponent.gender);
+    if (formDataFromComponent.dateOfBirth) {
+      formData.append('dateOfBirth', formDataFromComponent.dateOfBirth);
     }
-    if (tenantFormData.cnicNumber) {
-      formData.append('cnicNumber', tenantFormData.cnicNumber);
+    if (formDataFromComponent.cnicNumber) {
+      formData.append('cnicNumber', formDataFromComponent.cnicNumber);
     }
-    if (tenantFormData.hostelId) {
-      formData.append('hostelId', tenantFormData.hostelId);
+    if (formDataFromComponent.hostelId) {
+      formData.append('hostelId', formDataFromComponent.hostelId);
     }
-    if (tenantFormData.floorId) {
-      formData.append('floorId', tenantFormData.floorId);
+    if (formDataFromComponent.floorId) {
+      formData.append('floorId', formDataFromComponent.floorId);
     }
-    if (tenantFormData.roomId) {
-      formData.append('roomId', tenantFormData.roomId);
+    if (formDataFromComponent.roomId) {
+      formData.append('roomId', formDataFromComponent.roomId);
     }
-    if (tenantFormData.bedId) {
-      formData.append('bedId', tenantFormData.bedId);
+    if (formDataFromComponent.bedId) {
+      formData.append('bedId', formDataFromComponent.bedId);
     }
-    if (tenantFormData.leaseStartDate) {
-      formData.append('leaseStartDate', tenantFormData.leaseStartDate);
+    if (formDataFromComponent.leaseStartDate) {
+      formData.append('leaseStartDate', formDataFromComponent.leaseStartDate);
     }
-    if (tenantFormData.leaseEndDate) {
-      formData.append('leaseEndDate', tenantFormData.leaseEndDate);
+    if (formDataFromComponent.leaseEndDate) {
+      formData.append('leaseEndDate', formDataFromComponent.leaseEndDate);
     }
-    formData.append('monthlyRent', tenantFormData.monthlyRent || '0');
-    formData.append('securityDeposit', tenantFormData.securityDeposit || '0');
+    formData.append('monthlyRent', formDataFromComponent.monthlyRent || '0');
+    formData.append('securityDeposit', formDataFromComponent.securityDeposit || '0');
     
-    if (tenantFormData.profilePhoto) {
-      formData.append('profilePhoto', tenantFormData.profilePhoto);
+    // Professional fields
+    if (formDataFromComponent.profession) {
+      formData.append('profession', formDataFromComponent.profession);
+    }
+    if (formDataFromComponent.professionDetails) {
+      formData.append('professionDetails', formDataFromComponent.professionDetails);
+    }
+    if (formDataFromComponent.professionDocuments) {
+      formData.append('professionDocuments', formDataFromComponent.professionDocuments);
     }
     
-    if (tenantFormData.documents) {
-      formData.append('documents', tenantFormData.documents);
+    // Emergency contact fields
+    if (formDataFromComponent.emergencyContactName) {
+      formData.append('emergencyContactName', formDataFromComponent.emergencyContactName);
+    }
+    if (formDataFromComponent.emergencyContactNumber) {
+      formData.append('emergencyContactNumber', formDataFromComponent.emergencyContactNumber);
+    }
+    if (formDataFromComponent.emergencyContactRelation) {
+      formData.append('emergencyContactRelation', formDataFromComponent.emergencyContactRelation);
+    }
+    
+    if (formDataFromComponent.profilePhoto) {
+      formData.append('profilePhoto', formDataFromComponent.profilePhoto);
+    }
+    
+    if (formDataFromComponent.documents) {
+      formData.append('documents', formDataFromComponent.documents);
     }
 
     try {
@@ -997,11 +822,10 @@ const PeopleHub: React.FC = () => {
         
         // Create check-in alert in maintenance tab (only for new tenants)
         try {
-          const bedNumber = availableBeds.find(b => b.value === tenantFormData.bedId)?.label || 'N/A';
           alertService.createCheckInAlert(
             tenantName,
-            `Room ${tenantFormData.roomId}`,
-            bedNumber
+            `Room ${formDataFromComponent.roomId}`,
+            `Bed ${formDataFromComponent.bedId}`
           );
         } catch (error) {
           console.error('Failed to create check-in alert:', error);
@@ -1016,31 +840,7 @@ const PeopleHub: React.FC = () => {
 
       setIsAddModalOpen(false);
       setEditingTenantId(null);
-      setCurrentStep(1);
-      setTenantFormData({
-        firstName: '',
-        lastName: '',
-        email: '',
-        phone: '',
-        gender: '',
-        dateOfBirth: '',
-        cnicNumber: '',
-        profilePhoto: null,
-        previousProfilePhoto: null,
-        previousDocuments: null,
-        hostelId: '',
-        floorId: '',
-        roomId: '',
-        bedId: '',
-        leaseStartDate: '',
-        leaseEndDate: '',
-        monthlyRent: '',
-        securityDeposit: '',
-        documents: null,
-      });
-      setAvailableFloors([]);
-      setAvailableRooms([]);
-      setAvailableBeds([]);
+      setTenantFormData({});
 
       // Refresh tenant list if a hostel is selected
       if (selectedHostelId && activeSection === 'Tenants') {
@@ -1058,71 +858,13 @@ const PeopleHub: React.FC = () => {
         type: 'error',
         message: error.message || `Failed to ${isEditing ? 'update' : 'create'} tenant. Please try again.`,
       });
+      throw error; // Re-throw so TenantForm can handle it
     }
   };
 
-  const handleEmployeeNextStep = (e?: React.MouseEvent) => {
-    // Prevent any form submission
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    
-    // Validate step 1 fields before moving to step 2
-    if (employeeCurrentStep === 1) {
-      if (!employeeFormData.name || !employeeFormData.email || !employeeFormData.phone || !employeeFormData.username || !employeeFormData.password) {
-        setToast({
-          open: true,
-          type: 'warning',
-          message: 'Please fill in all required fields (Name, Email, Phone, Username, Password) before proceeding.',
-        });
-        return;
-      }
-    }
-    
-    // Move to next step
-    if (employeeCurrentStep < 2) {
-      console.log('Moving from step', employeeCurrentStep, 'to step', employeeCurrentStep + 1);
-      setEmployeeCurrentStep(employeeCurrentStep + 1);
-    }
-  };
-
-  const handleEmployeePreviousStep = () => {
-    if (employeeCurrentStep > 1) {
-      setEmployeeCurrentStep(employeeCurrentStep - 1);
-    }
-  };
-
-  const handleEmployeeSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    console.log('Form onSubmit triggered, current step:', employeeCurrentStep);
-    
-    // Only submit if we're on the final step (step 2)
-    if (employeeCurrentStep !== 2) {
-      console.log('Not on final step, preventing submission and moving to next step');
-      // If not on final step, just move to next step and prevent any submission
-      // Don't call handleEmployeeNextStep here to avoid double execution
-      if (employeeCurrentStep === 1) {
-        // Validate step 1 fields
-        if (!employeeFormData.name || !employeeFormData.email || !employeeFormData.phone || !employeeFormData.username || !employeeFormData.password) {
-          setToast({
-            open: true,
-            type: 'warning',
-            message: 'Please fill in all required fields (Name, Email, Phone, Username, Password) before proceeding.',
-          });
-          return;
-        }
-      }
-      setEmployeeCurrentStep(employeeCurrentStep + 1);
-      return;
-    }
-    
-    // Final step - submit the form
-    console.log('Submitting employee form on step 2');
-    
-    const employeeName = employeeFormData.name;
+  // Wrapper function for EmployeeForm onSubmit - receives formData from EmployeeForm component
+  const handleEmployeeSubmit = async (formDataFromComponent: EmployeeFormData): Promise<void> => {
+    const employeeName = formDataFromComponent.name;
     const isEditing = editingEmployeeId !== null;
     
     try {
@@ -1137,51 +879,51 @@ const PeopleHub: React.FC = () => {
       const formData = new FormData();
       
       // User fields
-      formData.append('username', employeeFormData.username);
-      formData.append('email', employeeFormData.email);
-      formData.append('phone', employeeFormData.phone);
-      if (employeeFormData.password) {
-        formData.append('password', employeeFormData.password);
+      formData.append('username', formDataFromComponent.username);
+      formData.append('email', formDataFromComponent.email);
+      formData.append('phone', formDataFromComponent.phone);
+      if (formDataFromComponent.password) {
+        formData.append('password', formDataFromComponent.password);
       }
       
       // Employee fields
-      formData.append('name', employeeFormData.name);
-      if (employeeFormData.roleId) {
-        formData.append('roleId', employeeFormData.roleId);
+      formData.append('name', formDataFromComponent.name);
+      if (formDataFromComponent.roleId) {
+        formData.append('roleId', formDataFromComponent.roleId);
       }
-      if (employeeFormData.hostelId) {
-        formData.append('hostelId', employeeFormData.hostelId);
+      if (formDataFromComponent.hostelId) {
+        formData.append('hostelId', formDataFromComponent.hostelId);
       }
-      if (employeeFormData.joinDate) {
-        formData.append('joinDate', employeeFormData.joinDate);
+      if (formDataFromComponent.joinDate) {
+        formData.append('joinDate', formDataFromComponent.joinDate);
       }
-      if (employeeFormData.salary) {
-        formData.append('salary', employeeFormData.salary);
+      if (formDataFromComponent.salary) {
+        formData.append('salary', formDataFromComponent.salary);
       }
-      if (employeeFormData.workingHours) {
-        formData.append('workingHours', employeeFormData.workingHours);
+      if (formDataFromComponent.workingHours) {
+        formData.append('workingHours', formDataFromComponent.workingHours);
       }
-      if (employeeFormData.notes) {
-        formData.append('notes', employeeFormData.notes);
+      if (formDataFromComponent.notes) {
+        formData.append('notes', formDataFromComponent.notes);
       }
       
       // Address fields
-      if (employeeFormData.address.street) {
-        formData.append('address[street]', employeeFormData.address.street);
+      if (formDataFromComponent.address.street) {
+        formData.append('address[street]', formDataFromComponent.address.street);
       }
-      if (employeeFormData.address.city) {
-        formData.append('address[city]', employeeFormData.address.city);
+      if (formDataFromComponent.address.city) {
+        formData.append('address[city]', formDataFromComponent.address.city);
       }
-      if (employeeFormData.address.country) {
-        formData.append('address[country]', employeeFormData.address.country);
+      if (formDataFromComponent.address.country) {
+        formData.append('address[country]', formDataFromComponent.address.country);
       }
       
       // Files
-      if (employeeFormData.profilePhoto) {
-        formData.append('profilePhoto', employeeFormData.profilePhoto);
+      if (formDataFromComponent.profilePhoto) {
+        formData.append('profilePhoto', formDataFromComponent.profilePhoto);
       }
-      if (employeeFormData.document) {
-        formData.append('documents', employeeFormData.document);
+      if (formDataFromComponent.document) {
+        formData.append('documents', formDataFromComponent.document);
       }
 
       let response;
@@ -1199,30 +941,7 @@ const PeopleHub: React.FC = () => {
         });
         setIsAddModalOpen(false);
         setEditingEmployeeId(null);
-        setEmployeeCurrentStep(1);
-        setEmployeeFormData({
-          name: '',
-          email: '',
-          phone: '',
-          username: '',
-          password: '',
-          profilePhoto: null,
-          previousProfilePhoto: null,
-          previousDocuments: null,
-          address: {
-            street: '',
-            city: '',
-            country: '',
-          },
-          roleId: '',
-          hostelId: '',
-          joinDate: '',
-          salary: '',
-          salaryType: 'monthly',
-          workingHours: '',
-          document: null,
-          notes: '',
-        });
+        setEmployeeFormData({});
         
         // Refresh employees list if hostel is selected
         if (selectedHostelId && activeSection === 'Employees') {
@@ -1240,8 +959,94 @@ const PeopleHub: React.FC = () => {
         type: 'error',
         message: errorMessage,
       });
+      throw error; // Re-throw so EmployeeForm can handle it
     } finally {
       setEmployeesLoading(false);
+    }
+  };
+
+  // Wrapper function for ProspectForm onSubmit - receives formData from ProspectForm component
+  const handleProspectSubmit = async (formDataFromComponent: ProspectFormData): Promise<void> => {
+    const prospectName = `${formDataFromComponent.firstName} ${formDataFromComponent.lastName}`;
+    const isEditing = editingProspectId !== null;
+    
+    try {
+      setProspectsLoading(true);
+      setToast({
+        open: true,
+        type: 'info',
+        message: isEditing ? 'Updating prospect...' : 'Creating prospect...',
+      });
+
+      // Create FormData for file uploads
+      const formData = new FormData();
+      formData.append('firstName', formDataFromComponent.firstName);
+      formData.append('lastName', formDataFromComponent.lastName);
+      formData.append('email', formDataFromComponent.email);
+      formData.append('phone', formDataFromComponent.phone);
+      formData.append('gender', formDataFromComponent.gender);
+      if (formDataFromComponent.dateOfBirth) {
+        formData.append('dateOfBirth', formDataFromComponent.dateOfBirth);
+      }
+      if (formDataFromComponent.cnicNumber) {
+        formData.append('cnicNumber', formDataFromComponent.cnicNumber);
+      }
+      
+      // Professional fields
+      if (formDataFromComponent.profession) {
+        formData.append('profession', formDataFromComponent.profession);
+      }
+      if (formDataFromComponent.professionDetails) {
+        formData.append('professionDetails', formDataFromComponent.professionDetails);
+      }
+      
+      // Files
+      if (formDataFromComponent.profilePhoto) {
+        formData.append('profilePhoto', formDataFromComponent.profilePhoto);
+      }
+      if (formDataFromComponent.documents) {
+        formData.append('documents', formDataFromComponent.documents);
+      }
+      if (formDataFromComponent.professionDocuments) {
+        formData.append('professionDocuments', formDataFromComponent.professionDocuments);
+      }
+
+      let response;
+      if (isEditing && editingProspectId) {
+        response = await prospectService.updateProspect(editingProspectId, formData);
+      } else {
+        response = await prospectService.createProspect(formData);
+      }
+      
+      if (response && response.success) {
+        setToast({
+          open: true,
+          type: 'success',
+          message: response.message || (isEditing ? `Prospect "${prospectName}" updated successfully!` : `Prospect "${prospectName}" added successfully!`),
+        });
+        setIsAddModalOpen(false);
+        setEditingProspectId(null);
+        setProspectFormData({});
+        
+        // Refresh prospects list
+        if (activeSection === 'Prospects') {
+          const prospectsData = await prospectService.getAllProspects();
+          setProspects(prospectsData);
+        }
+      } else {
+        throw new Error(response?.message || `Failed to ${isEditing ? 'update' : 'create'} prospect`);
+      }
+    } catch (error: any) {
+      console.error(`Error ${isEditing ? 'updating' : 'creating'} prospect:`, error);
+      const errorMessage = error?.response?.data?.message || error?.message || `Failed to ${isEditing ? 'update' : 'create'} prospect. Please try again.`;
+      setToast({
+        open: true,
+        type: 'error',
+        message: errorMessage,
+      });
+      throw error; // Re-throw so ProspectForm can handle it
+    } finally {
+      setProspectsLoading(false);
     }
   };
 
@@ -1249,55 +1054,10 @@ const PeopleHub: React.FC = () => {
     setIsAddModalOpen(false);
     setEditingTenantId(null);
     setEditingEmployeeId(null);
-    setCurrentStep(1);
-    setEmployeeCurrentStep(1);
-    setTenantFormData({
-      firstName: '',
-      lastName: '',
-      email: '',
-      phone: '',
-      gender: '',
-      dateOfBirth: '',
-      cnicNumber: '',
-      profilePhoto: null,
-      previousProfilePhoto: null,
-      previousDocuments: null,
-      hostelId: '',
-      floorId: '',
-      roomId: '',
-      bedId: '',
-      leaseStartDate: '',
-      leaseEndDate: '',
-      monthlyRent: '',
-      securityDeposit: '',
-      documents: null,
-    });
-    setEmployeeFormData({
-      name: '',
-      email: '',
-      phone: '',
-      username: '',
-      password: '',
-      profilePhoto: null,
-      previousProfilePhoto: null,
-      previousDocuments: null,
-      address: {
-        street: '',
-        city: '',
-        country: '',
-      },
-      roleId: '',
-      hostelId: '',
-      joinDate: '',
-      salary: '',
-      salaryType: 'monthly',
-      workingHours: '',
-      document: null,
-      notes: '',
-    });
-    setAvailableFloors([]);
-    setAvailableRooms([]);
-    setAvailableBeds([]);
+    setEditingProspectId(null);
+    setTenantFormData({});
+    setEmployeeFormData({});
+    setProspectFormData({});
   };
 
   const handleScoreClick = (type: 'Tenant' | 'Employee', id: number, name: string) => {
@@ -1366,43 +1126,104 @@ const PeopleHub: React.FC = () => {
       <div className="flex-1 flex flex-col overflow-hidden">
         {activeSection ? (
           <>
-            {/* Header */}
-            <div className="flex items-center justify-between gap-4 flex-wrap p-6 pb-4">
-              <div>
-                <h1 className="text-3xl font-bold text-slate-900">{activeSection}</h1>
-                <p className="text-slate-600 mt-1">
+        {/* Header */}
+        <div className="flex items-center justify-between gap-4 flex-wrap p-6 pb-4">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900">
+              {activeSection === 'Vendors' 
+                ? (activeVendorSubSection === 'Vendor Management' ? 'Vendor Management' : 'Vendor List')
+                : activeSection}
+            </h1>
+            <p className="text-slate-600 mt-1">
               {activeSection === 'Tenants' && 'Manage tenant information and room allocations.'}
               {activeSection === 'Employees' && 'Manage employee information and roles.'}
-              {activeSection === 'Owners' && 'Manage property owners and their properties.'}
-              {activeSection === 'Vendors' && 'Manage vendor information and services.'}
+              {activeSection === 'Vendors' && activeVendorSubSection === 'Vendor List' && 'View and manage all vendors.'}
+              {activeSection === 'Vendors' && activeVendorSubSection === 'Vendor Management' && 'Manage vendor services and assignments.'}
               {activeSection === 'Prospects' && 'Manage potential tenants and applications.'}
             </p>
-              </div>
+          </div>
           <div className="flex items-center gap-3 flex-wrap">
-            <div className="w-full sm:w-80">
-              <Select
-                value={selectedHostelId}
-                onChange={setSelectedHostelId}
-                options={hostelOptions}
-                disabled={hostelsLoading}
-              />
-            </div>
-            {(activeSection === 'Tenants' || activeSection === 'Employees') && (
-              <Button
-                variant="primary"
-                onClick={handleAddClick}
-                icon={UserPlusIcon}
-              >
-                {activeSection === 'Tenants' ? 'Add Tenant' : 'Add Employee'}
-              </Button>
+            {(activeSection === 'Tenants' || activeSection === 'Employees' || activeSection === 'Vendors' || activeSection === 'Prospects') && (
+              <>
+                {(activeSection !== 'Prospects') && (
+                  <div className="w-full sm:w-80">
+                    <Select
+                      value={selectedHostelId}
+                      onChange={setSelectedHostelId}
+                      options={hostelOptions}
+                      disabled={hostelsLoading}
+                    />
+                  </div>
+                )}
+                {(activeSection === 'Tenants' || activeSection === 'Employees' || activeSection === 'Prospects') && (
+                  <Button
+                    variant="primary"
+                    onClick={handleAddClick}
+                    icon={UserPlusIcon}
+                  >
+                    {activeSection === 'Tenants' ? 'Add Tenant' : activeSection === 'Employees' ? 'Add Employee' : 'Add Prospect'}
+                  </Button>
+                )}
+                {activeSection === 'Vendors' && activeVendorSubSection === 'Vendor List' && (
+                  <Button
+                    variant="primary"
+                    onClick={() => {
+                      // Dispatch event to open vendor modal
+                      window.dispatchEvent(new CustomEvent('openAddVendorModal'));
+                    }}
+                    icon={UserPlusIcon}
+                  >
+                    Add Vendor
+                  </Button>
+                )}
+              </>
             )}
           </div>
         </div>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-6 pb-6">
-          <div className="glass rounded-2xl border border-white/20 shadow-xl p-6">
-          {!selectedHostelId ? (
+          {activeSection === 'Vendors' ? (
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 min-h-[calc(100vh-300px)]">
+              <React.Suspense fallback={
+                <div className="text-center py-16">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+                  <p className="text-gray-600">Loading vendor management...</p>
+                </div>
+              }>
+                <VendorListWrapper 
+                  selectedHostelId={selectedHostelId}
+                  onHostelChange={setSelectedHostelId}
+                />
+              </React.Suspense>
+            </div>
+          ) : (
+            <div className="glass rounded-2xl border border-white/20 shadow-xl p-6">
+          {activeSection === 'Prospects' ? (
+            prospectsLoading ? (
+              <div className="text-center py-16">
+                <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                <h3 className="text-xl font-semibold text-gray-900 mb-2 mt-4">Loading Prospects...</h3>
+                <p className="text-gray-600">Please wait while we fetch the prospects.</p>
+              </div>
+            ) : filteredProspects.length === 0 ? (
+              <div className="text-center py-16">
+                <UserPlusIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">No Prospects Found</h3>
+                <p className="text-gray-600 mb-6">No prospects found. Start by adding your first prospect.</p>
+                <Button variant="primary" onClick={handleAddClick} icon={UserPlusIcon}>
+                  Add Prospect
+                </Button>
+              </div>
+            ) : (
+              <ProspectTable
+                prospects={filteredProspects}
+                onView={(id) => handleView(id, 'Prospect')}
+                onEdit={(id) => handleEdit(id, 'Prospect')}
+                onDelete={(id, name) => handleDelete(id, 'Prospect', name)}
+              />
+            )
+          ) : !selectedHostelId ? (
             <div className="text-center py-16">
               <HomeIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
               <h3 className="text-xl font-semibold text-gray-900 mb-2">Select a Hostel</h3>
@@ -1425,18 +1246,12 @@ const PeopleHub: React.FC = () => {
                 </Button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {(filteredTenants as any[]).map((t, idx) => (
-                  <TenantCard
-                    key={t.id}
-                    tenant={t}
-                    index={idx}
-                    onView={(id) => handleView(id, 'Tenant')}
-                    onEdit={(id) => handleEdit(id, 'Tenant')}
-                    onDelete={(id, name) => handleDelete(id, 'Tenant', name)}
-                  />
-                ))}
-              </div>
+              <TenantTable
+                tenants={filteredTenants}
+                onView={(id) => handleView(id, 'Tenant')}
+                onEdit={(id) => handleEdit(id, 'Tenant')}
+                onDelete={(id, name) => handleDelete(id, 'Tenant', name)}
+              />
             )
           ) : activeSection === 'Employees' ? (
             employeesLoading ? (
@@ -1454,58 +1269,17 @@ const PeopleHub: React.FC = () => {
                 </Button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {(filteredEmployees as any[]).map((e, idx) => (
-                  <EmployeeCard
-                    key={e.id}
-                    employee={e}
-                    index={idx}
-                    onView={(id) => handleView(id, 'Employee')}
-                    onEdit={(id) => handleEdit(id, 'Employee')}
-                    onDelete={(id, name) => handleDelete(id, 'Employee', name)}
-                  />
-                ))}
-              </div>
+              <EmployeeTable
+                employees={filteredEmployees}
+                onView={(id) => handleView(id, 'Employee')}
+                onEdit={(id) => handleEdit(id, 'Employee')}
+                onDelete={(id, name) => handleDelete(id, 'Employee', name)}
+              />
             )
-          ) : activeSection === 'Owners' ? (
-            ownersLoading ? (
-              <div className="text-center py-16">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
-                <p className="text-gray-600">Loading owners...</p>
-              </div>
-            ) : filteredOwners.length === 0 ? (
-              <div className="text-center py-16">
-                <BriefcaseIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">No Owners Found</h3>
-                <p className="text-gray-600 mb-6">No owners found for the selected hostel.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {(filteredOwners as any[]).map((o, idx) => (
-                  <OwnerCard
-                    key={o.id}
-                    owner={o}
-                    index={idx}
-                    onView={(id) => handleView(id, 'Owner')}
-                  />
-                ))}
-              </div>
-            )
-          ) : activeSection === 'Vendors' ? (
-            <div className="text-center py-16">
-              <BriefcaseIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">Vendors</h3>
-              <p className="text-gray-600">Vendor management coming soon.</p>
-            </div>
-          ) : activeSection === 'Prospects' ? (
-            <div className="text-center py-16">
-              <UserPlusIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">Prospects</h3>
-              <p className="text-gray-600">Prospect management coming soon.</p>
-            </div>
           ) : null}
+            </div>
+          )}
           </div>
-        </div>
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center">
@@ -1519,6 +1293,58 @@ const PeopleHub: React.FC = () => {
 
       {/* View/Edit Modal */}
       {modal && (
+        <ViewModal
+          modal={modal}
+          onClose={() => setModal(null)}
+          detailTab={detailTab}
+          onDetailTabChange={setDetailTab}
+          onScoreClick={(type, id, name) => handleScoreClick(type, id, name)}
+          getScore={getScore}
+          getScoreHistory={getScoreHistory}
+        />
+      )}
+
+      {/* Add Tenant Modal */}
+      {isAddModalOpen && activeSection === 'Tenants' && (
+        <TenantForm
+          isOpen={isAddModalOpen}
+          onClose={handleAddClose}
+          onSubmit={handleTenantSubmit}
+          editingId={editingTenantId}
+          initialData={editingTenantId ? tenantFormData : undefined}
+          hostelOptions={hostelOptions}
+          hostelsLoading={hostelsLoading}
+        />
+      )}
+
+      {/* Add Employee Modal */}
+      {isAddModalOpen && activeSection === 'Employees' && (
+        <EmployeeForm
+          isOpen={isAddModalOpen}
+          onClose={handleAddClose}
+          onSubmit={handleEmployeeSubmit}
+          editingId={editingEmployeeId}
+          initialData={editingEmployeeId ? employeeFormData : undefined}
+          hostelOptions={hostelOptions}
+          hostelsLoading={hostelsLoading}
+          roleOptions={roles}
+          rolesLoading={rolesLoading}
+        />
+      )}
+
+      {/* Add Prospect Modal */}
+      {isAddModalOpen && activeSection === 'Prospects' && (
+        <ProspectForm
+          isOpen={isAddModalOpen}
+          onClose={handleAddClose}
+          onSubmit={handleProspectSubmit}
+          editingId={editingProspectId}
+          initialData={editingProspectId ? prospectFormData : undefined}
+        />
+      )}
+
+      {/* Old modal code removed - using ViewModal component instead */}
+      {false && false && modal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={() => setModal(null)}>
           <motion.div
             initial={{ opacity: 0, scale: 0.96 }}
@@ -1651,7 +1477,7 @@ const PeopleHub: React.FC = () => {
                                         
                                         return (
                                           <div
-                                            key={idx}
+                                            key={doc.id || doc.url || `doc-${idx}`}
                                             className="group relative bg-gray-50 rounded-lg overflow-hidden border border-gray-200 hover:border-blue-300 transition-all hover:shadow-md"
                                           >
                                             <a
@@ -1703,154 +1529,7 @@ const PeopleHub: React.FC = () => {
                                     <div className="space-y-2">
                                       {otherDocs.map((doc: any, idx: number) => (
                                         <a
-                                          key={idx}
-                                          href={`${API_BASE_URL.replace('/api', '')}${doc.url}`}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200 hover:border-blue-300"
-                                        >
-                                          <DocumentTextIcon className="w-5 h-5 text-blue-500 flex-shrink-0" />
-                                          <span className="text-sm text-gray-700 flex-1 truncate" title={doc.originalName || doc.filename}>
-                                            {doc.originalName || doc.filename}
-                                          </span>
-                                        </a>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })()}
-                        </>
-                      ) : modal.type === 'Owner' ? (
-                        <>
-                          {/* Profile Photo */}
-                          <div className="flex justify-center mb-6">
-                            {modal.data.profilePhoto ? (
-                              <img 
-                                src={`${API_BASE_URL.replace('/api', '')}${modal.data.profilePhoto}`} 
-                                alt={modal.data.name}
-                                className="w-24 h-24 rounded-full object-cover border-4 border-purple-200"
-                                onError={(e) => {
-                                  const target = e.target as HTMLImageElement;
-                                  target.style.display = 'none';
-                                  const parent = target.parentElement;
-                                  if (parent) {
-                                    const fallback = document.createElement('div');
-                                    fallback.className = 'w-24 h-24 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 text-white flex items-center justify-center font-bold text-2xl';
-                                    fallback.textContent = modal.data.name.charAt(0).toUpperCase();
-                                    parent.appendChild(fallback);
-                                  }
-                                }}
-                              />
-                            ) : (
-                              <div className="w-24 h-24 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 text-white flex items-center justify-center font-bold text-2xl">
-                                {modal.data.name.charAt(0).toUpperCase()}
-                              </div>
-                            )}
-                          </div>
-                          
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <Info label="Name" value={modal.data.name} />
-                            <Info label="Status" value={modal.data.status} />
-                            <Info label="Email" value={modal.data.email || 'N/A'} />
-                            <Info label="Phone" value={modal.data.phone || 'N/A'} />
-                            {modal.data.alternatePhone && <Info label="Alternate Phone" value={modal.data.alternatePhone} />}
-                            {modal.data.ownerCode && <Info label="Owner Code" value={modal.data.ownerCode} />}
-                            {modal.data.HostelName && <Info label="Hostel Name" value={modal.data.HostelName} />}
-                            {modal.data.taxId && <Info label="Tax ID" value={modal.data.taxId} />}
-                            {modal.data.registrationNumber && <Info label="Registration Number" value={modal.data.registrationNumber} />}
-                            {modal.data.address && (
-                              <>
-                                {modal.data.address.city && <Info label="City" value={modal.data.address.city} />}
-                                {modal.data.address.state && <Info label="State" value={modal.data.address.state} />}
-                              </>
-                            )}
-                            {modal.data.hostelCount !== undefined && <Info label="Total Hostels" value={modal.data.hostelCount.toString()} />}
-                            {modal.data.notes && <Info label="Notes" value={modal.data.notes} />}
-                            {modal.data.createdAt && <Info label="Created At" value={new Date(modal.data.createdAt).toLocaleDateString()} />}
-                            {modal.data.updatedAt && <Info label="Updated At" value={new Date(modal.data.updatedAt).toLocaleDateString()} />}
-                          </div>
-                          
-                          {/* Documents */}
-                          {modal.data.documents && modal.data.documents.length > 0 && (() => {
-                            const imageDocs = modal.data.documents.filter((doc: any) => 
-                              doc.mimetype?.startsWith('image/') || 
-                              /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(doc.originalName || doc.filename || '')
-                            );
-                            const otherDocs = modal.data.documents.filter((doc: any) => 
-                              !doc.mimetype?.startsWith('image/') && 
-                              !/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(doc.originalName || doc.filename || '')
-                            );
-
-                            return (
-                              <div className="mt-6">
-                                <h4 className="font-semibold text-gray-900 mb-4">Documents</h4>
-                                
-                                {/* Images Grid */}
-                                {imageDocs.length > 0 && (
-                                  <div className="mb-6">
-                                    <h5 className="text-sm font-medium text-gray-700 mb-3">Images</h5>
-                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                                      {imageDocs.map((doc: any, idx: number) => {
-                                        const imageUrl = `${API_BASE_URL.replace('/api', '')}${doc.url}`;
-                                        const imageName = doc.originalName || doc.filename || 'Image';
-                                        
-                                        return (
-                                          <div
-                                            key={idx}
-                                            className="group relative bg-gray-50 rounded-lg overflow-hidden border border-gray-200 hover:border-blue-300 transition-all hover:shadow-md"
-                                          >
-                                            <a
-                                              href={imageUrl}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="block"
-                                            >
-                                              <div className="relative w-full aspect-square bg-gray-100 overflow-hidden">
-                                                <img
-                                                  src={imageUrl}
-                                                  alt={imageName}
-                                                  className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                                                  onError={(e) => {
-                                                    const target = e.target as HTMLImageElement;
-                                                    target.style.display = 'none';
-                                                    const parent = target.parentElement;
-                                                    if (parent) {
-                                                      parent.innerHTML = `
-                                                        <div class="w-full h-full flex items-center justify-center bg-gray-200">
-                                                          <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                                                          </svg>
-                                                        </div>
-                                                      `;
-                                                    }
-                                                  }}
-                                                />
-                                              </div>
-                                              <div className="p-2 bg-white border-t border-gray-200">
-                                                <p className="text-xs text-gray-700 font-medium truncate" title={imageName}>
-                                                  {imageName}
-                                                </p>
-                                              </div>
-                                            </a>
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Other Documents */}
-                                {otherDocs.length > 0 && (
-                                  <div>
-                                    <h5 className="text-sm font-medium text-gray-700 mb-3">
-                                      {imageDocs.length > 0 ? 'Other Documents' : 'Documents'}
-                                    </h5>
-                                    <div className="space-y-2">
-                                      {otherDocs.map((doc: any, idx: number) => (
-                                        <a
-                                          key={idx}
+                                          key={doc.id || doc.url || `doc-${idx}`}
                                           href={`${API_BASE_URL.replace('/api', '')}${doc.url}`}
                                           target="_blank"
                                           rel="noopener noreferrer"
@@ -1957,7 +1636,7 @@ const PeopleHub: React.FC = () => {
                                         
                                         return (
                                           <div
-                                            key={idx}
+                                            key={doc.id || doc.url || `doc-${idx}`}
                                             className="group relative bg-gray-50 rounded-lg overflow-hidden border border-gray-200 hover:border-green-300 transition-all hover:shadow-md"
                                           >
                                             <a
@@ -2009,7 +1688,7 @@ const PeopleHub: React.FC = () => {
                                     <div className="space-y-2">
                                       {otherDocs.map((doc: any, idx: number) => (
                                         <a
-                                          key={idx}
+                                          key={doc.id || doc.url || `doc-${idx}`}
                                           href={`${API_BASE_URL.replace('/api', '')}${doc.url}`}
                                           target="_blank"
                                           rel="noopener noreferrer"
@@ -2063,1064 +1742,16 @@ const PeopleHub: React.FC = () => {
         </div>
       )}
 
-      {/* Add Tenant/Employee Modal */}
-      <Modal
-        isOpen={isAddModalOpen}
-        onClose={handleAddClose}
-        title={activeSection === 'Tenants' 
-          ? (editingTenantId ? `Edit Tenant - Step ${currentStep} of 3` : `Add New Tenant - Step ${currentStep} of 3`) 
-          : (editingEmployeeId ? `Edit Employee - Step ${employeeCurrentStep} of 2` : `Add New Employee - Step ${employeeCurrentStep} of 2`)}
-        size="lg"
-      >
-        {activeSection === 'Tenants' ? (
-          <form onSubmit={handleTenantSubmit} className="space-y-6">
-            {/* Step Progress Indicator */}
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-2">
-                {[1, 2, 3].map((step) => (
-                  <div key={step} className="flex items-center flex-1">
-                    <div className="flex items-center">
-                      <div
-                        className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm ${
-                          currentStep >= step
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-gray-200 text-gray-600'
-                        }`}
-                      >
-                        {currentStep > step ? '✓' : step}
-                      </div>
-                      <div className="ml-2 hidden sm:block">
-                        <p className={`text-xs font-medium ${
-                          currentStep >= step ? 'text-blue-600' : 'text-gray-500'
-                        }`}>
-                          {step === 1 ? 'Personal' : step === 2 ? 'Room' : 'Lease'}
-                        </p>
-                      </div>
-                    </div>
-                    {step < 3 && (
-                      <div
-                        className={`flex-1 h-1 mx-2 ${
-                          currentStep > step ? 'bg-blue-600' : 'bg-gray-200'
-                        }`}
-                      />
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Step 1: Personal Information */}
-            <AnimatePresence mode="wait">
-              {currentStep === 1 && (
-                <motion.div
-                  key="step1"
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
-                  className="space-y-4"
-                >
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Personal Information</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        First Name <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={tenantFormData.firstName}
-                        onChange={(e) => setTenantFormData({ ...tenantFormData, firstName: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
-                        placeholder="John"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Last Name <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={tenantFormData.lastName}
-                        onChange={(e) => setTenantFormData({ ...tenantFormData, lastName: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
-                        placeholder="Doe"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Email <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="email"
-                        required
-                        value={tenantFormData.email}
-                        onChange={(e) => setTenantFormData({ ...tenantFormData, email: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
-                        placeholder="john@example.com"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Phone <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="tel"
-                        required
-                        value={tenantFormData.phone}
-                        onChange={(e) => setTenantFormData({ ...tenantFormData, phone: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
-                        placeholder="+1 234 567 8900"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Gender <span className="text-red-500">*</span>
-                      </label>
-                      <Select
-                        value={tenantFormData.gender}
-                        onChange={(value) => setTenantFormData({ ...tenantFormData, gender: value })}
-                        options={[
-                          { value: '', label: 'Select Gender' },
-                          { value: 'male', label: 'Male' },
-                          { value: 'female', label: 'Female' },
-                          { value: 'other', label: 'Other' },
-                        ]}
-                        placeholder="Select Gender"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Date of Birth <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="date"
-                        required
-                        value={tenantFormData.dateOfBirth}
-                        onChange={(e) => setTenantFormData({ ...tenantFormData, dateOfBirth: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        CNIC Number <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={tenantFormData.cnicNumber}
-                        onChange={(e) => setTenantFormData({ ...tenantFormData, cnicNumber: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
-                        placeholder="12345-1234567-1"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Profile Photo
-                      </label>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0] || null;
-                          setTenantFormData({ ...tenantFormData, profilePhoto: file });
-                        }}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
-                      />
-                      {tenantFormData.profilePhoto && (
-                        <p className="text-sm text-gray-600 mt-1">
-                          Selected: {tenantFormData.profilePhoto.name}
-                        </p>
-                      )}
-                      {editingTenantId && tenantFormData.previousProfilePhoto && !tenantFormData.profilePhoto && (
-                        <div className="mt-3">
-                          <p className="text-sm text-gray-600 mb-2">Current Profile Photo:</p>
-                          <img
-                            src={`${API_BASE_URL.replace('/api', '')}${tenantFormData.previousProfilePhoto}`}
-                            alt="Current profile"
-                            className="w-24 h-24 rounded-full object-cover border-2 border-gray-300"
-                            onError={(e) => {
-                              const target = e.target as HTMLImageElement;
-                              target.style.display = 'none';
-                            }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-
-              {/* Step 2: Room Allocation */}
-              {currentStep === 2 && (
-                <motion.div
-                  key="step2"
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
-                  className="space-y-4"
-                >
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Room Allocation Details</h3>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Hostel <span className="text-red-500">*</span>
-                      </label>
-                      <Select
-                        value={tenantFormData.hostelId}
-                        onChange={(value) => {
-                          setTenantFormData({
-                            ...tenantFormData,
-                            hostelId: value,
-                            floorId: '',
-                            roomId: '',
-                            bedId: '',
-                          });
-                        }}
-                        options={hostelOptions.filter(opt => opt.value !== '')}
-                        placeholder={hostelsLoading ? "Loading hostels..." : "Select Hostel"}
-                        disabled={hostelsLoading}
-                      />
-                    </div>
-                    {tenantFormData.hostelId && (
-                      <>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Floor <span className="text-red-500">*</span>
-                          </label>
-                          <Select
-                            value={tenantFormData.floorId}
-                            onChange={(value) => {
-                              setTenantFormData({
-                                ...tenantFormData,
-                                floorId: value,
-                                roomId: '',
-                                bedId: '',
-                              });
-                            }}
-                            options={availableFloors}
-                            placeholder={floorsLoading ? "Loading floors..." : "Select Floor"}
-                            disabled={floorsLoading}
-                          />
-                        </div>
-                        {tenantFormData.floorId && (
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Room <span className="text-red-500">*</span>
-                            </label>
-                            <Select
-                              value={tenantFormData.roomId}
-                              onChange={(value) => {
-                                setTenantFormData({
-                                  ...tenantFormData,
-                                  roomId: value,
-                                  bedId: '',
-                                });
-                              }}
-                              options={availableRooms}
-                              placeholder={roomsLoading ? "Loading rooms..." : "Select Room"}
-                              disabled={roomsLoading}
-                            />
-                          </div>
-                        )}
-                        {tenantFormData.roomId && (
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Bed <span className="text-red-500">*</span>
-                            </label>
-                            <Select
-                              value={tenantFormData.bedId}
-                              onChange={(value) => {
-                                setTenantFormData({
-                                  ...tenantFormData,
-                                  bedId: value,
-                                });
-                              }}
-                              options={availableBeds}
-                              placeholder={bedsLoading ? "Loading beds..." : "Select Available Bed"}
-                              disabled={bedsLoading}
-                            />
-                            {!bedsLoading && availableBeds.length === 0 && (
-                              <p className="text-sm text-red-600 mt-2">No available beds in this room.</p>
-                            )}
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </motion.div>
-              )}
-
-              {/* Step 3: Lease Information */}
-              {currentStep === 3 && (
-                <motion.div
-                  key="step3"
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
-                  className="space-y-4"
-                >
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Lease Information</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Lease Start Date <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="date"
-                        required
-                        value={tenantFormData.leaseStartDate}
-                        onChange={(e) => setTenantFormData({ ...tenantFormData, leaseStartDate: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Lease End Date <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="date"
-                        required
-                        value={tenantFormData.leaseEndDate}
-                        onChange={(e) => setTenantFormData({ ...tenantFormData, leaseEndDate: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Monthly Rent
-                      </label>
-                      <input
-                        type="number"
-                        value={tenantFormData.monthlyRent}
-                        onChange={(e) => setTenantFormData({ ...tenantFormData, monthlyRent: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
-                        placeholder="20000"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Security Deposit
-                      </label>
-                      <input
-                        type="number"
-                        value={tenantFormData.securityDeposit}
-                        onChange={(e) => setTenantFormData({ ...tenantFormData, securityDeposit: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
-                        placeholder="1000"
-                      />
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Documents
-                      </label>
-                      <input
-                        type="file"
-                        accept=".pdf,.doc,.docx,image/*"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0] || null;
-                          setTenantFormData({ ...tenantFormData, documents: file });
-                        }}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
-                      />
-                      {tenantFormData.documents && (
-                        <p className="text-sm text-gray-600 mt-1">
-                          Selected: {tenantFormData.documents.name}
-                        </p>
-                      )}
-                      {editingTenantId && tenantFormData.previousDocuments && tenantFormData.previousDocuments.length > 0 && (
-                        <div className="mt-4">
-                          <p className="text-sm font-medium text-gray-700 mb-3">Current Documents:</p>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                            {tenantFormData.previousDocuments.map((doc: any, idx: number) => {
-                              const isImage = doc.mimetype?.startsWith('image/') || 
-                                /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(doc.originalName || doc.filename || '');
-                              const docUrl = `${API_BASE_URL.replace('/api', '')}${doc.url}`;
-                              const docName = doc.originalName || doc.filename || 'Document';
-                              
-                              return (
-                                <div
-                                  key={idx}
-                                  className="group relative bg-gray-50 rounded-lg overflow-hidden border border-gray-200"
-                                >
-                                  {isImage ? (
-                                    <a
-                                      href={docUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="block"
-                                    >
-                                      <div className="relative w-full aspect-square bg-gray-100 overflow-hidden">
-                                        <img
-                                          src={docUrl}
-                                          alt={docName}
-                                          className="w-full h-full object-cover"
-                                          onError={(e) => {
-                                            const target = e.target as HTMLImageElement;
-                                            target.style.display = 'none';
-                                            const parent = target.parentElement;
-                                            if (parent) {
-                                              parent.innerHTML = `
-                                                <div class="w-full h-full flex items-center justify-center bg-gray-200">
-                                                  <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                                                  </svg>
-                                                </div>
-                                              `;
-                                            }
-                                          }}
-                                        />
-                                      </div>
-                                      <div className="p-2 bg-white border-t border-gray-200">
-                                        <p className="text-xs text-gray-700 font-medium truncate" title={docName}>
-                                          {docName}
-                                        </p>
-                                      </div>
-                                    </a>
-                                  ) : (
-                                    <a
-                                      href={docUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="flex items-center gap-2 p-3"
-                                    >
-                                      <DocumentTextIcon className="w-5 h-5 text-blue-500 flex-shrink-0" />
-                                      <span className="text-xs text-gray-700 truncate" title={docName}>
-                                        {docName}
-                                      </span>
-                                    </a>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Navigation Buttons */}
-            <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={currentStep === 1 ? handleAddClose : handlePreviousStep}
-              >
-                {currentStep === 1 ? 'Cancel' : 'Previous'}
-              </Button>
-              <div className="flex gap-2">
-                {currentStep < 3 ? (
-                  <Button
-                    type="button"
-                    variant="primary"
-                    onClick={handleNextStep}
-                  >
-                    Next
-                  </Button>
-                ) : (
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    icon={UserPlusIcon}
-                  >
-                    {editingTenantId ? 'Update Tenant' : 'Add Tenant'}
-                  </Button>
-                )}
-              </div>
-            </div>
-          </form>
-        ) : (
-          <form 
-            onSubmit={handleEmployeeSubmit} 
-            onKeyDown={(e) => {
-              // Prevent form submission on Enter key if not on final step
-              if (e.key === 'Enter') {
-                if (employeeCurrentStep < 2) {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  console.log('Enter key pressed on step 1, preventing submission');
-                  handleEmployeeNextStep();
-                }
-                // On step 2, allow Enter to submit (default behavior)
-              }
-            }}
-            className="space-y-6"
-          >
-            {/* Step Progress Indicator */}
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-2">
-                {[1, 2].map((step) => (
-                  <div key={step} className="flex items-center flex-1">
-                    <div className="flex items-center">
-                      <div
-                        className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm ${
-                          employeeCurrentStep >= step
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-gray-200 text-gray-600'
-                        }`}
-                      >
-                        {employeeCurrentStep > step ? '✓' : step}
-                      </div>
-                      <div className="ml-2 hidden sm:block">
-                        <p className={`text-xs font-medium ${
-                          employeeCurrentStep >= step ? 'text-blue-600' : 'text-gray-500'
-                        }`}>
-                          {step === 1 ? 'Personal' : 'Employment'}
-                        </p>
-                      </div>
-                    </div>
-                    {step < 2 && (
-                      <div
-                        className={`flex-1 h-1 mx-2 ${
-                          employeeCurrentStep > step ? 'bg-blue-600' : 'bg-gray-200'
-                        }`}
-                      />
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Step 1: Personal Information */}
-            <AnimatePresence mode="wait">
-              {employeeCurrentStep === 1 && (
-                <motion.div
-                  key="employee-step1"
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
-                  className="space-y-4"
-                >
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Personal Information</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Full Name <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={employeeFormData.name}
-                        onChange={(e) => setEmployeeFormData({ ...employeeFormData, name: e.target.value })}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            if (employeeCurrentStep < 2) {
-                              handleEmployeeNextStep();
-                            }
-                          }
-                        }}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
-                        placeholder="John Doe"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Email <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="email"
-                        value={employeeFormData.email}
-                        onChange={(e) => setEmployeeFormData({ ...employeeFormData, email: e.target.value })}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            if (employeeCurrentStep < 2) {
-                              handleEmployeeNextStep();
-                            }
-                          }
-                        }}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
-                        placeholder="john@example.com"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Phone <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="tel"
-                        value={employeeFormData.phone}
-                        onChange={(e) => setEmployeeFormData({ ...employeeFormData, phone: e.target.value })}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            if (employeeCurrentStep < 2) {
-                              handleEmployeeNextStep();
-                            }
-                          }
-                        }}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
-                        placeholder="+1 234 567 8900"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Username <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={employeeFormData.username}
-                        onChange={(e) => setEmployeeFormData({ ...employeeFormData, username: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
-                        placeholder="johndoe"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Password <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="password"
-                        value={employeeFormData.password}
-                        onChange={(e) => setEmployeeFormData({ ...employeeFormData, password: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
-                        placeholder="Enter password"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Profile Photo
-                      </label>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0] || null;
-                          setEmployeeFormData({ ...employeeFormData, profilePhoto: file });
-                        }}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
-                      />
-                      {employeeFormData.profilePhoto && (
-                        <p className="text-sm text-gray-600 mt-1">
-                          Selected: {employeeFormData.profilePhoto.name}
-                        </p>
-                      )}
-                      {editingEmployeeId && employeeFormData.previousProfilePhoto && !employeeFormData.profilePhoto && (
-                        <div className="mt-3">
-                          <p className="text-sm text-gray-600 mb-2">Current Profile Photo:</p>
-                          <img
-                            src={`${API_BASE_URL.replace('/api', '')}${employeeFormData.previousProfilePhoto}`}
-                            alt="Current profile"
-                            className="w-24 h-24 rounded-full object-cover border-2 border-gray-300"
-                            onError={(e) => {
-                              const target = e.target as HTMLImageElement;
-                              target.style.display = 'none';
-                            }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Street Address
-                      </label>
-                      <input
-                        type="text"
-                        value={employeeFormData.address.street}
-                        onChange={(e) => setEmployeeFormData({ 
-                          ...employeeFormData, 
-                          address: { ...employeeFormData.address, street: e.target.value }
-                        })}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
-                        placeholder="123 Main St"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        City
-                      </label>
-                      <input
-                        type="text"
-                        value={employeeFormData.address.city}
-                        onChange={(e) => setEmployeeFormData({ 
-                          ...employeeFormData, 
-                          address: { ...employeeFormData.address, city: e.target.value }
-                        })}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
-                        placeholder="New York"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Country
-                      </label>
-                      <input
-                        type="text"
-                        value={employeeFormData.address.country}
-                        onChange={(e) => setEmployeeFormData({ 
-                          ...employeeFormData, 
-                          address: { ...employeeFormData.address, country: e.target.value }
-                        })}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
-                        placeholder="United States"
-                      />
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-
-              {/* Step 2: Employment Details */}
-              {employeeCurrentStep === 2 && (
-                <motion.div
-                  key="employee-step2"
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
-                  className="space-y-4"
-                >
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Employment Details</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Role/Position <span className="text-red-500">*</span>
-                      </label>
-                      <Select
-                        value={employeeFormData.roleId}
-                        onChange={(value) => setEmployeeFormData({ ...employeeFormData, roleId: value })}
-                        options={[
-                          { value: '', label: rolesLoading ? 'Loading roles...' : 'Select Role' },
-                          ...roles,
-                        ]}
-                        placeholder={rolesLoading ? "Loading roles..." : "Select Role"}
-                        disabled={rolesLoading}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Hostel <span className="text-red-500">*</span>
-                      </label>
-                      <Select
-                        value={employeeFormData.hostelId}
-                        onChange={(value) => setEmployeeFormData({ ...employeeFormData, hostelId: value })}
-                        options={hostelOptions.filter(opt => opt.value !== '')}
-                        placeholder={hostelsLoading ? "Loading hostels..." : "Select Hostel"}
-                        disabled={hostelsLoading}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Join Date <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="date"
-                        required
-                        value={employeeFormData.joinDate}
-                        onChange={(e) => setEmployeeFormData({ ...employeeFormData, joinDate: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Working Hours
-                      </label>
-                      <input
-                        type="text"
-                        value={employeeFormData.workingHours}
-                        onChange={(e) => setEmployeeFormData({ ...employeeFormData, workingHours: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
-                        placeholder="9:00 AM - 5:00 PM"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Salary
-                      </label>
-                      <input
-                        type="number"
-                        value={employeeFormData.salary}
-                        onChange={(e) => setEmployeeFormData({ ...employeeFormData, salary: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
-                        placeholder="3000"
-                      />
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Document
-                      </label>
-                      <input
-                        type="file"
-                        accept=".pdf,.doc,.docx,image/*"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0] || null;
-                          setEmployeeFormData({ ...employeeFormData, document: file });
-                        }}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
-                      />
-                      {employeeFormData.document && (
-                        <p className="text-sm text-gray-600 mt-1">
-                          Selected: {employeeFormData.document.name}
-                        </p>
-                      )}
-                      {editingEmployeeId && employeeFormData.previousDocuments && employeeFormData.previousDocuments.length > 0 && (
-                        <div className="mt-4">
-                          <p className="text-sm font-medium text-gray-700 mb-3">Current Documents:</p>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                            {employeeFormData.previousDocuments.map((doc: any, idx: number) => {
-                              const isImage = doc.mimetype?.startsWith('image/') || 
-                                /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(doc.originalName || doc.filename || '');
-                              const docUrl = `${API_BASE_URL.replace('/api', '')}${doc.url}`;
-                              const docName = doc.originalName || doc.filename || 'Document';
-                              
-                              return (
-                                <div
-                                  key={idx}
-                                  className="group relative bg-gray-50 rounded-lg overflow-hidden border border-gray-200"
-                                >
-                                  {isImage ? (
-                                    <a
-                                      href={docUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="block"
-                                    >
-                                      <div className="relative w-full aspect-square bg-gray-100 overflow-hidden">
-                                        <img
-                                          src={docUrl}
-                                          alt={docName}
-                                          className="w-full h-full object-cover"
-                                          onError={(e) => {
-                                            const target = e.target as HTMLImageElement;
-                                            target.style.display = 'none';
-                                            const parent = target.parentElement;
-                                            if (parent) {
-                                              parent.innerHTML = `
-                                                <div class="w-full h-full flex items-center justify-center bg-gray-200">
-                                                  <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                                                  </svg>
-                                                </div>
-                                              `;
-                                            }
-                                          }}
-                                        />
-                                      </div>
-                                      <div className="p-2 bg-white border-t border-gray-200">
-                                        <p className="text-xs text-gray-700 font-medium truncate" title={docName}>
-                                          {docName}
-                                        </p>
-                                      </div>
-                                    </a>
-                                  ) : (
-                                    <a
-                                      href={docUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="flex items-center gap-2 p-3"
-                                    >
-                                      <DocumentTextIcon className="w-5 h-5 text-blue-500 flex-shrink-0" />
-                                      <span className="text-xs text-gray-700 truncate" title={docName}>
-                                        {docName}
-                                      </span>
-                                    </a>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Notes
-                      </label>
-                      <textarea
-                        value={employeeFormData.notes}
-                        onChange={(e) => setEmployeeFormData({ ...employeeFormData, notes: e.target.value })}
-                        rows={4}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
-                        placeholder="Add any additional notes or comments..."
-                      />
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Navigation Buttons */}
-            <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={employeeCurrentStep === 1 ? handleAddClose : handleEmployeePreviousStep}
-              >
-                {employeeCurrentStep === 1 ? 'Cancel' : 'Previous'}
-              </Button>
-              <div className="flex gap-2">
-                {employeeCurrentStep < 2 ? (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      console.log('Next button clicked, current step:', employeeCurrentStep);
-                      handleEmployeeNextStep(e);
-                    }}
-                    className="px-6 py-2.5 bg-[#2176FF] text-white font-semibold rounded-lg hover:bg-[#1966E6] active:bg-[#1555CC] shadow-sm transition-colors"
-                  >
-                    Next
-                  </button>
-                ) : (
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    icon={UserPlusIcon}
-                  >
-                    {editingEmployeeId ? 'Update Employee' : 'Add Employee'}
-                  </Button>
-                )}
-              </div>
-            </div>
-          </form>
-        )}
-      </Modal>
-
       {/* Score Update Modal */}
-      <Modal
+      <ScoreModal
         isOpen={isScoreModalOpen}
         onClose={handleScoreClose}
-        title={`${currentScoreEntity ? `Update Score - ${currentScoreEntity.name}` : 'Update Score'}`}
-        size="lg"
-      >
-        <form onSubmit={handleScoreSubmit} className="space-y-6">
-          {/* Behavior */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Behavior <span className="text-red-500">*</span>
-            </label>
-            <div className="flex items-center gap-4">
-              <input
-                type="range"
-                min="1"
-                max="5"
-                step="1"
-                value={scoreForm.behavior}
-                onChange={(e) => setScoreForm({ ...scoreForm, behavior: Number(e.target.value) })}
-                className="flex-1"
-                required
-              />
-              <div className="flex items-center gap-1 min-w-[100px]">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <StarIcon
-                    key={star}
-                    className={`w-6 h-6 ${
-                      star <= scoreForm.behavior
-                        ? 'text-yellow-400 fill-yellow-400'
-                        : 'text-gray-300'
-                    }`}
-                  />
-                ))}
-                <span className="ml-2 font-semibold text-gray-700">{scoreForm.behavior}/5</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Punctuality */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Punctuality <span className="text-red-500">*</span>
-            </label>
-            <div className="flex items-center gap-4">
-              <input
-                type="range"
-                min="1"
-                max="5"
-                step="1"
-                value={scoreForm.punctuality}
-                onChange={(e) => setScoreForm({ ...scoreForm, punctuality: Number(e.target.value) })}
-                className="flex-1"
-                required
-              />
-              <div className="flex items-center gap-1 min-w-[100px]">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <StarIcon
-                    key={star}
-                    className={`w-6 h-6 ${
-                      star <= scoreForm.punctuality
-                        ? 'text-yellow-400 fill-yellow-400'
-                        : 'text-gray-300'
-                    }`}
-                  />
-                ))}
-                <span className="ml-2 font-semibold text-gray-700">{scoreForm.punctuality}/5</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Cleanliness / Task Quality */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              {currentScoreEntity?.type === 'Tenant' ? 'Cleanliness' : 'Task Quality'}{' '}
-              <span className="text-red-500">*</span>
-            </label>
-            <div className="flex items-center gap-4">
-              <input
-                type="range"
-                min="1"
-                max="5"
-                step="1"
-                value={scoreForm.cleanliness}
-                onChange={(e) => setScoreForm({ ...scoreForm, cleanliness: Number(e.target.value) })}
-                className="flex-1"
-                required
-              />
-              <div className="flex items-center gap-1 min-w-[100px]">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <StarIcon
-                    key={star}
-                    className={`w-6 h-6 ${
-                      star <= scoreForm.cleanliness
-                        ? 'text-yellow-400 fill-yellow-400'
-                        : 'text-gray-300'
-                    }`}
-                  />
-                ))}
-                <span className="ml-2 font-semibold text-gray-700">{scoreForm.cleanliness}/5</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Remarks */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Remarks</label>
-            <textarea
-              value={scoreForm.remarks}
-              onChange={(e) => setScoreForm({ ...scoreForm, remarks: e.target.value })}
-              rows={4}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#2176FF] focus:border-transparent"
-              placeholder="Add any additional notes or comments..."
-            />
-          </div>
-
-          {/* Live Average Score */}
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg border border-blue-200">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-gray-700">Overall Score:</span>
-              <div className="flex items-center gap-2">
-                <StarIcon className="w-6 h-6 text-yellow-400 fill-yellow-400" />
-                <span className="text-2xl font-bold text-gray-900">{calculateAverage()}</span>
-                <span className="text-gray-600">/ 5</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Form Actions */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
-            <Button type="button" variant="outline" onClick={handleScoreClose}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="primary" icon={TrophyIcon}>
-              Save Score
-            </Button>
-          </div>
-        </form>
-      </Modal>
+        onSubmit={handleScoreSubmit}
+        scoreForm={scoreForm}
+        onScoreFormChange={(updates) => setScoreForm({ ...scoreForm, ...updates })}
+        currentScoreEntity={currentScoreEntity}
+        calculateAverage={calculateAverage}
+      />
 
       {/* Toast Notification */}
       <Toast
@@ -3134,283 +1765,3 @@ const PeopleHub: React.FC = () => {
 };
 
 export default PeopleHub;
-
-
-// Small info row component
-const Info = ({ label, value }: { label: string; value: string }) => (
-  <div className="bg-slate-50 rounded-lg p-3">
-    <p className="text-xs uppercase tracking-wide text-slate-500 mb-1">{label}</p>
-    <p className="text-slate-900 font-medium break-words">{value || '-'}</p>
-  </div>
-);
-
-// Edit form component for both Tenant and Employee
-const EditForm = ({ modal, onClose }: { modal: { mode: 'view' | 'edit'; type: 'Tenant' | 'Employee'; data: any }; onClose: () => void }) => {
-  const [form, setForm] = useState<any>({ ...modal.data });
-
-  const onSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // If tenant status changed, create appropriate alert
-    if (modal.type === 'Tenant' && modal.data.status !== form.status) {
-      const tenantName = form.name || modal.data.name;
-      const room = form.room || modal.data.room;
-      const seat = form.bed || modal.data.bed;
-      
-      try {
-        if (form.status === 'Active' && modal.data.status !== 'Active') {
-          // Check-in: Status changed to Active
-          alertService.createCheckInAlert(tenantName, room, seat);
-        } else if (form.status === 'Inactive' && modal.data.status === 'Active') {
-          // Check-out: Status changed from Active to Inactive
-          alertService.createCheckOutAlert(tenantName, room, seat);
-        }
-      } catch (error) {
-        console.error('Failed to create alert:', error);
-      }
-    }
-    
-    console.log('Update', modal.type, form);
-    onClose();
-  };
-
-  return (
-    <form onSubmit={onSubmit} className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Field label="Name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required />
-        <Field label="Email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} type="email" required />
-        <Field label="Phone" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} />
-        {modal.type === 'Employee' ? (
-          <>
-            <Field label="Role" value={form.role} onChange={(v) => setForm({ ...form, role: v })} />
-            <Field label="Joined" value={form.joinedAt} onChange={(v) => setForm({ ...form, joinedAt: v })} type="date" />
-          </>
-        ) : (
-          <>
-            <Field label="Room" value={form.room} onChange={(v) => setForm({ ...form, room: v })} />
-            <Field label="Bed" value={form.bed} onChange={(v) => setForm({ ...form, bed: v })} />
-            <Field label="Lease Start" value={form.leaseStart} onChange={(v) => setForm({ ...form, leaseStart: v })} type="date" />
-            <Field label="Lease End" value={form.leaseEnd} onChange={(v) => setForm({ ...form, leaseEnd: v })} type="date" />
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-              <select
-                value={form.status || 'Pending'}
-                onChange={(e) => setForm({ ...form, status: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="Pending">Pending</option>
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
-              </select>
-            </div>
-          </>
-        )}
-      </div>
-      <div className="flex items-center justify-end gap-3 pt-2">
-        <button type="button" onClick={onClose} className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">Cancel</button>
-        <button type="submit" className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 text-white font-semibold shadow-md hover:shadow-lg">Save Changes</button>
-      </div>
-    </form>
-  );
-};
-
-const Field = ({ label, value, onChange, type = 'text', required = false }: { label: string; value: any; onChange: (v: string) => void; type?: string; required?: boolean }) => (
-  <div>
-    <label className="block text-sm font-medium text-gray-700 mb-2">{label}{required ? ' *' : ''}</label>
-    <input
-      type={type}
-      value={value || ''}
-      required={required}
-      onChange={(e) => onChange(e.target.value)}
-      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-    />
-  </div>
-);
-
-// Score Card View Component
-interface ScoreCardViewProps {
-  type: 'Tenant' | 'Employee';
-  id: number;
-  name: string;
-  onUpdateClick: () => void;
-  getScore: (type: 'Tenant' | 'Employee', id: number) => any;
-  getScoreHistory: (type: 'Tenant' | 'Employee', id: number) => any[];
-}
-
-const ScoreCardView: React.FC<ScoreCardViewProps> = ({
-  type,
-  id,
-  name,
-  onUpdateClick,
-  getScore,
-  getScoreHistory,
-}) => {
-  const currentScore = getScore(type, id);
-  const scoreHistory = getScoreHistory(type, id);
-
-  const getScoreColor = (score: number) => {
-    if (score >= 4.5) return 'text-green-600';
-    if (score >= 3.5) return 'text-yellow-600';
-    if (score >= 2.5) return 'text-orange-600';
-    return 'text-red-600';
-  };
-
-  const getScoreLabel = (score: number) => {
-    if (score >= 4.5) return 'Excellent';
-    if (score >= 3.5) return 'Good';
-    if (score >= 2.5) return 'Average';
-    if (score >= 1.5) return 'Below Average';
-    return 'Poor';
-  };
-
-  return (
-    <div className="space-y-6">
-      {/* Current Score Display */}
-      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-1">Current Performance Score</h3>
-            <p className="text-sm text-gray-600">{name}</p>
-          </div>
-          <Button variant="primary" onClick={onUpdateClick} icon={TrophyIcon}>
-            Add / Update Score
-          </Button>
-        </div>
-
-        {currentScore ? (
-          <div className="space-y-4">
-            <div className="flex items-center gap-4">
-              <div className="text-center">
-                <div className={`text-5xl font-bold ${getScoreColor(currentScore.average)}`}>
-                  {currentScore.average.toFixed(1)}
-                </div>
-                <div className="text-sm text-gray-600 mt-1">/ 5.0</div>
-                <div className={`text-sm font-medium mt-2 ${getScoreColor(currentScore.average)}`}>
-                  {getScoreLabel(currentScore.average)}
-                </div>
-              </div>
-              <div className="flex-1">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-700">Behavior</span>
-                    <div className="flex items-center gap-1">
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <StarIcon
-                          key={star}
-                          className={`w-4 h-4 ${
-                            star <= currentScore.behavior
-                              ? 'text-yellow-400 fill-yellow-400'
-                              : 'text-gray-300'
-                          }`}
-                        />
-                      ))}
-                      <span className="ml-2 text-sm font-medium text-gray-900">
-                        {currentScore.behavior}/5
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-700">Punctuality</span>
-                    <div className="flex items-center gap-1">
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <StarIcon
-                          key={star}
-                          className={`w-4 h-4 ${
-                            star <= currentScore.punctuality
-                              ? 'text-yellow-400 fill-yellow-400'
-                              : 'text-gray-300'
-                          }`}
-                        />
-                      ))}
-                      <span className="ml-2 text-sm font-medium text-gray-900">
-                        {currentScore.punctuality}/5
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-700">
-                      {type === 'Tenant' ? 'Cleanliness' : 'Task Quality'}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <StarIcon
-                          key={star}
-                          className={`w-4 h-4 ${
-                            star <= currentScore.cleanliness
-                              ? 'text-yellow-400 fill-yellow-400'
-                              : 'text-gray-300'
-                          }`}
-                        />
-                      ))}
-                      <span className="ml-2 text-sm font-medium text-gray-900">
-                        {currentScore.cleanliness}/5
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            {currentScore.remarks && (
-              <div className="mt-4 pt-4 border-t border-blue-200">
-                <p className="text-sm text-gray-700">
-                  <span className="font-medium">Remarks:</span> {currentScore.remarks}
-                </p>
-              </div>
-            )}
-            <div className="text-xs text-gray-500 mt-2">
-              Last updated: {new Date(currentScore.date).toLocaleDateString()}
-            </div>
-          </div>
-        ) : (
-          <div className="text-center py-8">
-            <TrophyIcon className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500 mb-4">No score recorded yet.</p>
-            <Button variant="primary" onClick={onUpdateClick} icon={TrophyIcon}>
-              Add Score
-            </Button>
-          </div>
-        )}
-      </div>
-
-      {/* Score History */}
-      {scoreHistory.length > 0 && (
-        <div>
-          <h4 className="text-lg font-semibold text-gray-900 mb-4">Score History</h4>
-          <div className="space-y-3">
-            {scoreHistory.map((record: any, index: number) => (
-              <div
-                key={index}
-                className="bg-gray-50 p-4 rounded-lg border border-gray-200 hover:shadow-md transition-shadow"
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <StarIcon className="w-5 h-5 text-yellow-400 fill-yellow-400" />
-                    <span className={`text-lg font-bold ${getScoreColor(record.average)}`}>
-                      {record.average.toFixed(1)}/5
-                    </span>
-                  </div>
-                  <span className="text-xs text-gray-500">
-                    {new Date(record.date).toLocaleDateString()}
-                  </span>
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-xs text-gray-600 mb-2">
-                  <div>Behavior: {record.behavior}/5</div>
-                  <div>Punctuality: {record.punctuality}/5</div>
-                  <div>
-                    {type === 'Tenant' ? 'Cleanliness' : 'Quality'}: {record.cleanliness}/5
-                  </div>
-                </div>
-                {record.remarks && (
-                  <p className="text-sm text-gray-700 mt-2 italic">"{record.remarks}"</p>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-
-
