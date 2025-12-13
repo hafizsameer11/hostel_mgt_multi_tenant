@@ -17,8 +17,10 @@ import {
   XMarkIcon,
   EyeIcon,
   PencilIcon,
-  TrashIcon
+  TrashIcon,
+  ArrowDownTrayIcon
 } from '@heroicons/react/24/outline';
+import jsPDF from 'jspdf';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Select } from '../../components/Select';
@@ -26,6 +28,7 @@ import { Modal } from '../../components/Modal';
 import { Toast } from '../../components/Toast';
 import { DataTable } from '../../components/DataTable';
 import type { Column } from '../../components/DataTable';
+import VendorTable from '../People/components/VendorTable';
 import ROUTES from '../../routes/routePaths';
 import { formatCurrency } from '../../types/common';
 import vendorsData from '../../mock/vendors.json';
@@ -107,9 +110,12 @@ const VendorList: React.FC<VendorListProps> = ({
   const navigate = useNavigate();
   
   // Determine active section from route
+  // If accessed from People section (/people/vendors), show list
+  // If accessed from main sidebar (/vendor/management), show only management
   const getActiveSection = (): 'list' | 'management' => {
-    if (location.pathname.includes('/vendor/management') || location.pathname.includes('/people/vendors/management')) return 'management';
-    return 'list'; // Default to list
+    if (location.pathname.includes('/people/vendors')) return 'list';
+    if (location.pathname.includes('/vendor/management')) return 'management';
+    return 'management'; // Default to management
   };
   
   const activeSection = getActiveSection();
@@ -878,6 +884,98 @@ const VendorList: React.FC<VendorListProps> = ({
     };
   }, []);
 
+  // Handle PDF export for Vendor List
+  const handleExportPDFList = () => {
+    try {
+      const doc = new jsPDF();
+      let yPos = 20;
+      
+      doc.setFontSize(18);
+      doc.text('Vendor List Report', 105, yPos, { align: 'center' });
+      yPos += 10;
+      
+      doc.setFontSize(10);
+      doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 105, yPos, { align: 'center' });
+      yPos += 15;
+      
+      if (filteredVendors.length > 0) {
+        doc.setFontSize(14);
+        doc.setFont(undefined, 'bold');
+        doc.text('Vendors', 20, yPos);
+        yPos += 8;
+        
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'normal');
+        filteredVendors.slice(0, 30).forEach((vendor, index) => {
+          if (yPos > 270) {
+            doc.addPage();
+            yPos = 20;
+          }
+          doc.text(`${index + 1}. ${vendor.name || 'N/A'} - ${vendor.email || 'N/A'} - ${vendor.phone || 'N/A'}`, 20, yPos);
+          yPos += 6;
+        });
+      } else {
+        doc.setFontSize(12);
+        doc.text('No vendors available', 20, yPos);
+      }
+      
+      doc.save(`vendor-list-report-${new Date().toISOString().split('T')[0]}.pdf`);
+    } catch (error: any) {
+      console.error('Error exporting PDF:', error);
+      setToast({
+        open: true,
+        type: 'error',
+        message: 'Failed to export PDF. Please try again.',
+      });
+    }
+  };
+
+  // Handle PDF export for Vendor Management
+  const handleExportPDFManagement = () => {
+    try {
+      const doc = new jsPDF();
+      let yPos = 20;
+      
+      doc.setFontSize(18);
+      doc.text('Vendor Management Report', 105, yPos, { align: 'center' });
+      yPos += 10;
+      
+      doc.setFontSize(10);
+      doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 105, yPos, { align: 'center' });
+      yPos += 15;
+      
+      if (servicesWithVendors.length > 0) {
+        doc.setFontSize(14);
+        doc.setFont(undefined, 'bold');
+        doc.text('Services & Vendor Assignments', 20, yPos);
+        yPos += 8;
+        
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'normal');
+        servicesWithVendors.slice(0, 30).forEach((service, index) => {
+          if (yPos > 270) {
+            doc.addPage();
+            yPos = 20;
+          }
+          doc.text(`${index + 1}. ${service.name} - Assigned Vendors: ${service.assignedVendorsCount}`, 20, yPos);
+          yPos += 6;
+        });
+      } else {
+        doc.setFontSize(12);
+        doc.text('No services available', 20, yPos);
+      }
+      
+      doc.save(`vendor-management-report-${new Date().toISOString().split('T')[0]}.pdf`);
+    } catch (error: any) {
+      console.error('Error exporting PDF:', error);
+      setToast({
+        open: true,
+        type: 'error',
+        message: 'Failed to export PDF. Please try again.',
+      });
+    }
+  };
+
   return (
     <>
       <div className="space-y-6">
@@ -897,6 +995,19 @@ const VendorList: React.FC<VendorListProps> = ({
                   <p className="text-sm text-yellow-800">
                     Please select a hostel to view its vendors.
                   </p>
+                </div>
+              )}
+
+              {/* Header with Export Button */}
+              {effectiveHostelId && filteredVendors.length > 0 && (
+                <div className="mb-4 flex justify-end">
+                  <Button
+                    variant="outline"
+                    onClick={handleExportPDFList}
+                    icon={ArrowDownTrayIcon}
+                  >
+                    Export PDF
+                  </Button>
                 </div>
               )}
 
@@ -927,104 +1038,22 @@ const VendorList: React.FC<VendorListProps> = ({
                     <p className="text-gray-600">No vendors are assigned to this hostel.</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {filteredVendors.map((vendor, idx) => (
-                      <motion.div
-                        key={vendor.id}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: idx * 0.03 }}
-                        className="bg-white p-6 rounded-xl border border-gray-200 hover:shadow-lg transition-all"
-                      >
-                        <div className="flex items-center gap-4 mb-4 pb-4 border-b border-gray-100">
-                          <div className="w-14 h-14 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 text-white flex items-center justify-center font-bold text-lg">
-                            {vendor.name.charAt(0)}
-                          </div>
-                          <div className="flex-1">
-                            <h3 className="font-bold text-gray-900">{vendor.name}</h3>
-                            {vendor.companyName && (
-                              <p className="text-xs text-gray-500 mt-1">{vendor.companyName}</p>
-                            )}
-                            <Badge variant={
-                              vendor.status === 'active' || vendor.statusLabel === 'Active' ? 'success' : 
-                              vendor.status === 'pending' || vendor.statusLabel === 'Pending' ? 'warning' : 
-                              'default'
-                            }>
-                              {vendor.statusLabel || vendor.status}
-                            </Badge>
-                          </div>
-                        </div>
-                        <div className="space-y-2 text-sm text-gray-700 mb-4">
-                          {vendor.specialty || vendor.primaryService ? (
-                            <div className="flex items-center gap-2">
-                              <WrenchScrewdriverIcon className="w-4 h-4 text-purple-500" />
-                              <span className="font-medium">Specialty:</span> {vendor.specialty || vendor.primaryService}
-                            </div>
-                          ) : null}
-                          {vendor.contact?.phone && (
-                            <div className="flex items-center gap-2">
-                              <span className="text-gray-500">Phone:</span> {vendor.contact.phone}
-                            </div>
-                          )}
-                          {vendor.contact?.email && (
-                            <div className="flex items-center gap-2">
-                              <span className="text-gray-500">Email:</span> {vendor.contact.email}
-                            </div>
-                          )}
-                          {vendor.rating?.average && (
-                            <div className="flex items-center gap-2">
-                              <span className="text-gray-500">Rating:</span> 
-                              <span className="font-semibold text-purple-600">{vendor.rating.display || `${vendor.rating.average}/5`}</span>
-                              {vendor.rating.totalReviews > 0 && (
-                                <span className="text-xs text-gray-400">({vendor.rating.totalReviews} reviews)</span>
-                              )}
-                            </div>
-                          )}
-                          {vendor.serviceTags && vendor.serviceTags.length > 0 && (
-                            <div className="flex items-center gap-2 flex-wrap mt-2">
-                              <span className="text-gray-500">Services:</span>
-                              <div className="flex gap-1 flex-wrap">
-                                {vendor.serviceTags.slice(0, 3).map((tag, tagIdx) => (
-                                  <span key={tagIdx} className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
-                                    {tag}
-                                  </span>
-                                ))}
-                                {vendor.serviceTags.length > 3 && (
-                                  <span className="text-xs text-gray-400">+{vendor.serviceTags.length - 3} more</span>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                        {/* Action Buttons */}
-                        <div className="flex items-center gap-2 pt-4 border-t border-gray-100">
-                          <button
-                            onClick={() => handleViewVendor(vendor)}
-                            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors flex-1 justify-center"
-                            title="View Vendor"
-                          >
-                            <EyeIcon className="w-5 h-5" />
-                            <span>View</span>
-                          </button>
-                          <button
-                            onClick={() => handleEditVendor(vendor)}
-                            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-green-600 hover:text-green-700 hover:bg-green-50 rounded-lg transition-colors flex-1 justify-center"
-                            title="Edit Vendor"
-                          >
-                            <PencilIcon className="w-5 h-5" />
-                            <span>Edit</span>
-                          </button>
-                          <button
-                            onClick={() => handleDeleteVendor(vendor)}
-                            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors flex-1 justify-center"
-                            title="Delete Vendor"
-                          >
-                            <TrashIcon className="w-5 h-5" />
-                            <span>Delete</span>
-                          </button>
-                        </div>
-                      </motion.div>
-                    ))}
+                  <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                    <VendorTable
+                      vendors={filteredVendors}
+                      onView={(id) => {
+                        const vendor = filteredVendors.find(v => v.id === id);
+                        if (vendor) handleViewVendor(vendor);
+                      }}
+                      onEdit={(id) => {
+                        const vendor = filteredVendors.find(v => v.id === id);
+                        if (vendor) handleEditVendor(vendor);
+                      }}
+                      onDelete={(id, name) => {
+                        const vendor = filteredVendors.find(v => v.id === id);
+                        if (vendor) handleDeleteVendor(vendor);
+                      }}
+                    />
                   </div>
                 )
               ) : null}
@@ -1066,6 +1095,13 @@ const VendorList: React.FC<VendorListProps> = ({
                         Clear Filter
                       </Button>
                     )}
+                    <Button
+                      variant="outline"
+                      onClick={handleExportPDFManagement}
+                      icon={ArrowDownTrayIcon}
+                    >
+                      Export PDF
+                    </Button>
                     <Button
                       variant="primary"
                       onClick={() => setIsAssignModalOpen(true)}

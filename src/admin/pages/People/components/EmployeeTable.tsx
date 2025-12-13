@@ -88,6 +88,38 @@ const EmployeeTable: React.FC<EmployeeTableProps> = ({
       ),
     },
     {
+      key: 'workingTime',
+      label: 'Working Time (Date)',
+      sortable: true,
+      render: (row: any) => {
+        const joinDate = row.joinDate ? new Date(row.joinDate).toLocaleDateString() : 'N/A';
+        return (
+          <div className="text-sm text-gray-700">
+            {joinDate}
+          </div>
+        );
+      },
+    },
+    {
+      key: 'workingHours',
+      label: 'Working Hours',
+      render: (row: any) => {
+        let hoursDisplay = 'N/A';
+        if (row.workingHours) {
+          if (typeof row.workingHours === 'string') {
+            hoursDisplay = row.workingHours;
+          } else if (typeof row.workingHours === 'object' && row.workingHours.startTime && row.workingHours.endTime) {
+            hoursDisplay = `${row.workingHours.startTime} - ${row.workingHours.endTime}`;
+          }
+        }
+        return (
+          <div className="text-sm text-gray-700">
+            {hoursDisplay}
+          </div>
+        );
+      },
+    },
+    {
       key: 'actions',
       label: 'Actions',
       render: (row: any) => (
@@ -128,6 +160,9 @@ const EmployeeTable: React.FC<EmployeeTableProps> = ({
 };
 
 export default EmployeeTable;
+
+
+
 
 
 

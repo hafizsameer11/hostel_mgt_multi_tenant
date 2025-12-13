@@ -25,6 +25,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { label: "Overview", path: ROUTES.OVERVIEW, icon: ChartBarIcon },
   { label: "People", path: ROUTES.PEOPLE, icon: UsersIcon },
+  { label: "Vendor Management", path: ROUTES.VENDOR_MANAGEMENT, icon: BuildingStorefrontIcon },
   { label: "Accounts", path: ROUTES.ACCOUNTS, icon: CurrencyDollarIcon },
   { label: "Hostel Management", path: ROUTES.HOSTEL, icon: BuildingOfficeIcon },
   { label: "Alerts", path: ROUTES.ALERTS, icon: BellAlertIcon },

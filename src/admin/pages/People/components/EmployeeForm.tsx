@@ -34,7 +34,8 @@ interface EmployeeFormData {
   salary: string;
   salaryType: string;
   workingHours: string;
-  document: File | null;
+  reference: string;
+  documents: File[];
   notes: string;
 }
 
@@ -84,7 +85,8 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
     salary: '',
     salaryType: 'monthly',
     workingHours: '',
-    document: null,
+    reference: '',
+    documents: [],
     notes: '',
   });
 
@@ -118,7 +120,8 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
         salary: '',
         salaryType: 'monthly',
         workingHours: '',
-        document: null,
+        reference: '',
+        documents: [],
         notes: '',
       });
       setActiveTab('personal');
@@ -424,21 +427,39 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
                       </div>
                       <div className="md:col-span-2">
                         <label className="block text-sm font-medium text-slate-700 mb-2">
-                          Document
+                          Reference
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.reference}
+                          onChange={(e) => setFormData({ ...formData, reference: e.target.value })}
+                          className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="Enter reference information"
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                          Documents (Multiple)
                         </label>
                         <input
                           type="file"
                           accept=".pdf,.doc,.docx,image/*"
+                          multiple
                           onChange={(e) => {
-                            const file = e.target.files?.[0] || null;
-                            setFormData({ ...formData, document: file });
+                            const files = Array.from(e.target.files || []);
+                            setFormData({ ...formData, documents: files });
                           }}
                           className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
-                        {formData.document && (
-                          <p className="text-sm text-gray-600 mt-1">
-                            Selected: {formData.document.name}
-                          </p>
+                        {formData.documents.length > 0 && (
+                          <div className="mt-2">
+                            <p className="text-sm text-gray-600 mb-2">Selected documents:</p>
+                            <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+                              {formData.documents.map((file, idx) => (
+                                <li key={idx}>{file.name}</li>
+                              ))}
+                            </ul>
+                          </div>
                         )}
                         {editingId && formData.previousDocuments && formData.previousDocuments.length > 0 && (
                           <div className="mt-4">

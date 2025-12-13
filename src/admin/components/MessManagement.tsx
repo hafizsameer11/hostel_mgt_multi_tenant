@@ -4,8 +4,8 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { motion } from 'framer-motion';
-import { PlusIcon, PencilIcon, TrashIcon, CalendarIcon, CurrencyDollarIcon, CubeIcon } from '@heroicons/react/24/outline';
+import { motion, AnimatePresence } from 'framer-motion';
+import { PlusIcon, PencilIcon, TrashIcon, CalendarIcon, CurrencyDollarIcon, CubeIcon, XMarkIcon, SunIcon, MoonIcon } from '@heroicons/react/24/outline';
 import { Button } from './Button';
 import { Modal } from './Modal';
 import { Toast } from './Toast';
@@ -39,12 +39,47 @@ export const MessManagement: React.FC<MessManagementProps> = ({ hostelId }) => {
     message: string;
   }>({ open: false, type: 'success', message: '' });
 
+  // Days of the week
+  const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+  // Helper function to get date for selected day (this week)
+  const getDateForDay = (dayName: string): string => {
+    const today = new Date();
+    const currentDay = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const dayIndex = daysOfWeek.indexOf(dayName);
+    
+    // Convert to Monday-based week (0 = Monday, 6 = Sunday)
+    const mondayBasedCurrentDay = currentDay === 0 ? 6 : currentDay - 1;
+    const daysToAdd = dayIndex - mondayBasedCurrentDay;
+    
+    const targetDate = new Date(today);
+    targetDate.setDate(today.getDate() + daysToAdd);
+    
+    return targetDate.toISOString().split('T')[0];
+  };
+
+  // Get current day name
+  const getCurrentDayName = (): string => {
+    const today = new Date();
+    const dayIndex = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    // Convert to Monday-based index
+    const mondayBasedIndex = dayIndex === 0 ? 6 : dayIndex - 1;
+    return daysOfWeek[mondayBasedIndex];
+  };
+
+  const [selectedDay, setSelectedDay] = useState<string>(getCurrentDayName());
   const [formData, setFormData] = useState<MessFormData>({
-    date: new Date().toISOString().split('T')[0],
+    date: getDateForDay(getCurrentDayName()),
     breakfast: { items: [{ id: `breakfast-${Date.now()}`, name: '', quantity: '', unit: '' }] },
     lunch: { items: [{ id: `lunch-${Date.now() + 1}`, name: '', quantity: '', unit: '' }] },
     dinner: { items: [{ id: `dinner-${Date.now() + 2}`, name: '', quantity: '', unit: '' }] },
   });
+
+  // Update form date when day is selected
+  useEffect(() => {
+    const dateForDay = getDateForDay(selectedDay);
+    setFormData(prev => ({ ...prev, date: dateForDay }));
+  }, [selectedDay]);
 
   useEffect(() => {
     loadMessEntries();
@@ -208,6 +243,8 @@ export const MessManagement: React.FC<MessManagementProps> = ({ hostelId }) => {
 
   const handleEdit = (entry: MessEntry) => {
     setEditingEntry(entry);
+    const dayName = getDayName(entry.date);
+    setSelectedDay(dayName);
     setFormData({
       date: entry.date,
       breakfast: {
@@ -273,8 +310,9 @@ export const MessManagement: React.FC<MessManagementProps> = ({ hostelId }) => {
 
   const resetForm = () => {
     const now = Date.now();
+    setSelectedDay('Monday');
     setFormData({
-      date: new Date().toISOString().split('T')[0],
+      date: getDateForDay('Monday'),
       breakfast: { items: [{ id: `breakfast-${now}`, name: '', quantity: '', unit: '' }] },
       lunch: { items: [{ id: `lunch-${now + 1}`, name: '', quantity: '', unit: '' }] },
       dinner: { items: [{ id: `dinner-${now + 2}`, name: '', quantity: '', unit: '' }] },
@@ -360,7 +398,7 @@ export const MessManagement: React.FC<MessManagementProps> = ({ hostelId }) => {
   const tabs = [
     {
       id: 'list',
-      label: 'Mess List',
+      label: 'Mess Menu',
       count: messEntries.length,
     },
     {
@@ -602,12 +640,117 @@ export const MessManagement: React.FC<MessManagementProps> = ({ hostelId }) => {
             </div>
           </div>
 
-          {/* Material Usage Table */}
+          {/* Material Usage by Meal Type */}
+          <div className="space-y-6">
+            {/* Breakfast Items */}
+            <div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-6 shadow-sm">
+              <div className="mb-6">
+                <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                  <SunIcon className="w-6 h-6 text-yellow-600" />
+                  Breakfast Items
+                </h3>
+                <p className="text-sm text-slate-600 mt-1">
+                  All items used in breakfast meals
+                </p>
+              </div>
+              {messStats.materialUsage.filter(item => {
+                const breakfastItems = messEntries.flatMap(entry => 
+                  entry.breakfast.items.map(item => item.name)
+                );
+                return breakfastItems.includes(item.name);
+              }).length === 0 ? (
+                <div className="text-center py-8 bg-white rounded-lg border border-yellow-200">
+                  <p className="text-slate-600">No breakfast items recorded yet</p>
+                </div>
+              ) : (
+                <DataTable
+                  columns={materialColumns}
+                  data={messStats.materialUsage.filter(item => {
+                    const breakfastItems = messEntries.flatMap(entry => 
+                      entry.breakfast.items.map(item => item.name)
+                    );
+                    return breakfastItems.includes(item.name);
+                  })}
+                  emptyMessage="No breakfast items found"
+                />
+              )}
+            </div>
+
+            {/* Lunch Items */}
+            <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-6 shadow-sm">
+              <div className="mb-6">
+                <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                  <SunIcon className="w-6 h-6 text-blue-600" />
+                  Lunch Items
+                </h3>
+                <p className="text-sm text-slate-600 mt-1">
+                  All items used in lunch meals
+                </p>
+              </div>
+              {messStats.materialUsage.filter(item => {
+                const lunchItems = messEntries.flatMap(entry => 
+                  entry.lunch.items.map(item => item.name)
+                );
+                return lunchItems.includes(item.name);
+              }).length === 0 ? (
+                <div className="text-center py-8 bg-white rounded-lg border border-blue-200">
+                  <p className="text-slate-600">No lunch items recorded yet</p>
+                </div>
+              ) : (
+                <DataTable
+                  columns={materialColumns}
+                  data={messStats.materialUsage.filter(item => {
+                    const lunchItems = messEntries.flatMap(entry => 
+                      entry.lunch.items.map(item => item.name)
+                    );
+                    return lunchItems.includes(item.name);
+                  })}
+                  emptyMessage="No lunch items found"
+                />
+              )}
+            </div>
+
+            {/* Dinner Items */}
+            <div className="bg-purple-50 border-2 border-purple-200 rounded-xl p-6 shadow-sm">
+              <div className="mb-6">
+                <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                  <MoonIcon className="w-6 h-6 text-purple-600" />
+                  Dinner Items
+                </h3>
+                <p className="text-sm text-slate-600 mt-1">
+                  All items used in dinner meals
+                </p>
+              </div>
+              {messStats.materialUsage.filter(item => {
+                const dinnerItems = messEntries.flatMap(entry => 
+                  entry.dinner.items.map(item => item.name)
+                );
+                return dinnerItems.includes(item.name);
+              }).length === 0 ? (
+                <div className="text-center py-8 bg-white rounded-lg border border-purple-200">
+                  <p className="text-slate-600">No dinner items recorded yet</p>
+                </div>
+              ) : (
+                <DataTable
+                  columns={materialColumns}
+                  data={messStats.materialUsage.filter(item => {
+                    const dinnerItems = messEntries.flatMap(entry => 
+                      entry.dinner.items.map(item => item.name)
+                    );
+                    return dinnerItems.includes(item.name);
+                  })}
+                  emptyMessage="No dinner items found"
+                />
+              )}
+            </div>
+          </div>
+
+          {/* Material Usage Table - All Items */}
           <div className="bg-white rounded-xl border-2 border-slate-200 p-6 shadow-sm">
             <div className="mb-6">
-              <h3 className="text-xl font-bold text-slate-900">Material Usage Summary</h3>
+              <h3 className="text-xl font-bold text-slate-900">All Material Usage Summary</h3>
               <p className="text-sm text-slate-600 mt-1">
-                All materials and ingredients used in the mess system
+                Complete list of all materials and ingredients used in the mess system
               </p>
             </div>
 
@@ -643,79 +786,134 @@ export const MessManagement: React.FC<MessManagementProps> = ({ hostelId }) => {
         </motion.div>
       )}
 
-      {/* Add/Edit Modal */}
-      <Modal
-        isOpen={isAddModalOpen || isEditModalOpen}
-        onClose={() => {
-          setIsAddModalOpen(false);
-          setIsEditModalOpen(false);
-          setEditingEntry(null);
-          resetForm();
-        }}
-        title={editingEntry ? 'Edit Mess Entry' : 'Add Mess Entry'}
-        size="lg"
-      >
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-2">
-              Date <span className="text-red-500">*</span>
-            </label>
-            <div className="space-y-2">
-              <input
-                type="date"
-                value={formData.date}
-                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
-              {formData.date && (
-                <div className="px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg">
-                  <p className="text-sm font-semibold text-blue-900">
-                    {getDayName(formData.date)}
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Breakfast Section */}
-          <MealSectionComponent
-            mealType="breakfast"
-            mealData={formData.breakfast}
-            {...breakfastCallbacks}
-          />
-          {/* Lunch Section */}
-          <MealSectionComponent
-            mealType="lunch"
-            mealData={formData.lunch}
-            {...lunchCallbacks}
-          />
-          {/* Dinner Section */}
-          <MealSectionComponent
-            mealType="dinner"
-            mealData={formData.dinner}
-            {...dinnerCallbacks}
-          />
-
-          <div className="flex gap-3 pt-4">
-            <Button type="submit" variant="primary" className="flex-1">
-              {editingEntry ? 'Update Entry' : 'Create Entry'}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
+      {/* Add/Edit Modal with Sidebar Layout */}
+      <AnimatePresence>
+        {(isAddModalOpen || isEditModalOpen) && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
               onClick={() => {
                 setIsAddModalOpen(false);
                 setIsEditModalOpen(false);
                 setEditingEntry(null);
                 resetForm();
               }}
+              className="fixed inset-0 bg-black/50 z-50"
+            />
+            
+            {/* Modal */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+              onClick={(e) => e.stopPropagation()}
             >
-              Cancel
-            </Button>
-          </div>
-        </form>
-      </Modal>
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[90vh] flex overflow-hidden">
+                {/* Left Sidebar - Days of Week */}
+                <div className="w-64 bg-slate-800 flex flex-col">
+                  <div className="p-6 border-b border-slate-700">
+                    <div className="flex items-center gap-3">
+                      <CalendarIcon className="w-6 h-6 text-white" />
+                      <h2 className="text-lg font-semibold text-white">Select Day</h2>
+                    </div>
+                  </div>
+
+                  <div className="flex-1 p-4 space-y-2 overflow-y-auto">
+                    {/* Days of Week */}
+                    {daysOfWeek.map((day) => (
+                      <button
+                        key={day}
+                        onClick={() => setSelectedDay(day)}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                          selectedDay === day
+                            ? 'bg-blue-600 text-white'
+                            : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                        }`}
+                      >
+                        <span className="font-medium">{day}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Main Content - All Meal Types */}
+                <div className="flex-1 bg-slate-50 flex flex-col overflow-hidden">
+                  <div className="flex items-center justify-between p-6 border-b border-slate-200 bg-white">
+                    <div>
+                      <h3 className="text-xl font-bold text-slate-900">
+                        {selectedDay} - {formData.date ? formatDate(formData.date) : ''}
+                      </h3>
+                      <span className="block w-12 h-1 bg-pink-500 mt-1" />
+                    </div>
+                    <button
+                      onClick={() => {
+                        setIsAddModalOpen(false);
+                        setIsEditModalOpen(false);
+                        setEditingEntry(null);
+                        resetForm();
+                      }}
+                      className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                    >
+                      <XMarkIcon className="w-6 h-6 text-slate-600" />
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">
+                    <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                      {/* Breakfast Section */}
+                      <MealSectionComponent
+                        mealType="breakfast"
+                        mealData={formData.breakfast}
+                        {...breakfastCallbacks}
+                      />
+                      
+                      {/* Lunch Section */}
+                      <MealSectionComponent
+                        mealType="lunch"
+                        mealData={formData.lunch}
+                        {...lunchCallbacks}
+                      />
+                      
+                      {/* Dinner Section */}
+                      <MealSectionComponent
+                        mealType="dinner"
+                        mealData={formData.dinner}
+                        {...dinnerCallbacks}
+                      />
+                    </div>
+
+                    {/* Footer Buttons */}
+                    <div className="p-6 border-t border-slate-200 bg-white flex justify-end gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsAddModalOpen(false);
+                          setIsEditModalOpen(false);
+                          setEditingEntry(null);
+                          resetForm();
+                        }}
+                        className="px-6 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-6 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors"
+                      >
+                        {editingEntry ? 'Update Entry' : 'Create Entry'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Delete Confirmation */}
       <ConfirmDialog

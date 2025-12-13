@@ -32,8 +32,11 @@ import {
   CheckCircleIcon,
   UserIcon,
   BellAlertIcon,
+  ArrowDownTrayIcon,
 } from '@heroicons/react/24/outline';
+import { Button } from '../components/Button';
 import { getOverviewDashboard, type OverviewDashboardResponse } from '../services/dashboard.service';
+import jsPDF from 'jspdf';
 
 /**
  * Professional overview dashboard page
@@ -329,12 +332,122 @@ const Overview: React.FC = () => {
   const tenantsCard = dashboardData?.summaryCards.find(card => card.key === 'activeTenants');
   const vendorsCard = dashboardData?.summaryCards.find(card => card.key === 'activeVendors');
 
+  // Handle PDF export
+  const handleExportPDF = () => {
+    try {
+      const doc = new jsPDF();
+      let yPos = 20;
+      
+      // Title
+      doc.setFontSize(18);
+      doc.text('Overview Dashboard Report', 105, yPos, { align: 'center' });
+      yPos += 10;
+      
+      // Date
+      doc.setFontSize(10);
+      doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 105, yPos, { align: 'center' });
+      yPos += 15;
+      
+      // Summary Cards
+      doc.setFontSize(14);
+      doc.setFont(undefined, 'bold');
+      doc.text('Summary Statistics', 20, yPos);
+      yPos += 8;
+      
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      doc.text(`Occupancy Rate: ${occupancyCard?.valueFormatted || `${stats.occupancyRate}%`}`, 20, yPos);
+      yPos += 6;
+      doc.text(`Active Tenants: ${tenantsCard?.valueFormatted || stats.activeTenants.toString()}`, 20, yPos);
+      yPos += 6;
+      doc.text(`Monthly Revenue: ${revenueCard?.valueFormatted || formatCurrency(stats.monthlyRevenue)}`, 20, yPos);
+      yPos += 6;
+      doc.text(`Active Vendors: ${vendorsCard?.valueFormatted || stats.activeVendors.toString()}`, 20, yPos);
+      yPos += 10;
+      
+      // Net Income
+      doc.setFontSize(14);
+      doc.setFont(undefined, 'bold');
+      doc.text('Financial Summary', 20, yPos);
+      yPos += 8;
+      
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      doc.text(`Net Income: ${formatCurrency(netIncome)} (Last 3 months)`, 20, yPos);
+      yPos += 10;
+      
+      // Transactions Summary
+      doc.setFontSize(14);
+      doc.setFont(undefined, 'bold');
+      doc.text('Transactions Summary', 20, yPos);
+      yPos += 8;
+      
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      doc.text(`Payable Transactions: ${paidTransactions.length}`, 20, yPos);
+      yPos += 6;
+      doc.text(`Receivable Payments: ${recentPaymentsReceived.length}`, 20, yPos);
+      yPos += 10;
+      
+      // Unpaid Rent
+      doc.setFontSize(14);
+      doc.setFont(undefined, 'bold');
+      doc.text('Unpaid Rent Summary', 20, yPos);
+      yPos += 8;
+      
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      doc.text(`Total Unpaid Rent: ${formatCurrency(totalUnpaidRent)}`, 20, yPos);
+      yPos += 6;
+      doc.text(`Tenants with Unpaid Rent: ${tenantsWithUnpaidRent.length}`, 20, yPos);
+      yPos += 10;
+      
+      // Recent Bills & Maintenance
+      doc.setFontSize(14);
+      doc.setFont(undefined, 'bold');
+      doc.text('Recent Requests', 20, yPos);
+      yPos += 8;
+      
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      doc.text(`Recent Bills: ${recentBills.length}`, 20, yPos);
+      yPos += 6;
+      doc.text(`Maintenance Requests: ${recentMaintenance.length}`, 20, yPos);
+      yPos += 10;
+      
+      // Check In/Out
+      doc.setFontSize(14);
+      doc.setFont(undefined, 'bold');
+      doc.text('Check In & Check Out', 20, yPos);
+      yPos += 8;
+      
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      doc.text(`Total: ${checkInCheckOutTotal.toLocaleString()} (Last 30 days / Next 30 days)`, 20, yPos);
+      
+      // Save PDF
+      doc.save(`overview-report-${new Date().toISOString().split('T')[0]}.pdf`);
+    } catch (error: any) {
+      console.error('Error exporting PDF:', error);
+      alert('Failed to export PDF. Please try again.');
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-slate-900">Overview</h1>
-        <p className="text-slate-600 mt-1">Dashboard summary and key metrics</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900">Overview</h1>
+          <p className="text-slate-600 mt-1">Dashboard summary and key metrics</p>
+        </div>
+        <Button
+          variant="outline"
+          icon={ArrowDownTrayIcon}
+          onClick={handleExportPDF}
+        >
+          Export PDF
+        </Button>
       </div>
 
       {/* Stats Cards and Activity Log in Same Grid */}

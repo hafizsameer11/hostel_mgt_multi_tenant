@@ -78,8 +78,7 @@ export const AdminRoutes: React.FC = () => {
           <Route path="alerts/maintenance" element={<AlertsList />} />
 
           {/* Vendor */}
-          <Route path="vendor" element={<VendorList />} />
-          <Route path="vendor/list" element={<VendorList />} />
+          <Route path="vendor" element={<Navigate to="/admin/vendor/management" replace />} />
           <Route path="vendor/management" element={<VendorList />} />
 
           {/* Communication */}

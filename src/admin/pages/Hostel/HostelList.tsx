@@ -7,7 +7,8 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/Button';
-import { PlusIcon, EyeIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, EyeIcon, PencilIcon, TrashIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import jsPDF from 'jspdf';
 import { DataTable } from '../../components/DataTable';
 import type { Column } from '../../components/DataTable';
 import { SearchInput } from '../../components/SearchInput';
@@ -148,6 +149,67 @@ const HostelList: React.FC = () => {
     }
   };
 
+  // Handle PDF export
+  const handleExportPDF = () => {
+    try {
+      const doc = new jsPDF();
+      let yPos = 20;
+      
+      // Title
+      doc.setFontSize(18);
+      doc.text('Hostel Management Report', 105, yPos, { align: 'center' });
+      yPos += 10;
+      
+      // Date
+      doc.setFontSize(10);
+      doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 105, yPos, { align: 'center' });
+      yPos += 15;
+      
+      // Table headers
+      doc.setFontSize(12);
+      doc.setFont(undefined, 'bold');
+      doc.text('Name', 20, yPos);
+      doc.text('City', 60, yPos);
+      doc.text('Blocks', 90, yPos);
+      doc.text('Rooms/Block', 115, yPos);
+      doc.text('Manager', 145, yPos);
+      doc.text('Phone', 175, yPos);
+      yPos += 8;
+      
+      // Table data
+      doc.setFont(undefined, 'normal');
+      doc.setFontSize(10);
+      filteredData.forEach((hostel, index) => {
+        if (yPos > 270) {
+          doc.addPage();
+          yPos = 20;
+        }
+        doc.text(hostel.name || 'N/A', 20, yPos);
+        doc.text(hostel.city || 'N/A', 60, yPos);
+        doc.text(String(hostel.totalFloors || 0), 90, yPos);
+        doc.text(String(hostel.roomsPerFloor || 0), 115, yPos);
+        doc.text(hostel.managerName || 'N/A', 145, yPos);
+        doc.text(hostel.managerPhone || 'N/A', 175, yPos);
+        yPos += 7;
+      });
+      
+      // Save PDF
+      doc.save(`hostels-report-${new Date().toISOString().split('T')[0]}.pdf`);
+      
+      setToast({
+        open: true,
+        type: 'success',
+        message: 'PDF exported successfully!',
+      });
+    } catch (error: any) {
+      setToast({
+        open: true,
+        type: 'error',
+        message: 'Failed to export PDF. Please try again.',
+      });
+    }
+  };
+
   // Handle delete
   const handleDelete = async () => {
     if (!deleteConfirm.hostel) return;
@@ -284,13 +346,22 @@ const HostelList: React.FC = () => {
           </h1>
           <p className="text-slate-600 mt-1">Manage hostel properties</p>
         </div>
-        <Button
-          variant="primary"
-          onClick={() => setIsAddHostelOpen(true)}
-          icon={PlusIcon}
-        >
-          Add Hostel
-        </Button>
+        <div className="flex gap-3">
+          <Button
+            variant="outline"
+            onClick={handleExportPDF}
+            icon={ArrowDownTrayIcon}
+          >
+            Export PDF
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => setIsAddHostelOpen(true)}
+            icon={PlusIcon}
+          >
+            Add Hostel
+          </Button>
+        </div>
       </div>
 
       {/* Loading State */}

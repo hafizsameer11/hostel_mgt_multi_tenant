@@ -34,9 +34,6 @@ const TenantTable: React.FC<TenantTableProps> = ({
       label: 'Tenant',
       sortable: true,
       render: (row: any) => {
-        const propertyAddress = row.hostel?.name 
-          ? `${row.hostel.name} | ${row.room || ''} ${row.bed || ''}`.trim()
-          : `${row.room || ''}-${row.bed || ''}`.trim() || 'N/A';
         const tenantName = row.firstName && row.lastName 
           ? `${row.firstName} ${row.lastName}`
           : row.name || 'N/A';
@@ -63,7 +60,33 @@ const TenantTable: React.FC<TenantTableProps> = ({
                   {row.status === 'active' || row.status === 'Active' ? 'Current' : row.status || 'N/A'}
                 </Badge>
               </div>
-              <p className="text-sm text-gray-600 truncate">{propertyAddress}</p>
+              <p className="text-sm text-gray-600 truncate">{row.email || 'N/A'}</p>
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      key: 'roomAllocation',
+      label: 'Room Allocation',
+      sortable: true,
+      render: (row: any) => {
+        const hostelName = row.hostel || row.activeAllocation?.hostel?.name || 'N/A';
+        const floorName = row.floor || row.activeAllocation?.floor?.floorName || row.activeAllocation?.floor?.name || 'N/A';
+        const roomNumber = row.room || row.activeAllocation?.room?.roomNumber || row.activeAllocation?.room?.number || 'N/A';
+        const bedNumber = row.bed || row.activeAllocation?.bed?.bedNumber || row.activeAllocation?.bed?.number || 'N/A';
+        
+        return (
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-gray-900">{hostelName}</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <span>Floor: {floorName}</span>
+              <span>•</span>
+              <span>Room: {roomNumber}</span>
+              <span>•</span>
+              <span>Bed: {bedNumber}</span>
             </div>
           </div>
         );
@@ -74,10 +97,6 @@ const TenantTable: React.FC<TenantTableProps> = ({
       label: 'Contact Info',
       render: (row: any) => (
         <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <EnvelopeIcon className="w-4 h-4 text-gray-400 shrink-0" />
-            <span className="text-sm text-gray-700">{row.email || 'N/A'}</span>
-          </div>
           <div className="flex items-center gap-2">
             <PhoneIcon className="w-4 h-4 text-gray-400 shrink-0" />
             {row.phone ? (
@@ -132,6 +151,9 @@ const TenantTable: React.FC<TenantTableProps> = ({
 };
 
 export default TenantTable;
+
+
+
 
 
 

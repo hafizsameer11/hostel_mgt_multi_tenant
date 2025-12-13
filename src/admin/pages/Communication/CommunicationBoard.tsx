@@ -5,7 +5,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   UserCircleIcon, 
   EnvelopeIcon, 
@@ -18,8 +18,11 @@ import {
   EyeIcon,
   CurrencyDollarIcon,
   DocumentTextIcon,
-  MapPinIcon
+  MapPinIcon,
+  XMarkIcon,
+  ArrowDownTrayIcon
 } from '@heroicons/react/24/outline';
+import jsPDF from 'jspdf';
 import { Button } from '../../components/Button';
 import { Modal } from '../../components/Modal';
 import ROUTES from '../../routes/routePaths';
@@ -71,8 +74,11 @@ const CommunicationBoard: React.FC = () => {
   const [employeesLoading, setEmployeesLoading] = useState<boolean>(false);
   const [isEmailCampaignOpen, setIsEmailCampaignOpen] = useState(false);
   const [campaignForm, setCampaignForm] = useState({
-    subject: '',
+    campaignType: 'email', // 'email' or 'whatsapp'
     message: '',
+    sendToTenant: false,
+    sendToEmployee: false,
+    sendToVendor: false,
   });
   const [viewModal, setViewModal] = useState<{
     isOpen: boolean;
@@ -218,22 +224,95 @@ const CommunicationBoard: React.FC = () => {
 
   const handleCampaignSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!campaignForm.subject.trim() || !campaignForm.message.trim()) {
-      alert('Please fill in both subject and message fields.');
+    if (!campaignForm.message.trim()) {
+      alert('Please fill in the message field.');
       return;
     }
     
-    console.log('Email Campaign:', campaignForm);
-    alert(`Email Campaign Created!\n\nSubject: ${campaignForm.subject}\n\nMessage: ${campaignForm.message}\n\nThis will be sent to all recipients.`);
+    if (!campaignForm.sendToTenant && !campaignForm.sendToEmployee && !campaignForm.sendToVendor) {
+      alert('Please select at least one recipient type (Tenant, Employee, or Vendor).');
+      return;
+    }
+    
+    console.log('Campaign:', campaignForm);
+    const recipients = [];
+    if (campaignForm.sendToTenant) recipients.push('Tenants');
+    if (campaignForm.sendToEmployee) recipients.push('Employees');
+    if (campaignForm.sendToVendor) recipients.push('Vendors');
+    
+    alert(`${campaignForm.campaignType === 'email' ? 'Email' : 'WhatsApp'} Campaign Created!\n\nType: ${campaignForm.campaignType}\n\nMessage: ${campaignForm.message}\n\nRecipients: ${recipients.join(', ')}`);
     
     // Reset form and close modal
-    setCampaignForm({ subject: '', message: '' });
+    setCampaignForm({ 
+      campaignType: 'email',
+      message: '',
+      sendToTenant: false,
+      sendToEmployee: false,
+      sendToVendor: false,
+    });
     setIsEmailCampaignOpen(false);
   };
 
   const handleCampaignClose = () => {
-    setCampaignForm({ subject: '', message: '' });
+    setCampaignForm({ 
+      campaignType: 'email',
+      message: '',
+      sendToTenant: false,
+      sendToEmployee: false,
+      sendToVendor: false,
+    });
     setIsEmailCampaignOpen(false);
+  };
+
+  // Handle PDF export
+  const handleExportPDF = () => {
+    try {
+      const doc = new jsPDF();
+      let yPos = 20;
+      
+      doc.setFontSize(18);
+      doc.text(`${activeTab} Communication Report`, 105, yPos, { align: 'center' });
+      yPos += 10;
+      
+      doc.setFontSize(10);
+      doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 105, yPos, { align: 'center' });
+      yPos += 15;
+      
+      let dataToExport: any[] = [];
+      if (activeTab === 'Tenants') {
+        dataToExport = tenants;
+      } else if (activeTab === 'Employees') {
+        dataToExport = employees;
+      } else if (activeTab === 'Vendors') {
+        dataToExport = filteredVendors;
+      }
+      
+      if (dataToExport.length > 0) {
+        doc.setFontSize(14);
+        doc.setFont(undefined, 'bold');
+        doc.text(`${activeTab} List`, 20, yPos);
+        yPos += 8;
+        
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'normal');
+        dataToExport.slice(0, 30).forEach((item, index) => {
+          if (yPos > 270) {
+            doc.addPage();
+            yPos = 20;
+          }
+          doc.text(`${index + 1}. ${item.name || 'N/A'} - ${item.email || item.phone || 'N/A'}`, 20, yPos);
+          yPos += 6;
+        });
+      } else {
+        doc.setFontSize(12);
+        doc.text(`No ${activeTab.toLowerCase()} available`, 20, yPos);
+      }
+      
+      doc.save(`communication-${activeTab.toLowerCase()}-report-${new Date().toISOString().split('T')[0]}.pdf`);
+    } catch (error: any) {
+      console.error('Error exporting PDF:', error);
+      alert('Failed to export PDF. Please try again.');
+    }
   };
 
   const handleView = async (type: 'Tenant' | 'Employee' | 'Vendor', data: any) => {
@@ -394,11 +473,18 @@ const CommunicationBoard: React.FC = () => {
             />
           </div>
           <Button
+            variant="outline"
+            onClick={handleExportPDF}
+            icon={ArrowDownTrayIcon}
+          >
+            Export PDF
+          </Button>
+          <Button
             variant="primary"
             onClick={handleEmailCampaign}
             icon={PaperAirplaneIcon}
           >
-            Email Campaign
+            Campaign
           </Button>
         </div>
       </div>
@@ -726,78 +812,155 @@ const CommunicationBoard: React.FC = () => {
         </div>
       </div>
 
-      {/* Email Campaign Modal */}
-      <Modal
-        isOpen={isEmailCampaignOpen}
-        onClose={handleCampaignClose}
-        title="Create Email Campaign"
-        size="lg"
-      >
-        <form onSubmit={handleCampaignSubmit} className="space-y-6">
-          {/* Subject Field */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
-              Subject <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              required
-              value={campaignForm.subject}
-              onChange={(e) => setCampaignForm({ ...campaignForm, subject: e.target.value })}
-              placeholder="Enter email subject..."
-              className="block w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2176FF] transition-colors"
-            />
-          </div>
-
-          {/* Message Field */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
-              Message <span className="text-red-500">*</span>
-            </label>
-            <textarea
-              required
-              value={campaignForm.message}
-              onChange={(e) => setCampaignForm({ ...campaignForm, message: e.target.value })}
-              placeholder="Enter your email message..."
-              rows={8}
-              className="block w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2176FF] transition-colors resize-none"
-            />
-            <p className="text-xs text-slate-500 mt-1">
-              This message will be sent to all recipients based on the current tab selection.
-            </p>
-          </div>
-
-          {/* Recipients Info */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <p className="text-sm font-medium text-blue-900 mb-1">
-              Recipients:
-            </p>
-            <p className="text-sm text-blue-700">
-              {activeTab === 'Tenants' && `All ${filteredTenants.length} Tenants${selectedHostelName ? ` from ${selectedHostelName}` : ''}`}
-              {activeTab === 'Employees' && `All ${filteredEmployees.length} Employees${selectedHostelName ? ` from ${selectedHostelName}` : ''}`}
-              {activeTab === 'Vendors' && `All ${filteredVendors.length} Vendors${selectedHostelName ? ` from ${selectedHostelName}` : ''}`}
-            </p>
-          </div>
-
-          {/* Form Actions */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
-            <Button
-              type="button"
-              variant="outline"
+      {/* Campaign Modal with Sidebar Layout */}
+      <AnimatePresence>
+        {isEmailCampaignOpen && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
               onClick={handleCampaignClose}
+              className="fixed inset-0 bg-black/50 z-50"
+            />
+            
+            {/* Modal */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+              onClick={(e) => e.stopPropagation()}
             >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              icon={PaperAirplaneIcon}
-            >
-              Send Campaign
-            </Button>
-          </div>
-        </form>
-      </Modal>
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[90vh] flex overflow-hidden">
+                {/* Left Sidebar */}
+                <div className="w-64 bg-slate-800 flex flex-col">
+                  <div className="p-6 border-b border-slate-700">
+                    <div className="flex items-center gap-3">
+                      <PaperAirplaneIcon className="w-6 h-6 text-white" />
+                      <h2 className="text-lg font-semibold text-white">Campaign</h2>
+                    </div>
+                  </div>
+
+                  <div className="flex-1 p-4">
+                    <button
+                      className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-blue-600 text-white"
+                    >
+                      <PaperAirplaneIcon className="w-5 h-5" />
+                      <span className="font-medium">Campaign</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Main Content */}
+                <div className="flex-1 bg-slate-50 flex flex-col overflow-hidden">
+                  <div className="flex items-center justify-between p-6 border-b border-slate-200 bg-white">
+                    <div>
+                      <h3 className="text-xl font-bold text-slate-900">CAMPAIGN</h3>
+                      <span className="block w-12 h-1 bg-pink-500 mt-1" />
+                    </div>
+                    <button
+                      onClick={handleCampaignClose}
+                      className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                    >
+                      <XMarkIcon className="w-6 h-6 text-slate-600" />
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleCampaignSubmit} className="flex-1 flex flex-col overflow-hidden">
+                    <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                      {/* Campaign Type Dropdown */}
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                          Campaign <span className="text-red-500">*</span>
+                        </label>
+                        <Select
+                          value={campaignForm.campaignType}
+                          onChange={(value) => setCampaignForm({ ...campaignForm, campaignType: value })}
+                          options={[
+                            { value: 'email', label: 'Email' },
+                            { value: 'whatsapp', label: 'WhatsApp' },
+                          ]}
+                        />
+                      </div>
+
+                      {/* Message Field */}
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                          Messages <span className="text-red-500">*</span>
+                        </label>
+                        <textarea
+                          required
+                          value={campaignForm.message}
+                          onChange={(e) => setCampaignForm({ ...campaignForm, message: e.target.value })}
+                          placeholder="Enter your message..."
+                          rows={10}
+                          className="block w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors resize-none"
+                        />
+                      </div>
+
+                      {/* Send To Checkboxes */}
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-3">
+                          Send <span className="text-red-500">*</span>
+                        </label>
+                        <div className="space-y-3">
+                          <label className="flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={campaignForm.sendToTenant}
+                              onChange={(e) => setCampaignForm({ ...campaignForm, sendToTenant: e.target.checked })}
+                              className="w-5 h-5 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                            />
+                            <span className="text-sm font-medium text-slate-700">Tenant</span>
+                          </label>
+                          <label className="flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={campaignForm.sendToEmployee}
+                              onChange={(e) => setCampaignForm({ ...campaignForm, sendToEmployee: e.target.checked })}
+                              className="w-5 h-5 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                            />
+                            <span className="text-sm font-medium text-slate-700">Employee</span>
+                          </label>
+                          <label className="flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={campaignForm.sendToVendor}
+                              onChange={(e) => setCampaignForm({ ...campaignForm, sendToVendor: e.target.checked })}
+                              className="w-5 h-5 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                            />
+                            <span className="text-sm font-medium text-slate-700">Vendor</span>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Footer Buttons */}
+                    <div className="p-6 border-t border-slate-200 bg-white flex justify-end gap-3">
+                      <button
+                        type="button"
+                        onClick={handleCampaignClose}
+                        className="px-6 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-6 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors flex items-center gap-2"
+                      >
+                        <PaperAirplaneIcon className="w-5 h-5" />
+                        Send Campaign
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* View Details Modal */}
       <Modal

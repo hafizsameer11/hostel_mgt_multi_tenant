@@ -38,7 +38,9 @@ import {
   BanknotesIcon,
   CalendarIcon,
   Cog6ToothIcon,
+  ArrowDownTrayIcon,
 } from '@heroicons/react/24/outline';
+import jsPDF from 'jspdf';
 
 type MainTab = 'Payable' | 'Receivable' | 'All';
 type PayableSubTab = 'All' | 'Bills' | 'Vendor' | 'Laundry';
@@ -689,6 +691,61 @@ const AccountsList: React.FC = () => {
     });
   };
 
+  // Handle PDF export
+  const handleExportPDF = () => {
+    try {
+      const doc = new jsPDF();
+      let yPos = 20;
+      
+      doc.setFontSize(18);
+      doc.text(`${activeMainTab} Accounts Report`, 105, yPos, { align: 'center' });
+      yPos += 10;
+      
+      doc.setFontSize(10);
+      doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 105, yPos, { align: 'center' });
+      yPos += 15;
+      
+      if (filteredData.length > 0) {
+        doc.setFontSize(14);
+        doc.setFont(undefined, 'bold');
+        doc.text(`${activeMainTab} Transactions`, 20, yPos);
+        yPos += 8;
+        
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'normal');
+        filteredData.slice(0, 30).forEach((transaction, index) => {
+          if (yPos > 270) {
+            doc.addPage();
+            yPos = 20;
+          }
+          doc.text(`${index + 1}. ${transaction.description || 'N/A'} - ${formatCurrency(transaction.amount)} - ${transaction.status}`, 20, yPos);
+          yPos += 6;
+        });
+        
+        yPos += 5;
+        doc.setFontSize(12);
+        doc.setFont(undefined, 'bold');
+        if (activeMainTab === 'Payable') {
+          doc.text(`Total Payable: ${formatCurrency(payableTotal)}`, 20, yPos);
+        } else if (activeMainTab === 'Receivable') {
+          doc.text(`Total Receivable: ${formatCurrency(receivableTotal)}`, 20, yPos);
+        }
+      } else {
+        doc.setFontSize(12);
+        doc.text('No transactions available', 20, yPos);
+      }
+      
+      doc.save(`accounts-${activeMainTab.toLowerCase()}-report-${new Date().toISOString().split('T')[0]}.pdf`);
+    } catch (error: any) {
+      console.error('Error exporting PDF:', error);
+      setToast({
+        open: true,
+        type: 'error',
+        message: 'Failed to export PDF. Please try again.',
+      });
+    }
+  };
+
   // Handle edit status form submission
   const handleEditStatus = (e: React.FormEvent) => {
     e.preventDefault();
@@ -754,12 +811,19 @@ const AccountsList: React.FC = () => {
           <p className="text-slate-600 mt-1">Manage payables, receivables, and financial overview</p>
         </div>
         
-        {/* Hostel Filter - Right side of heading */}
+        {/* Hostel Filter and Export Button - Right side of heading */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           className="flex items-center gap-2 sm:mt-0 mt-2"
         >
+          <Button
+            variant="outline"
+            onClick={handleExportPDF}
+            icon={ArrowDownTrayIcon}
+          >
+            Export PDF
+          </Button>
           <label className="text-sm font-semibold text-slate-700 whitespace-nowrap">
             Filter by Hostel:
           </label>
@@ -774,6 +838,75 @@ const AccountsList: React.FC = () => {
           </div>
         </motion.div>
       </div>
+
+      {/* Filter Tabs for Sub-items - Shown in main content */}
+      {activeMainTab === 'Payable' && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass rounded-xl p-4 border border-white/20 shadow-lg"
+        >
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-semibold text-slate-700 whitespace-nowrap">Filter by:</span>
+            <div className="flex gap-2 flex-wrap">
+              <button
+                onClick={() => navigate(ROUTES.ACCOUNTS_PAYABLE_BILLS)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  activePayableTab === 'Bills'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-300'
+                }`}
+              >
+                Bills
+              </button>
+              <button
+                onClick={() => navigate(ROUTES.ACCOUNTS_PAYABLE_VENDOR)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  activePayableTab === 'Vendor'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-300'
+                }`}
+              >
+                Vendor
+              </button>
+              <button
+                onClick={() => navigate(ROUTES.ACCOUNTS_PAYABLE_LAUNDRY)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  activePayableTab === 'Laundry'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-300'
+                }`}
+              >
+                Laundry
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {activeMainTab === 'Receivable' && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass rounded-xl p-4 border border-white/20 shadow-lg"
+        >
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-semibold text-slate-700 whitespace-nowrap">Filter by:</span>
+            <div className="flex gap-2 flex-wrap">
+              <button
+                onClick={() => navigate(ROUTES.ACCOUNTS_RECEIVABLE_RECEIVED)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  activeReceivableTab === 'Received'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-300'
+                }`}
+              >
+                Received
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* Vendor Filter and Selected Badges - Below header */}
       {(activeMainTab === 'Payable' && activePayableTab === 'Vendor') || (selectedHostelName || selectedVendorName) ? (
@@ -820,8 +953,95 @@ const AccountsList: React.FC = () => {
         </motion.div>
       ) : null}
 
-      {/* Report Period Filter Section */}
-      <motion.div
+  
+
+      {/* Summary Cards - Income, Expense, Profit, Bad Debt */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* Income Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0 }}
+          className="glass p-6 rounded-xl border border-white/20 shadow-lg"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <div className="w-12 h-12 bg-gradient-to-br from-green-400 to-green-600 rounded-lg flex items-center justify-center">
+              <CurrencyDollarIcon className="w-6 h-6 text-white" />
+            </div>
+            <ArrowTrendingUpIcon className="w-5 h-5 text-green-600" />
+          </div>
+          <p className="text-sm font-medium text-gray-600 mb-1">Total Income</p>
+          <p className="text-2xl font-bold text-gray-900">{formatCurrency(summary.income)}</p>
+        </motion.div>
+
+        {/* Expense Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="glass p-6 rounded-xl border border-white/20 shadow-lg"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <div className="w-12 h-12 bg-gradient-to-br from-red-400 to-red-600 rounded-lg flex items-center justify-center">
+              <ArrowTrendingDownIcon className="w-6 h-6 text-white" />
+            </div>
+            <ArrowTrendingDownIcon className="w-5 h-5 text-red-600" />
+          </div>
+          <p className="text-sm font-medium text-gray-600 mb-1">Total Expenses</p>
+          <p className="text-2xl font-bold text-gray-900">{formatCurrency(summary.expenses)}</p>
+        </motion.div>
+
+        {/* Profit Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className={`glass p-6 rounded-xl border border-white/20 shadow-lg ${
+            summary.isProfit ? 'bg-green-50/30' : 'bg-red-50/30'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-3">
+            <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
+              summary.isProfit 
+                ? 'bg-gradient-to-br from-green-400 to-green-600' 
+                : 'bg-gradient-to-br from-red-400 to-red-600'
+            }`}>
+              {summary.isProfit ? (
+                <ArrowTrendingUpIcon className="w-6 h-6 text-white" />
+              ) : (
+                <ArrowTrendingDownIcon className="w-6 h-6 text-white" />
+              )}
+            </div>
+            <span className={`text-sm font-semibold ${summary.isProfit ? 'text-green-600' : 'text-red-600'}`}>
+              {summary.isProfit ? 'Gain' : 'Loss'}
+            </span>
+          </div>
+          <p className="text-sm font-medium text-gray-600 mb-1">Profit / Loss</p>
+          <p className={`text-2xl font-bold ${summary.isProfit ? 'text-green-900' : 'text-red-900'}`}>
+            {summary.isProfit ? '+' : ''}{formatCurrency(summary.profit)}
+          </p>
+        </motion.div>
+
+        {/* Capital Invested Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="glass p-6 rounded-xl border border-white/20 shadow-lg bg-orange-50/30"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <div className="w-12 h-12 bg-gradient-to-br from-orange-400 to-orange-600 rounded-lg flex items-center justify-center">
+              <BanknotesIcon className="w-6 h-6 text-white" />
+            </div>
+            <span className="text-sm font-semibold text-orange-600">Loss</span>
+          </div>
+          <p className="text-sm font-medium text-gray-600 mb-1">Capital Invested</p>
+          <p className="text-2xl font-bold text-orange-900">{formatCurrency(summary.badDebt)}</p>
+        </motion.div>
+      </div>
+
+        {/* Report Period Filter Section */}
+        <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         className="glass rounded-xl p-4 border border-white/20 shadow-lg mb-6"
@@ -986,92 +1206,7 @@ const AccountsList: React.FC = () => {
           </div>
         </div>
       </motion.div>
-
-      {/* Summary Cards - Income, Expense, Profit, Bad Debt */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* Income Card */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0 }}
-          className="glass p-6 rounded-xl border border-white/20 shadow-lg"
-        >
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-12 h-12 bg-gradient-to-br from-green-400 to-green-600 rounded-lg flex items-center justify-center">
-              <CurrencyDollarIcon className="w-6 h-6 text-white" />
-            </div>
-            <ArrowTrendingUpIcon className="w-5 h-5 text-green-600" />
-          </div>
-          <p className="text-sm font-medium text-gray-600 mb-1">Total Income</p>
-          <p className="text-2xl font-bold text-gray-900">{formatCurrency(summary.income)}</p>
-        </motion.div>
-
-        {/* Expense Card */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="glass p-6 rounded-xl border border-white/20 shadow-lg"
-        >
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-12 h-12 bg-gradient-to-br from-red-400 to-red-600 rounded-lg flex items-center justify-center">
-              <ArrowTrendingDownIcon className="w-6 h-6 text-white" />
-            </div>
-            <ArrowTrendingDownIcon className="w-5 h-5 text-red-600" />
-          </div>
-          <p className="text-sm font-medium text-gray-600 mb-1">Total Expenses</p>
-          <p className="text-2xl font-bold text-gray-900">{formatCurrency(summary.expenses)}</p>
-        </motion.div>
-
-        {/* Profit Card */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className={`glass p-6 rounded-xl border border-white/20 shadow-lg ${
-            summary.isProfit ? 'bg-green-50/30' : 'bg-red-50/30'
-          }`}
-        >
-          <div className="flex items-center justify-between mb-3">
-            <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
-              summary.isProfit 
-                ? 'bg-gradient-to-br from-green-400 to-green-600' 
-                : 'bg-gradient-to-br from-red-400 to-red-600'
-            }`}>
-              {summary.isProfit ? (
-                <ArrowTrendingUpIcon className="w-6 h-6 text-white" />
-              ) : (
-                <ArrowTrendingDownIcon className="w-6 h-6 text-white" />
-              )}
-            </div>
-            <span className={`text-sm font-semibold ${summary.isProfit ? 'text-green-600' : 'text-red-600'}`}>
-              {summary.isProfit ? 'Gain' : 'Loss'}
-            </span>
-          </div>
-          <p className="text-sm font-medium text-gray-600 mb-1">Profit / Loss</p>
-          <p className={`text-2xl font-bold ${summary.isProfit ? 'text-green-900' : 'text-red-900'}`}>
-            {summary.isProfit ? '+' : ''}{formatCurrency(summary.profit)}
-          </p>
-        </motion.div>
-
-        {/* Capital Invested Card */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="glass p-6 rounded-xl border border-white/20 shadow-lg bg-orange-50/30"
-        >
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-12 h-12 bg-gradient-to-br from-orange-400 to-orange-600 rounded-lg flex items-center justify-center">
-              <BanknotesIcon className="w-6 h-6 text-white" />
-            </div>
-            <span className="text-sm font-semibold text-orange-600">Loss</span>
-          </div>
-          <p className="text-sm font-medium text-gray-600 mb-1">Capital Invested</p>
-          <p className="text-2xl font-bold text-orange-900">{formatCurrency(summary.badDebt)}</p>
-        </motion.div>
-      </div>
-
+      
       {/* Content - No tabs, navigation handled by second sidebar */}
       <div className="glass rounded-2xl border border-white/20 shadow-xl">
         <div className="p-6">

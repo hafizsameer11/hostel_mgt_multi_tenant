@@ -62,6 +62,7 @@ const SecondSidebar: React.FC<SecondSidebarProps> = ({ isVisible }) => {
 
   // Check which section we're in
   const isPeopleSection = location.pathname.startsWith(ROUTES.PEOPLE);
+  const isVendorSection = location.pathname.startsWith(ROUTES.VENDOR);
   const isAccountsSection = location.pathname.startsWith(ROUTES.ACCOUNTS);
   const isCommunicationSection = location.pathname.startsWith(ROUTES.COMM);
   const isFPASection = location.pathname.startsWith(ROUTES.FPA);
@@ -71,21 +72,13 @@ const SecondSidebar: React.FC<SecondSidebarProps> = ({ isVisible }) => {
   const getActivePeopleSection = (): string | null => {
     if (location.pathname.includes('/tenants')) return 'Tenants';
     if (location.pathname.includes('/employees')) return 'Employees';
-    if (location.pathname.includes('/vendors')) return 'Vendors';
     if (location.pathname.includes('/prospects')) return 'Prospects';
     return null;
   };
 
-  const getActiveVendorSubSection = (): string | null => {
-    if (location.pathname.includes('/people/vendors/management')) return 'Vendor Management';
-    if (location.pathname.includes('/people/vendors/list')) return 'Vendor List';
-    return null;
-  };
-
-  // Get active section from URL for Vendor
+  // Get active section from URL for Vendor (always Management)
   const getActiveVendorSection = (): string | null => {
-    if (location.pathname.includes('/vendor/list')) return 'Vendor List';
-    if (location.pathname.includes('/vendor/management')) return 'Vendor Management';
+    if (location.pathname.includes('/vendor/management') || location.pathname.includes('/vendor')) return 'Vendor Management';
     return null;
   };
 
@@ -125,7 +118,6 @@ const SecondSidebar: React.FC<SecondSidebarProps> = ({ isVisible }) => {
   };
 
   const activePeopleSection = getActivePeopleSection();
-  const activeVendorSubSection = getActiveVendorSubSection();
   const activeVendorSection = getActiveVendorSection();
   const activeAccountsSection = getActiveAccountsSection();
   const activeCommunicationSection = getActiveCommunicationSection();
@@ -138,12 +130,6 @@ const SecondSidebar: React.FC<SecondSidebarProps> = ({ isVisible }) => {
     { id: 'Employees', label: 'Employees', path: ROUTES.EMPLOYEES },
     { id: 'Vendors', label: 'Vendor', path: ROUTES.VENDOR_LIST_PEOPLE },
     { id: 'Prospects', label: 'Prospects', path: ROUTES.PROSPECTS },
-  ];
-
-  // Vendor sub-sections (when Vendor is selected in People)
-  const vendorSubSections: Array<{ id: string; label: string; path: string }> = [
-    { id: 'Vendor List', label: 'Vendor List', path: ROUTES.VENDOR_LIST_PEOPLE },
-    { id: 'Vendor Management', label: 'Vendor Management', path: ROUTES.VENDOR_MANAGEMENT_PEOPLE },
   ];
 
   // Directory sections for Vendor
@@ -243,6 +229,7 @@ const SecondSidebar: React.FC<SecondSidebarProps> = ({ isVisible }) => {
               </svg>
               <span className="font-bold">
                 {isPeopleSection ? 'PEOPLE' : 
+                 isVendorSection ? 'VENDOR' :
                  isAccountsSection ? 'ACCOUNTS' : 
                  isCommunicationSection ? 'COMMUNICATION' : 
                  isFPASection ? 'FP&A' :
@@ -254,6 +241,7 @@ const SecondSidebar: React.FC<SecondSidebarProps> = ({ isVisible }) => {
             {/* Directory Label */}
             <h2 className="text-xs font-semibold text-white/60 uppercase tracking-wider mb-3">
               {isPeopleSection ? 'DIRECTORY' : 
+               isVendorSection ? 'VENDOR SECTIONS' :
                isAccountsSection ? 'ACCOUNTS SECTIONS' : 
                isCommunicationSection ? 'COMMUNICATION SECTIONS' : 
                isFPASection ? 'FP&A SECTIONS' :
@@ -263,52 +251,44 @@ const SecondSidebar: React.FC<SecondSidebarProps> = ({ isVisible }) => {
 
             {/* Directory Items */}
             <nav className="space-y-1">
-              {isPeopleSection ? (
+              {isVendorSection ? (
+                vendorSections.map((section) => {
+                  const isSectionActive = activeVendorSection === section.id;
+                  return (
+                    <button
+                      key={section.id}
+                      onClick={() => navigate(section.path)}
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                        isSectionActive
+                          ? 'bg-[#2176FF] text-white shadow-sm'
+                          : 'text-white/80 hover:bg-white/10 hover:text-white'
+                      }`}
+                    >
+                      <span>{section.label}</span>
+                    </button>
+                  );
+                })
+              ) : isPeopleSection ? (
                 peopleSections.map((section) => {
-                  const isSectionActive = activePeopleSection === section.id || 
-                    (section.id === 'Vendors' && activeVendorSubSection !== null);
-                  const isVendor = section.id === 'Vendors';
+                  const isSectionActive = activePeopleSection === section.id;
                   
                   return (
-                    <div key={section.id} className="space-y-1">
-                      <button
-                        onClick={() => navigate(section.path)}
-                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-                          isSectionActive
-                            ? 'bg-[#2176FF] text-white shadow-sm'
-                            : 'text-white/90 hover:bg-white/10 hover:text-white'
-                        }`}
-                      >
-                        <span>{section.label}</span>
-                      </button>
-                      
-                      {/* Vendor Sub-sections */}
-                      {isVendor && (
-                        <div className="ml-4 space-y-1 border-l border-white/20 pl-2">
-                          {vendorSubSections.map((subSection) => {
-                            const isSubSectionActive = activeVendorSubSection === subSection.id;
-                            return (
-                              <button
-                                key={subSection.id}
-                                onClick={() => navigate(subSection.path)}
-                                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                                  isSubSectionActive
-                                    ? 'bg-[#2176FF]/80 text-white shadow-sm'
-                                    : 'text-white/70 hover:bg-white/10 hover:text-white'
-                                }`}
-                              >
-                                <span>{subSection.label}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
+                    <button
+                      key={section.id}
+                      onClick={() => navigate(section.path)}
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                        isSectionActive
+                          ? 'bg-[#2176FF] text-white shadow-sm'
+                          : 'text-white/90 hover:bg-white/10 hover:text-white'
+                      }`}
+                    >
+                      <span>{section.label}</span>
+                    </button>
                   );
                 })
               ) : isAccountsSection ? (
                 <>
-                  {/* Main Sections - All, Payable, and Receivable */}
+                  {/* Main Sections - All, Payable, and Receivable (No sub-items in sidebar) */}
                   {accountsMainSections.map((section) => {
                     const isAll = section.id === 'All';
                     const isPayable = section.id === 'Payable';
@@ -324,61 +304,17 @@ const SecondSidebar: React.FC<SecondSidebarProps> = ({ isVisible }) => {
                       : false;
                     
                     return (
-                      <div key={section.id} className="space-y-1">
-                        <button
-                          onClick={() => navigate(section.path)}
-                          className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-                            isSectionActive
-                              ? 'bg-[#2176FF] text-white shadow-sm'
-                              : 'text-white/90 hover:bg-white/10 hover:text-white'
-                          }`}
-                        >
-                          <span>{section.label}</span>
-                        </button>
-                        
-                        {/* Sub-sections with indentation - Only for Payable and Receivable, not All */}
-                        {isPayable && (
-                          <div className="ml-4 space-y-1 border-l border-white/20 pl-2">
-                            {accountsPayableSubSections.map((subSection) => {
-                              const isSubSectionActive = activeAccountsSection === subSection.id;
-                              return (
-                                <button
-                                  key={subSection.id}
-                                  onClick={() => navigate(subSection.path)}
-                                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                                    isSubSectionActive
-                                      ? 'bg-[#2176FF]/80 text-white shadow-sm'
-                                      : 'text-white/70 hover:bg-white/10 hover:text-white'
-                                  }`}
-                                >
-                                  <span>{subSection.label}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-                        
-                        {isReceivable && (
-                          <div className="ml-4 space-y-1 border-l border-white/20 pl-2">
-                            {accountsReceivableSubSections.map((subSection) => {
-                              const isSubSectionActive = activeAccountsSection === subSection.id;
-                              return (
-                                <button
-                                  key={subSection.id}
-                                  onClick={() => navigate(subSection.path)}
-                                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                                    isSubSectionActive
-                                      ? 'bg-[#2176FF]/80 text-white shadow-sm'
-                                      : 'text-white/70 hover:bg-white/10 hover:text-white'
-                                  }`}
-                                >
-                                  <span>{subSection.label}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
+                      <button
+                        key={section.id}
+                        onClick={() => navigate(section.path)}
+                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+                          isSectionActive
+                            ? 'bg-[#2176FF] text-white shadow-sm'
+                            : 'text-white/90 hover:bg-white/10 hover:text-white'
+                        }`}
+                      >
+                        <span>{section.label}</span>
+                      </button>
                     );
                   })}
                 </>
@@ -433,24 +369,7 @@ const SecondSidebar: React.FC<SecondSidebarProps> = ({ isVisible }) => {
                     </button>
                   );
                 })
-              ) : (
-                vendorSections.map((section) => {
-                  const isSectionActive = activeVendorSection === section.id;
-                  return (
-                    <button
-                      key={section.id}
-                      onClick={() => navigate(section.path)}
-                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                        isSectionActive
-                          ? 'bg-[#2176FF] text-white shadow-sm'
-                          : 'text-white/80 hover:bg-white/10 hover:text-white'
-                      }`}
-                    >
-                      <span>{section.label}</span>
-                    </button>
-                  );
-                })
-              )}
+              ) : null}
             </nav>
           </div>
         </motion.aside>

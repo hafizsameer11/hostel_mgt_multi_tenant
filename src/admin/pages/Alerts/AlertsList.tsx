@@ -6,7 +6,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { PlusIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, CalendarIcon, Cog6ToothIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import jsPDF from 'jspdf';
 import { DataTable } from '../../components/DataTable';
 import type { Column } from '../../components/DataTable';
 import { Select } from '../../components/Select';
@@ -51,6 +52,17 @@ const AlertsList: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('');
   const [hostelFilter, setHostelFilter] = useState('');
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  
+  // Report Period filters
+  const [reportPeriod, setReportPeriod] = useState<string>('Last 7 days');
+  const [dateFrom, setDateFrom] = useState<string>(() => {
+    const date = new Date();
+    date.setDate(date.getDate() - 7);
+    return date.toISOString().split('T')[0];
+  });
+  const [dateTo, setDateTo] = useState<string>(() => {
+    return new Date().toISOString().split('T')[0];
+  });
   const [isAddAlertOpen, setIsAddAlertOpen] = useState(false);
   const [isViewAlertOpen, setIsViewAlertOpen] = useState(false);
   const [selectedAlertId, setSelectedAlertId] = useState<number | null>(null);
@@ -161,7 +173,16 @@ const AlertsList: React.FC = () => {
     }
   };
 
-  // Filter data by severity and status (type and hostel are already filtered by API)
+  // Helper function to format date as MM/DD/YYYY for display
+  const formatDateDisplay = (dateString: string): string => {
+    const date = new Date(dateString);
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${month}/${day}/${year}`;
+  };
+
+  // Filter data by severity, status, and date range (type and hostel are already filtered by API)
   const filteredData = useMemo(() => {
     let data = alerts;
 
@@ -175,14 +196,71 @@ const AlertsList: React.FC = () => {
       data = data.filter((a) => a.status === statusFilter);
     }
 
+    // Date range filter
+    if (dateFrom && dateTo) {
+      data = data.filter((a) => {
+        const alertDate = new Date(a.createdAt);
+        const fromDate = new Date(dateFrom);
+        const toDate = new Date(dateTo);
+        toDate.setHours(23, 59, 59, 999); // Include the entire end date
+        return alertDate >= fromDate && alertDate <= toDate;
+      });
+    }
+
     return data;
-  }, [alerts, severityFilter, statusFilter]);
+  }, [alerts, severityFilter, statusFilter, dateFrom, dateTo]);
 
   // Calculate stats for current section
   const currentSectionData = filteredData;
   const dangerCount = currentSectionData.filter((a) => a.severity === 'danger').length;
   const warningCount = currentSectionData.filter((a) => a.severity === 'warn').length;
   const infoCount = currentSectionData.filter((a) => a.severity === 'info').length;
+
+  // Handle PDF export
+  const handleExportPDF = () => {
+    try {
+      const doc = new jsPDF();
+      let yPos = 20;
+      
+      doc.setFontSize(18);
+      doc.text(`${activeSection === 'bills' ? 'Bills' : 'Maintenance'} Alerts Report`, 105, yPos, { align: 'center' });
+      yPos += 10;
+      
+      doc.setFontSize(10);
+      doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 105, yPos, { align: 'center' });
+      yPos += 15;
+      
+      if (filteredData.length > 0) {
+        doc.setFontSize(14);
+        doc.setFont(undefined, 'bold');
+        doc.text('Alerts List', 20, yPos);
+        yPos += 8;
+        
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'normal');
+        filteredData.slice(0, 30).forEach((alert, index) => {
+          if (yPos > 270) {
+            doc.addPage();
+            yPos = 20;
+          }
+          doc.text(`${index + 1}. ${alert.title || 'N/A'} - ${alert.severity.toUpperCase()} - ${alert.status}`, 20, yPos);
+          yPos += 6;
+        });
+      } else {
+        doc.setFontSize(12);
+        doc.text('No alerts available', 20, yPos);
+      }
+      
+      doc.save(`alerts-${activeSection}-report-${new Date().toISOString().split('T')[0]}.pdf`);
+    } catch (error: any) {
+      console.error('Error exporting PDF:', error);
+      setToast({
+        open: true,
+        type: 'error',
+        message: 'Failed to export PDF. Please try again.',
+      });
+    }
+  };
 
   // Handle add alert
   const handleAddAlert = async (formData: AlertFormData) => {
@@ -351,6 +429,13 @@ const AlertsList: React.FC = () => {
             />
           </div>
           <Button
+            variant="outline"
+            onClick={handleExportPDF}
+            icon={ArrowDownTrayIcon}
+          >
+            Export PDF
+          </Button>
+          <Button
             variant="primary"
             onClick={() => setIsAddAlertOpen(true)}
             icon={PlusIcon}
@@ -403,6 +488,113 @@ const AlertsList: React.FC = () => {
             </p>
           </div>
         </div>
+      )}
+
+      {/* Report Period Filter Section */}
+      {!loading && !error && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass rounded-xl p-4 border border-white/20 shadow-lg mb-6"
+        >
+          <div className="space-y-4">
+            {/* Report Period Heading */}
+            <h3 className="text-sm font-bold text-slate-900">Report Period</h3>
+            
+            {/* Filter Controls Row */}
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Period Dropdown */}
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-slate-700 whitespace-nowrap">Period:</label>
+                <Select
+                  value={reportPeriod}
+                  onChange={(value) => {
+                    setReportPeriod(value);
+                    const today = new Date();
+                    const todayStr = today.toISOString().split('T')[0];
+                    
+                    if (value === 'Today') {
+                      setDateFrom(todayStr);
+                      setDateTo(todayStr);
+                    } else if (value === 'Last 7 days') {
+                      const last7Days = new Date(today);
+                      last7Days.setDate(last7Days.getDate() - 7);
+                      setDateFrom(last7Days.toISOString().split('T')[0]);
+                      setDateTo(todayStr);
+                    } else if (value === 'Last 30 days') {
+                      const last30Days = new Date(today);
+                      last30Days.setDate(last30Days.getDate() - 30);
+                      setDateFrom(last30Days.toISOString().split('T')[0]);
+                      setDateTo(todayStr);
+                    } else if (value === 'This Month') {
+                      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+                      setDateFrom(firstDay.toISOString().split('T')[0]);
+                      setDateTo(todayStr);
+                    } else if (value === 'This Year') {
+                      const firstDayOfYear = new Date(today.getFullYear(), 0, 1);
+                      setDateFrom(firstDayOfYear.toISOString().split('T')[0]);
+                      setDateTo(todayStr);
+                    } else if (value === 'Custom Range') {
+                      // Keep current dates for custom range
+                    }
+                  }}
+                  options={[
+                    { value: 'Today', label: 'Today' },
+                    { value: 'Last 7 days', label: 'Last 7 days' },
+                    { value: 'Last 30 days', label: 'Last 30 days' },
+                    { value: 'This Month', label: 'This Month' },
+                    { value: 'This Year', label: 'This Year' },
+                    { value: 'Custom Range', label: 'Custom Range' },
+                  ]}
+                />
+              </div>
+              
+              {/* From Date Input */}
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-slate-700 whitespace-nowrap">From:</label>
+                <div className="relative">
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => {
+                      setDateFrom(e.target.value);
+                      setReportPeriod('Custom Range');
+                    }}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
+                  <CalendarIcon className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                </div>
+              </div>
+              
+              {/* To Date Input */}
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-slate-700 whitespace-nowrap">To:</label>
+                <div className="relative">
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => {
+                      setDateTo(e.target.value);
+                      setReportPeriod('Custom Range');
+                    }}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
+                  <CalendarIcon className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                </div>
+              </div>
+            </div>
+            
+            {/* Selected Report Period Display */}
+            <div className="mt-3">
+              <button
+                type="button"
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg border border-slate-300 transition-colors text-sm font-medium text-slate-700"
+              >
+                Report Period: {formatDateDisplay(dateFrom)} - {formatDateDisplay(dateTo)}
+              </button>
+            </div>
+          </div>
+        </motion.div>
       )}
 
       {/* Data table */}

@@ -41,6 +41,7 @@ export const AddHostelForm: React.FC<AddHostelFormProps> = ({
     type: '',
     checkInTime: '',
     checkOutTime: '',
+    mapLink: '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -66,6 +67,7 @@ export const AddHostelForm: React.FC<AddHostelFormProps> = ({
           type: '', // May need to fetch from API
           checkInTime: '9:00AM', // Default or fetch from API
           checkOutTime: '6:00PM', // Default or fetch from API
+          mapLink: editingHostel.mapLink || '',
         });
       } else {
         // Reset form for new hostel
@@ -84,6 +86,7 @@ export const AddHostelForm: React.FC<AddHostelFormProps> = ({
           type: '',
           checkInTime: '9:00AM',
           checkOutTime: '6:00PM',
+          mapLink: '',
   });
       }
       setActiveTab('hostelInfo');
@@ -183,6 +186,7 @@ export const AddHostelForm: React.FC<AddHostelFormProps> = ({
           checkOut: formData.checkOutTime,
         },
         hostelImage: formData.hostelImage,
+        mapLink: formData.mapLink.trim(),
       };
 
       await onSubmit(submitData);
@@ -212,6 +216,7 @@ export const AddHostelForm: React.FC<AddHostelFormProps> = ({
       type: '',
       checkInTime: '',
       checkOutTime: '',
+      mapLink: '',
     });
     setErrors({});
     setActiveTab('hostelInfo');
@@ -484,6 +489,23 @@ export const AddHostelForm: React.FC<AddHostelFormProps> = ({
                             placeholder="Enter hostel description..."
                             className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           />
+                        </div>
+
+                        {/* Hostel Map Link */}
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-2">
+                            Hostel Map (Google Map Link)
+                          </label>
+                          <input
+                            type="url"
+                            value={formData.mapLink}
+                            onChange={(e) => setFormData({ ...formData, mapLink: e.target.value })}
+                            placeholder="https://maps.google.com/..."
+                            className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                          <p className="mt-1 text-xs text-slate-500">
+                            Enter the Google Maps link for the hostel location
+                          </p>
                         </div>
 
                         {/* Hostel Image Upload */}

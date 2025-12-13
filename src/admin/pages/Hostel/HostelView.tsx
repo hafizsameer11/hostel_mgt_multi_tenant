@@ -379,16 +379,16 @@ const HostelView: React.FC = () => {
       label: 'Details',
     },
     {
+      id: 'mess',
+      label: 'Mess',
+    },
+    {
       id: 'arrangement',
       label: 'Arrangement',
     },
     {
       id: 'architecture',
       label: 'Architecture',
-    },
-    {
-      id: 'mess',
-      label: 'Mess',
     },
   ];
 
@@ -407,20 +407,24 @@ const HostelView: React.FC = () => {
           <p className="text-slate-600 mt-1">Hostel Details & Architecture</p>
         </div>
         <div className="flex gap-3">
-          <Button
-            variant="primary"
-            onClick={() => setIsAddBlockOpen(true)}
-            icon={PlusIcon}
-          >
-            Add Block
-          </Button>
-          <Button
-            variant="primary"
-            onClick={() => setIsAddRoomOpen(true)}
-            icon={PlusIcon}
-          >
-            Add Room
-          </Button>
+          {activeTab === 'arrangement' && (
+            <>
+              <Button
+                variant="primary"
+                onClick={() => setIsAddBlockOpen(true)}
+                icon={PlusIcon}
+              >
+                Add Block
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => setIsAddRoomOpen(true)}
+                icon={PlusIcon}
+              >
+                Add Room
+              </Button>
+            </>
+          )}
           <Button
             variant="outline"
             onClick={() => navigate(ROUTES.HOSTEL_EDIT(hostel.id))}
@@ -833,20 +837,15 @@ const HostelView: React.FC = () => {
                           {/* Vertical Line from Room */}
                           <div className="w-0.5 h-2 bg-slate-400 mb-1"></div>
 
-                          {/* Level 3: Seats (Light Green) - Horizontal Compact */}
-                          <div className="flex gap-1">
-                            {room.seats.map((seat) => (
-                              <div key={seat.id} className="relative">
-                                {/* Seat Node (Light Green) */}
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-[9px] shadow-sm border border-white ${
-                                  seat.isOccupied
-                                    ? 'bg-red-400 text-white'
-                                    : 'bg-green-300 text-green-800'
-                                }`}>
-                                  {seat.seatNumber}
-                                </div>
-                              </div>
-                            ))}
+                          {/* Level 3: Seats (Light Green) - Show only count */}
+                          <div className="flex items-center justify-center">
+                            <div className={`px-2 py-1 rounded text-[10px] font-semibold ${
+                              room.seats.filter(s => s.isOccupied).length > 0
+                                ? 'bg-red-100 text-red-700 border border-red-300'
+                                : 'bg-green-100 text-green-700 border border-green-300'
+                            }`}>
+                              {room.seats.filter(s => s.isOccupied).length}/{room.seats.length} Seats
+                            </div>
                           </div>
                         </div>
                       ))}

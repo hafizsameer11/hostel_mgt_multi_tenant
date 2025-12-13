@@ -19,7 +19,9 @@ import {
   BriefcaseIcon, 
   HomeIcon,
   UserPlusIcon,
+  ArrowDownTrayIcon,
 } from '@heroicons/react/24/outline';
+import jsPDF from 'jspdf';
 
 // Import components
 import TenantForm, { type TenantFormData } from './components/TenantForm';
@@ -41,7 +43,6 @@ const VendorListWrapper: React.FC<{ selectedHostelId: string; onHostelChange: (i
 };
 
 type PeopleSection = 'Tenants' | 'Employees' | 'Vendors' | 'Prospects';
-type VendorSubSection = 'Vendor List' | 'Vendor Management';
 
 const PeopleHub: React.FC = () => {
   const location = useLocation();
@@ -55,15 +56,7 @@ const PeopleHub: React.FC = () => {
     return null; // On base route
   };
   
-  // Get active vendor sub-section from URL
-  const getActiveVendorSubSection = (): VendorSubSection | null => {
-    if (location.pathname.includes('/people/vendors/management')) return 'Vendor Management';
-    if (location.pathname.includes('/people/vendors/list')) return 'Vendor List';
-    return null;
-  };
-  
   const activeSection = getActiveSection();
-  const activeVendorSubSection = getActiveVendorSubSection();
   const [selectedHostelId, setSelectedHostelId] = useState<string>('');
   const [hostels, setHostels] = useState<Array<{ id: string | number; name: string; city: string }>>([]);
   const [hostelsLoading, setHostelsLoading] = useState<boolean>(true);
@@ -555,7 +548,8 @@ const PeopleHub: React.FC = () => {
             salary: employeeData.employee.salary?.toString() || '',
             salaryType: employeeData.employee.salaryType || 'monthly',
             workingHours: employeeData.employee.workingHours || '',
-            document: null, // Keep as null, user can upload new one if needed
+            reference: employeeData.employee.reference || '',
+            documents: [], // Keep as empty array, user can upload new ones if needed
             notes: employeeData.employee.notes || '',
           });
           
@@ -903,6 +897,9 @@ const PeopleHub: React.FC = () => {
       if (formDataFromComponent.workingHours) {
         formData.append('workingHours', formDataFromComponent.workingHours);
       }
+      if (formDataFromComponent.reference) {
+        formData.append('reference', formDataFromComponent.reference);
+      }
       if (formDataFromComponent.notes) {
         formData.append('notes', formDataFromComponent.notes);
       }
@@ -922,8 +919,11 @@ const PeopleHub: React.FC = () => {
       if (formDataFromComponent.profilePhoto) {
         formData.append('profilePhoto', formDataFromComponent.profilePhoto);
       }
-      if (formDataFromComponent.document) {
-        formData.append('documents', formDataFromComponent.document);
+      // Append multiple documents
+      if (formDataFromComponent.documents && formDataFromComponent.documents.length > 0) {
+        formDataFromComponent.documents.forEach((doc) => {
+          formData.append('documents', doc);
+        });
       }
 
       let response;
@@ -1120,6 +1120,88 @@ const PeopleHub: React.FC = () => {
     return ((scoreForm.behavior + scoreForm.punctuality + scoreForm.cleanliness) / 3).toFixed(1);
   };
 
+  // Handle PDF export
+  const handleExportPDF = () => {
+    try {
+      const doc = new jsPDF();
+      let yPos = 20;
+      
+      // Title
+      doc.setFontSize(18);
+      doc.text(`${activeSection || 'People'} Report`, 105, yPos, { align: 'center' });
+      yPos += 10;
+      
+      // Date
+      doc.setFontSize(10);
+      doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 105, yPos, { align: 'center' });
+      yPos += 15;
+      
+      // Data based on active section
+      if (activeSection === 'Tenants' && filteredTenants.length > 0) {
+        doc.setFontSize(14);
+        doc.setFont(undefined, 'bold');
+        doc.text('Tenants List', 20, yPos);
+        yPos += 8;
+        
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'normal');
+        filteredTenants.slice(0, 20).forEach((tenant, index) => {
+          if (yPos > 270) {
+            doc.addPage();
+            yPos = 20;
+          }
+          doc.text(`${index + 1}. ${tenant.name || 'N/A'} - ${tenant.email || 'N/A'} - ${tenant.phone || 'N/A'}`, 20, yPos);
+          yPos += 6;
+        });
+      } else if (activeSection === 'Employees' && filteredEmployees.length > 0) {
+        doc.setFontSize(14);
+        doc.setFont(undefined, 'bold');
+        doc.text('Employees List', 20, yPos);
+        yPos += 8;
+        
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'normal');
+        filteredEmployees.slice(0, 20).forEach((employee, index) => {
+          if (yPos > 270) {
+            doc.addPage();
+            yPos = 20;
+          }
+          doc.text(`${index + 1}. ${employee.name || 'N/A'} - ${employee.email || 'N/A'} - ${employee.phone || 'N/A'}`, 20, yPos);
+          yPos += 6;
+        });
+      } else if (activeSection === 'Prospects' && filteredProspects.length > 0) {
+        doc.setFontSize(14);
+        doc.setFont(undefined, 'bold');
+        doc.text('Prospects List', 20, yPos);
+        yPos += 8;
+        
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'normal');
+        filteredProspects.slice(0, 20).forEach((prospect, index) => {
+          if (yPos > 270) {
+            doc.addPage();
+            yPos = 20;
+          }
+          doc.text(`${index + 1}. ${prospect.name || 'N/A'} - ${prospect.email || 'N/A'} - ${prospect.phone || 'N/A'}`, 20, yPos);
+          yPos += 6;
+        });
+      } else {
+        doc.setFontSize(12);
+        doc.text('No data available for export', 20, yPos);
+      }
+      
+      // Save PDF
+      doc.save(`${activeSection?.toLowerCase() || 'people'}-report-${new Date().toISOString().split('T')[0]}.pdf`);
+    } catch (error: any) {
+      console.error('Error exporting PDF:', error);
+      setToast({
+        open: true,
+        type: 'error',
+        message: 'Failed to export PDF. Please try again.',
+      });
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
       {/* Main Content Area */}
@@ -1130,22 +1212,19 @@ const PeopleHub: React.FC = () => {
         <div className="flex items-center justify-between gap-4 flex-wrap p-6 pb-4">
           <div>
             <h1 className="text-3xl font-bold text-slate-900">
-              {activeSection === 'Vendors' 
-                ? (activeVendorSubSection === 'Vendor Management' ? 'Vendor Management' : 'Vendor List')
-                : activeSection}
+              {activeSection === 'Vendors' ? 'Vendor' : activeSection}
             </h1>
             <p className="text-slate-600 mt-1">
               {activeSection === 'Tenants' && 'Manage tenant information and room allocations.'}
               {activeSection === 'Employees' && 'Manage employee information and roles.'}
-              {activeSection === 'Vendors' && activeVendorSubSection === 'Vendor List' && 'View and manage all vendors.'}
-              {activeSection === 'Vendors' && activeVendorSubSection === 'Vendor Management' && 'Manage vendor services and assignments.'}
+              {activeSection === 'Vendors' && 'View and manage all vendors.'}
               {activeSection === 'Prospects' && 'Manage potential tenants and applications.'}
             </p>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
             {(activeSection === 'Tenants' || activeSection === 'Employees' || activeSection === 'Vendors' || activeSection === 'Prospects') && (
               <>
-                {(activeSection !== 'Prospects') && (
+                {activeSection !== 'Prospects' && (
                   <div className="w-full sm:w-80">
                     <Select
                       value={selectedHostelId}
@@ -1155,6 +1234,13 @@ const PeopleHub: React.FC = () => {
                     />
                   </div>
                 )}
+                <Button
+                  variant="outline"
+                  onClick={handleExportPDF}
+                  icon={ArrowDownTrayIcon}
+                >
+                  Export PDF
+                </Button>
                 {(activeSection === 'Tenants' || activeSection === 'Employees' || activeSection === 'Prospects') && (
                   <Button
                     variant="primary"
@@ -1164,7 +1250,7 @@ const PeopleHub: React.FC = () => {
                     {activeSection === 'Tenants' ? 'Add Tenant' : activeSection === 'Employees' ? 'Add Employee' : 'Add Prospect'}
                   </Button>
                 )}
-                {activeSection === 'Vendors' && activeVendorSubSection === 'Vendor List' && (
+                {activeSection === 'Vendors' && (
                   <Button
                     variant="primary"
                     onClick={() => {
@@ -1188,7 +1274,7 @@ const PeopleHub: React.FC = () => {
               <React.Suspense fallback={
                 <div className="text-center py-16">
                   <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
-                  <p className="text-gray-600">Loading vendor management...</p>
+                  <p className="text-gray-600">Loading vendors...</p>
                 </div>
               }>
                 <VendorListWrapper 
@@ -1277,9 +1363,9 @@ const PeopleHub: React.FC = () => {
               />
             )
           ) : null}
-            </div>
-          )}
           </div>
+          )}
+        </div>
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center">

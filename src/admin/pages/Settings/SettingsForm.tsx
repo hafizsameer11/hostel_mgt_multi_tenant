@@ -28,7 +28,10 @@ import {
   FunnelIcon,
   CheckCircleIcon,
   MagnifyingGlassIcon,
+  ArrowDownTrayIcon,
 } from '@heroicons/react/24/outline';
+import { Button } from '../../components/Button';
+import jsPDF from 'jspdf';
 import { Toast } from '../../components/Toast';
 import type { ToastType } from '../../types/common';
 import { DataTable } from '../../components/DataTable';
@@ -76,18 +79,20 @@ interface LoginPasswordFormData {
 }
 
 /**
- * Change Password Modal Component
+ * Change Password Modal Component with Sidebar Layout
  */
 const LoginPasswordModal: React.FC<LoginPasswordModalProps> = ({ isOpen, onClose }) => {
+  const [activeTab, setActiveTab] = useState<'changePassword' | 'forgetPassword'>('changePassword');
   const [formData, setFormData] = useState<LoginPasswordFormData>({
     currentPassword: '',
     newPassword: '',
     confirmPassword: '',
   });
+  const [forgetPasswordEmail, setForgetPasswordEmail] = useState('');
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [errors, setErrors] = useState<{ currentPassword?: string; newPassword?: string; confirmPassword?: string }>({});
+  const [errors, setErrors] = useState<{ currentPassword?: string; newPassword?: string; confirmPassword?: string; email?: string }>({});
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -97,9 +102,11 @@ const LoginPasswordModal: React.FC<LoginPasswordModalProps> = ({ isOpen, onClose
       document.body.style.overflow = 'hidden';
       // Reset form when modal opens
       setFormData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      setForgetPasswordEmail('');
       setErrors({});
       setSuccess(null);
       setApiError(null);
+      setActiveTab('changePassword');
     } else {
       document.body.style.overflow = 'unset';
     }
@@ -204,6 +211,46 @@ const LoginPasswordModal: React.FC<LoginPasswordModalProps> = ({ isOpen, onClose
     }
   };
 
+  const handleForgetPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!forgetPasswordEmail.trim()) {
+      setErrors({ email: 'Email is required' });
+      return;
+    }
+    
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(forgetPasswordEmail)) {
+      setErrors({ email: 'Invalid email format' });
+      return;
+    }
+    
+    setLoading(true);
+    setApiError(null);
+    setSuccess(null);
+    
+    try {
+      // Call forget password API
+      const response = await api.post('/admin/auth/forgot-password', {
+        email: forgetPasswordEmail,
+      });
+      
+      if (response.success) {
+        setSuccess(response.message || 'Password reset link sent to your email!');
+        setForgetPasswordEmail('');
+        setTimeout(() => {
+          onClose();
+        }, 3000);
+      } else {
+        setApiError(response.message || 'Failed to send password reset link');
+      }
+    } catch (err: any) {
+      console.error('Error sending password reset:', err);
+      setApiError(err?.response?.data?.message || 'Failed to send password reset link. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -217,7 +264,7 @@ const LoginPasswordModal: React.FC<LoginPasswordModalProps> = ({ isOpen, onClose
             className="fixed inset-0 bg-black/50 z-50"
           />
 
-          {/* Modal */}
+          {/* Modal with Sidebar */}
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -225,162 +272,281 @@ const LoginPasswordModal: React.FC<LoginPasswordModalProps> = ({ isOpen, onClose
             className="fixed inset-0 z-50 flex items-center justify-center p-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col overflow-hidden">
-              {/* Header with Close Button */}
-              <div className="flex items-center justify-between p-6 border-b border-slate-200 bg-white">
-                <div>
-                  <h3 className="text-xl font-bold text-slate-900">Change Password</h3>
-                  <span className="block w-12 h-1 bg-pink-500 mt-1" />
-                </div>
-                <button
-                  onClick={onClose}
-                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-                >
-                  <XMarkIcon className="w-6 h-6 text-slate-600" />
-                </button>
-              </div>
-
-              {/* Form Content */}
-              <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">
-                <div className="flex-1 overflow-y-auto p-6">
-                  {/* Error and Success Messages */}
-                  {(apiError || success) && (
-                    <div className="mb-6">
-                      {apiError && (
-                        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
-                          <p className="text-sm">{apiError}</p>
-                        </div>
-                      )}
-                      {success && (
-                        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-4">
-                          <p className="text-sm">{success}</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  
-                  <div className="space-y-6 max-w-md">
-                    {/* Current Password Field */}
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Current Password <span className="text-red-500">*</span>
-                      </label>
-                      <div className="relative">
-                        <input
-                          type={showCurrentPassword ? 'text' : 'password'}
-                          value={formData.currentPassword}
-                          onChange={(e) => handleInputChange('currentPassword', e.target.value)}
-                          placeholder="Enter current password"
-                          className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
-                            errors.currentPassword
-                              ? 'border-red-300 focus:ring-red-500'
-                              : 'border-slate-300 focus:ring-blue-500'
-                          }`}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700"
-                        >
-                          <LockClosedIcon className="w-5 h-5" />
-                        </button>
-                      </div>
-                      {errors.currentPassword && (
-                        <p className="mt-1 text-sm text-red-600">{errors.currentPassword}</p>
-                      )}
-                    </div>
-
-                    {/* New Password Field */}
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">
-                        New Password <span className="text-red-500">*</span>
-                      </label>
-                      <div className="relative">
-                        <input
-                          type={showNewPassword ? 'text' : 'password'}
-                          value={formData.newPassword}
-                          onChange={(e) => handleInputChange('newPassword', e.target.value)}
-                          placeholder="Enter new password"
-                          className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
-                            errors.newPassword
-                              ? 'border-red-300 focus:ring-red-500'
-                              : 'border-slate-300 focus:ring-blue-500'
-                          }`}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowNewPassword(!showNewPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700"
-                        >
-                          <LockClosedIcon className="w-5 h-5" />
-                        </button>
-                      </div>
-                      {errors.newPassword && (
-                        <p className="mt-1 text-sm text-red-600">{errors.newPassword}</p>
-                      )}
-                      <p className="mt-1 text-xs text-slate-500">
-                        Password must be at least 8 characters long
-                      </p>
-                    </div>
-
-                    {/* Confirm Password Field */}
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Confirm Password <span className="text-red-500">*</span>
-                      </label>
-                      <div className="relative">
-                        <input
-                          type={showConfirmPassword ? 'text' : 'password'}
-                          value={formData.confirmPassword}
-                          onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
-                          placeholder="Confirm new password"
-                          className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
-                            errors.confirmPassword
-                              ? 'border-red-300 focus:ring-red-500'
-                              : 'border-slate-300 focus:ring-blue-500'
-                          }`}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700"
-                        >
-                          <LockClosedIcon className="w-5 h-5" />
-                        </button>
-                      </div>
-                      {errors.confirmPassword && (
-                        <p className="mt-1 text-sm text-red-600">{errors.confirmPassword}</p>
-                      )}
-                    </div>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[90vh] flex overflow-hidden">
+              {/* Left Sidebar */}
+              <div className="w-64 bg-slate-800 flex flex-col">
+                <div className="p-6 border-b border-slate-700">
+                  <div className="flex items-center gap-3">
+                    <KeyIcon className="w-6 h-6 text-white" />
+                    <h2 className="text-lg font-semibold text-white">Password</h2>
                   </div>
                 </div>
 
-                {/* Footer Buttons */}
-                <div className="p-6 border-t border-slate-200 bg-white flex justify-end gap-3">
+                <div className="flex-1 p-4 space-y-2">
                   <button
-                    type="button"
-                    onClick={onClose}
-                    disabled={loading}
-                    className="px-6 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() => setActiveTab('changePassword')}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                      activeTab === 'changePassword'
+                        ? 'bg-blue-600 text-white'
+                        : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                    }`}
                   >
-                    Cancel
+                    <LockClosedIcon className="w-5 h-5" />
+                    <span className="font-medium">Change Password</span>
                   </button>
                   <button
-                    type="submit"
-                    disabled={loading}
-                    className="px-6 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    onClick={() => setActiveTab('forgetPassword')}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                      activeTab === 'forgetPassword'
+                        ? 'bg-blue-600 text-white'
+                        : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                    }`}
                   >
-                    {loading ? (
-                      <>
-                        <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                        <span>Changing...</span>
-                      </>
-                    ) : (
-                      'Save'
-                    )}
+                    <ArrowPathIcon className="w-5 h-5" />
+                    <span className="font-medium">Forget Password</span>
                   </button>
                 </div>
-              </form>
+              </div>
+
+              {/* Main Content */}
+              <div className="flex-1 bg-slate-50 flex flex-col overflow-hidden">
+                <div className="flex items-center justify-between p-6 border-b border-slate-200 bg-white">
+                  <div>
+                    <h3 className="text-xl font-bold text-slate-900">
+                      {activeTab === 'changePassword' && 'CHANGE PASSWORD'}
+                      {activeTab === 'forgetPassword' && 'FORGET PASSWORD'}
+                    </h3>
+                    <span className="block w-12 h-1 bg-pink-500 mt-1" />
+                  </div>
+                  <button
+                    onClick={onClose}
+                    className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                  >
+                    <XMarkIcon className="w-6 h-6 text-slate-600" />
+                  </button>
+                </div>
+
+                {/* Form Content */}
+                {activeTab === 'changePassword' ? (
+                  <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">
+                    <div className="flex-1 overflow-y-auto p-6">
+                      {/* Error and Success Messages */}
+                      {(apiError || success) && (
+                        <div className="mb-6">
+                          {apiError && (
+                            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
+                              <p className="text-sm">{apiError}</p>
+                            </div>
+                          )}
+                          {success && (
+                            <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-4">
+                              <p className="text-sm">{success}</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      
+                      <div className="space-y-6 max-w-md">
+                        {/* Current Password Field */}
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-2">
+                            Current Password <span className="text-red-500">*</span>
+                          </label>
+                          <div className="relative">
+                            <input
+                              type={showCurrentPassword ? 'text' : 'password'}
+                              value={formData.currentPassword}
+                              onChange={(e) => handleInputChange('currentPassword', e.target.value)}
+                              placeholder="Enter current password"
+                              className={`w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 ${
+                                errors.currentPassword
+                                  ? 'border-red-300 focus:ring-red-500'
+                                  : 'border-slate-300 focus:ring-blue-500'
+                              }`}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700"
+                            >
+                              <LockClosedIcon className="w-5 h-5" />
+                            </button>
+                          </div>
+                          {errors.currentPassword && (
+                            <p className="mt-1 text-sm text-red-600">{errors.currentPassword}</p>
+                          )}
+                        </div>
+
+                        {/* New Password Field */}
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-2">
+                            New Password <span className="text-red-500">*</span>
+                          </label>
+                          <div className="relative">
+                            <input
+                              type={showNewPassword ? 'text' : 'password'}
+                              value={formData.newPassword}
+                              onChange={(e) => handleInputChange('newPassword', e.target.value)}
+                              placeholder="Enter new password"
+                              className={`w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 ${
+                                errors.newPassword
+                                  ? 'border-red-300 focus:ring-red-500'
+                                  : 'border-slate-300 focus:ring-blue-500'
+                              }`}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowNewPassword(!showNewPassword)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700"
+                            >
+                              <LockClosedIcon className="w-5 h-5" />
+                            </button>
+                          </div>
+                          {errors.newPassword && (
+                            <p className="mt-1 text-sm text-red-600">{errors.newPassword}</p>
+                          )}
+                          <p className="mt-1 text-xs text-slate-500">
+                            Password must be at least 8 characters long
+                          </p>
+                        </div>
+
+                        {/* Confirm Password Field */}
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-2">
+                            Confirm Password <span className="text-red-500">*</span>
+                          </label>
+                          <div className="relative">
+                            <input
+                              type={showConfirmPassword ? 'text' : 'password'}
+                              value={formData.confirmPassword}
+                              onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
+                              placeholder="Confirm new password"
+                              className={`w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 ${
+                                errors.confirmPassword
+                                  ? 'border-red-300 focus:ring-red-500'
+                                  : 'border-slate-300 focus:ring-blue-500'
+                              }`}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700"
+                            >
+                              <LockClosedIcon className="w-5 h-5" />
+                            </button>
+                          </div>
+                          {errors.confirmPassword && (
+                            <p className="mt-1 text-sm text-red-600">{errors.confirmPassword}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Footer Buttons */}
+                    <div className="p-6 border-t border-slate-200 bg-white flex justify-end gap-3">
+                      <button
+                        type="button"
+                        onClick={onClose}
+                        disabled={loading}
+                        className="px-6 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={loading}
+                        className="px-6 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      >
+                        {loading ? (
+                          <>
+                            <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                            <span>Changing...</span>
+                          </>
+                        ) : (
+                          'Save'
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <form onSubmit={handleForgetPasswordSubmit} className="flex-1 flex flex-col overflow-hidden">
+                    <div className="flex-1 overflow-y-auto p-6">
+                      {/* Error and Success Messages */}
+                      {(apiError || success) && (
+                        <div className="mb-6">
+                          {apiError && (
+                            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
+                              <p className="text-sm">{apiError}</p>
+                            </div>
+                          )}
+                          {success && (
+                            <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-4">
+                              <p className="text-sm">{success}</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      
+                      <div className="space-y-6 max-w-md">
+                        {/* Email Field */}
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-2">
+                            Email <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="email"
+                            value={forgetPasswordEmail}
+                            onChange={(e) => {
+                              setForgetPasswordEmail(e.target.value);
+                              if (errors.email) {
+                                setErrors({ ...errors, email: undefined });
+                              }
+                            }}
+                            placeholder="Enter your email address"
+                            className={`w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 ${
+                              errors.email
+                                ? 'border-red-300 focus:ring-red-500'
+                                : 'border-slate-300 focus:ring-blue-500'
+                            }`}
+                          />
+                          {errors.email && (
+                            <p className="mt-1 text-sm text-red-600">{errors.email}</p>
+                          )}
+                          <p className="mt-1 text-xs text-slate-500">
+                            We'll send a password reset link to this email address
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Footer Buttons */}
+                    <div className="p-6 border-t border-slate-200 bg-white flex justify-end gap-3">
+                      <button
+                        type="button"
+                        onClick={onClose}
+                        disabled={loading}
+                        className="px-6 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={loading}
+                        className="px-6 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      >
+                        {loading ? (
+                          <>
+                            <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                            <span>Sending...</span>
+                          </>
+                        ) : (
+                          'Send Reset Link'
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
             </div>
           </motion.div>
         </>
@@ -829,6 +995,64 @@ const SettingsForm: React.FC = () => {
     setViewingRole(null);
   };
 
+  // Handle PDF export
+  const handleExportPDF = () => {
+    try {
+      const doc = new jsPDF();
+      let yPos = 20;
+      
+      doc.setFontSize(18);
+      doc.text('Settings Report', 105, yPos, { align: 'center' });
+      yPos += 10;
+      
+      doc.setFontSize(10);
+      doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 105, yPos, { align: 'center' });
+      yPos += 15;
+      
+      doc.setFontSize(14);
+      doc.setFont(undefined, 'bold');
+      doc.text('Personal Settings', 20, yPos);
+      yPos += 8;
+      
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      personalSettings.forEach((setting, index) => {
+        if (yPos > 270) {
+          doc.addPage();
+          yPos = 20;
+        }
+        doc.text(`${index + 1}. ${setting.title}`, 20, yPos);
+        yPos += 6;
+      });
+      
+      yPos += 5;
+      doc.setFontSize(14);
+      doc.setFont(undefined, 'bold');
+      doc.text('Company Settings', 20, yPos);
+      yPos += 8;
+      
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      companySettings.forEach((setting, index) => {
+        if (yPos > 270) {
+          doc.addPage();
+          yPos = 20;
+        }
+        doc.text(`${index + 1}. ${setting.title}`, 20, yPos);
+        yPos += 6;
+      });
+      
+      doc.save(`settings-report-${new Date().toISOString().split('T')[0]}.pdf`);
+    } catch (error: any) {
+      console.error('Error exporting PDF:', error);
+      setToast({
+        open: true,
+        type: 'error',
+        message: 'Failed to export PDF. Please try again.',
+      });
+    }
+  };
+
   // Handle delete user role
   const handleDeleteUserRole = async (role: UserRole) => {
     if (window.confirm(`Are you sure you want to delete the role "${role.name}"? This action cannot be undone.`)) {
@@ -1158,8 +1382,17 @@ const SettingsForm: React.FC = () => {
   return (
     <div className="space-y-8 pb-8">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-slate-900">General Settings</h1>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900">General Settings</h1>
+        </div>
+        <Button
+          variant="outline"
+          onClick={handleExportPDF}
+          icon={ArrowDownTrayIcon}
+        >
+          Export PDF
+        </Button>
       </div>
 
       {/* Personal Section */}
