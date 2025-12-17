@@ -3,36 +3,25 @@
  * Sidebar navigation with Tenants, Employees, Vendors, and Prospects sections
  */
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import * as alertService from '../../services/alert.service';
-import { Select } from '../../components/Select';
-import { Button } from '../../components/Button';
 import { Toast } from '../../components/Toast';
 import * as hostelService from '../../services/hostel.service';
 import * as tenantService from '../../services/tenant.service';
 import * as employeeService from '../../services/employee.service';
 import * as roleService from '../../services/role.service';
 import * as prospectService from '../../services/prospect.service';
-import { API_BASE_URL } from '../../../services/api.config';
-import { 
-  BriefcaseIcon, 
-  HomeIcon,
-  UserPlusIcon,
-  ArrowDownTrayIcon,
-} from '@heroicons/react/24/outline';
 import jsPDF from 'jspdf';
 
 // Import components
 import TenantForm, { type TenantFormData } from './components/TenantForm';
 import EmployeeForm, { type EmployeeFormData } from './components/EmployeeForm';
 import ProspectForm, { type ProspectFormData } from './components/ProspectForm';
-import TenantTable from './components/TenantTable';
-import EmployeeTable from './components/EmployeeTable';
-import ProspectTable from './components/ProspectTable';
 import ViewModal from './components/ViewModal';
 import ScoreModal from './components/ScoreModal';
-import EditForm from './components/EditForm';
+import { PeopleHeader } from './components/PeopleHeader';
+import { PeopleContent } from './components/PeopleContent';
 
 // Lazy load VendorList
 const VendorListLazy = React.lazy(() => import('../Vendor/VendorList'));
@@ -307,8 +296,8 @@ const PeopleHub: React.FC = () => {
   };
 
 
-  // Action handlers
-  const handleView = async (id: number, type: 'Tenant' | 'Employee' | 'Prospect') => {
+  // Action handlers - wrapped in useCallback for performance
+  const handleView = useCallback(async (id: number, type: 'Tenant' | 'Employee' | 'Prospect') => {
     if (type === 'Tenant') {
       // Fetch full tenant details from API
       try {
@@ -447,9 +436,9 @@ const PeopleHub: React.FC = () => {
         setProspectsLoading(false);
       }
     }
-  };
+  }, []);
 
-  const handleEdit = async (id: number, type: 'Tenant' | 'Employee' | 'Prospect') => {
+  const handleEdit = useCallback(async (id: number, type: 'Tenant' | 'Employee' | 'Prospect') => {
     if (type === 'Tenant') {
       // Fetch tenant data from API and populate form
       try {
@@ -618,9 +607,9 @@ const PeopleHub: React.FC = () => {
         setProspectsLoading(false);
       }
     }
-  };
+  }, [roles]);
 
-  const handleDelete = async (id: number, type: 'Tenant' | 'Employee' | 'Prospect', name: string) => {
+  const handleDelete = useCallback(async (id: number, type: 'Tenant' | 'Employee' | 'Prospect', name: string) => {
     if (!window.confirm(`Are you sure you want to delete ${name}? This action cannot be undone.`)) {
       return;
     }
@@ -719,9 +708,9 @@ const PeopleHub: React.FC = () => {
         setProspectsLoading(false);
       }
     }
-  };
+  }, [selectedHostelId, activeSection]);
 
-  const handleAddClick = () => {
+  const handleAddClick = useCallback(() => {
     // Reset editing IDs - forms will reset themselves when opened
     setEditingTenantId(null);
     setEditingEmployeeId(null);
@@ -730,7 +719,7 @@ const PeopleHub: React.FC = () => {
     setEmployeeFormData({});
     setProspectFormData({});
     setIsAddModalOpen(true);
-  };
+  }, []);
 
   // Wrapper function for TenantForm onSubmit - receives formData from TenantForm component
   const handleTenantSubmit = async (formDataFromComponent: TenantFormData): Promise<void> => {
@@ -1116,12 +1105,12 @@ const PeopleHub: React.FC = () => {
     });
   };
 
-  const calculateAverage = () => {
+  const calculateAverage = useCallback(() => {
     return ((scoreForm.behavior + scoreForm.punctuality + scoreForm.cleanliness) / 3).toFixed(1);
-  };
+  }, [scoreForm.behavior, scoreForm.punctuality, scoreForm.cleanliness]);
 
   // Handle PDF export
-  const handleExportPDF = () => {
+  const handleExportPDF = useCallback(() => {
     try {
       const doc = new jsPDF();
       let yPos = 20;
@@ -1200,174 +1189,64 @@ const PeopleHub: React.FC = () => {
         message: 'Failed to export PDF. Please try again.',
       });
     }
-  };
+  }, [activeSection, filteredTenants, filteredEmployees, filteredProspects]);
+
+  // Memoized handlers - use the original handlers directly
+  const handleViewMemo = handleView;
+  const handleEditMemo = handleEdit;
+  const handleDeleteMemo = handleDelete;
+
+  // Vendor wrapper component
+  const vendorListWrapper = activeSection === 'Vendors' ? (
+    <React.Suspense fallback={
+      <div className="text-center py-16">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+        <p className="text-gray-600">Loading vendors...</p>
+      </div>
+    }>
+      <VendorListWrapper 
+        selectedHostelId={selectedHostelId}
+        onHostelChange={setSelectedHostelId}
+      />
+    </React.Suspense>
+  ) : null;
 
   return (
     <div className="flex flex-col h-full">
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {activeSection ? (
+        {activeSection && (
           <>
-        {/* Header */}
-        <div className="flex items-center justify-between gap-4 flex-wrap p-6 pb-4">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-900">
-              {activeSection === 'Vendors' ? 'Vendor' : activeSection}
-            </h1>
-            <p className="text-slate-600 mt-1">
-              {activeSection === 'Tenants' && 'Manage tenant information and room allocations.'}
-              {activeSection === 'Employees' && 'Manage employee information and roles.'}
-              {activeSection === 'Vendors' && 'View and manage all vendors.'}
-              {activeSection === 'Prospects' && 'Manage potential tenants and applications.'}
-            </p>
-          </div>
-          <div className="flex items-center gap-3 flex-wrap">
-            {(activeSection === 'Tenants' || activeSection === 'Employees' || activeSection === 'Vendors' || activeSection === 'Prospects') && (
-              <>
-                {activeSection !== 'Prospects' && (
-                  <div className="w-full sm:w-80">
-                    <Select
-                      value={selectedHostelId}
-                      onChange={setSelectedHostelId}
-                      options={hostelOptions}
-                      disabled={hostelsLoading}
-                    />
-                  </div>
-                )}
-                <Button
-                  variant="outline"
-                  onClick={handleExportPDF}
-                  icon={ArrowDownTrayIcon}
-                >
-                  Export PDF
-                </Button>
-                {(activeSection === 'Tenants' || activeSection === 'Employees' || activeSection === 'Prospects') && (
-                  <Button
-                    variant="primary"
-                    onClick={handleAddClick}
-                    icon={UserPlusIcon}
-                  >
-                    {activeSection === 'Tenants' ? 'Add Tenant' : activeSection === 'Employees' ? 'Add Employee' : 'Add Prospect'}
-                  </Button>
-                )}
-                {activeSection === 'Vendors' && (
-                  <Button
-                    variant="primary"
-                    onClick={() => {
-                      // Dispatch event to open vendor modal
-                      window.dispatchEvent(new CustomEvent('openAddVendorModal'));
-                    }}
-                    icon={UserPlusIcon}
-                  >
-                    Add Vendor
-                  </Button>
-                )}
-              </>
-            )}
-          </div>
-        </div>
+            {/* Header */}
+            <PeopleHeader
+              activeSection={activeSection}
+              selectedHostelId={selectedHostelId}
+              onHostelChange={setSelectedHostelId}
+              hostelOptions={hostelOptions}
+              hostelsLoading={hostelsLoading}
+              onExportPDF={handleExportPDF}
+              onAddClick={handleAddClick}
+            />
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto px-6 pb-6">
-          {activeSection === 'Vendors' ? (
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 min-h-[calc(100vh-300px)]">
-              <React.Suspense fallback={
-                <div className="text-center py-16">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
-                  <p className="text-gray-600">Loading vendors...</p>
-                </div>
-              }>
-                <VendorListWrapper 
-                  selectedHostelId={selectedHostelId}
-                  onHostelChange={setSelectedHostelId}
-                />
-              </React.Suspense>
-            </div>
-          ) : (
-            <div className="glass rounded-2xl border border-white/20 shadow-xl p-6">
-          {activeSection === 'Prospects' ? (
-            prospectsLoading ? (
-              <div className="text-center py-16">
-                <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2 mt-4">Loading Prospects...</h3>
-                <p className="text-gray-600">Please wait while we fetch the prospects.</p>
-              </div>
-            ) : filteredProspects.length === 0 ? (
-              <div className="text-center py-16">
-                <UserPlusIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">No Prospects Found</h3>
-                <p className="text-gray-600 mb-6">No prospects found. Start by adding your first prospect.</p>
-                <Button variant="primary" onClick={handleAddClick} icon={UserPlusIcon}>
-                  Add Prospect
-                </Button>
-              </div>
-            ) : (
-              <ProspectTable
-                prospects={filteredProspects}
-                onView={(id) => handleView(id, 'Prospect')}
-                onEdit={(id) => handleEdit(id, 'Prospect')}
-                onDelete={(id, name) => handleDelete(id, 'Prospect', name)}
-              />
-            )
-          ) : !selectedHostelId ? (
-            <div className="text-center py-16">
-              <HomeIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">Select a Hostel</h3>
-              <p className="text-gray-600 mb-6">Please select a hostel from the dropdown above to view {activeSection?.toLowerCase()}.</p>
-            </div>
-          ) : activeSection === 'Tenants' ? (
-            tenantsLoading ? (
-              <div className="text-center py-16">
-                <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-[#2176FF]"></div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2 mt-4">Loading Tenants...</h3>
-                <p className="text-gray-600">Please wait while we fetch the tenants.</p>
-              </div>
-            ) : filteredTenants.length === 0 ? (
-              <div className="text-center py-16">
-                <UserPlusIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">No Tenants Found</h3>
-                <p className="text-gray-600 mb-6">No tenants found for the selected hostel.</p>
-                <Button variant="primary" onClick={handleAddClick} icon={UserPlusIcon}>
-                  Add Tenant
-                </Button>
-              </div>
-            ) : (
-              <TenantTable
-                tenants={filteredTenants}
-                onView={(id) => handleView(id, 'Tenant')}
-                onEdit={(id) => handleEdit(id, 'Tenant')}
-                onDelete={(id, name) => handleDelete(id, 'Tenant', name)}
-              />
-            )
-          ) : activeSection === 'Employees' ? (
-            employeesLoading ? (
-              <div className="text-center py-16">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
-                <p className="text-gray-500">Loading employees...</p>
-              </div>
-            ) : filteredEmployees.length === 0 ? (
-              <div className="text-center py-16">
-                <BriefcaseIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">No Employees Found</h3>
-                <p className="text-gray-600 mb-6">No employees found for the selected hostel.</p>
-                <Button variant="primary" onClick={handleAddClick} icon={UserPlusIcon}>
-                  Add Employee
-                </Button>
-              </div>
-            ) : (
-              <EmployeeTable
-                employees={filteredEmployees}
-                onView={(id) => handleView(id, 'Employee')}
-                onEdit={(id) => handleEdit(id, 'Employee')}
-                onDelete={(id, name) => handleDelete(id, 'Employee', name)}
-              />
-            )
-          ) : null}
-          </div>
-          )}
-        </div>
+            {/* Content */}
+            <PeopleContent
+              activeSection={activeSection}
+              selectedHostelId={selectedHostelId}
+              tenants={filteredTenants}
+              employees={filteredEmployees}
+              prospects={filteredProspects}
+              tenantsLoading={tenantsLoading}
+              employeesLoading={employeesLoading}
+              prospectsLoading={prospectsLoading}
+              onView={handleViewMemo}
+              onEdit={handleEditMemo}
+              onDelete={handleDeleteMemo}
+              onAddClick={handleAddClick}
+              vendorListWrapper={vendorListWrapper}
+            />
           </>
-        ) : (
+        )}
+        {!activeSection && (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
               <h2 className="text-2xl font-semibold text-slate-900 mb-2">Select a Section</h2>
@@ -1429,404 +1308,6 @@ const PeopleHub: React.FC = () => {
         />
       )}
 
-      {/* Old modal code removed - using ViewModal component instead */}
-      {false && false && modal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={() => setModal(null)}>
-          <motion.div
-            initial={{ opacity: 0, scale: 0.96 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.96 }}
-            onClick={(e) => e.stopPropagation()}
-            className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden my-8 flex flex-col max-h-[90vh]"
-          >
-            {/* Header */}
-            <div className={`flex items-center justify-between px-6 py-4 flex-shrink-0 ${modal.mode === 'view' ? 'bg-gradient-to-r from-blue-500 to-blue-600' : 'bg-gradient-to-r from-amber-500 to-orange-600'}`}>
-              <div>
-                <h3 className="text-xl font-bold text-white">
-                  {modal.mode === 'view' ? 'View Details' : 'Edit Details'} — {modal.type}
-                </h3>
-                <p className="text-white/80 text-sm">{modal.data?.name}</p>
-              </div>
-              <button onClick={() => setModal(null)} className="text-white/90 hover:text-white text-lg">×</button>
-            </div>
-
-            {/* Body */}
-            <div className="p-6 overflow-y-auto flex-1">
-              {modal.mode === 'view' ? (
-                <>
-                  {/* Tabs - Only show for Tenant and Employee, not for Owner */}
-                  {(modal.type === 'Tenant' || modal.type === 'Employee') && (
-                    <div className="flex gap-4 mb-6 border-b border-gray-200">
-                      <button
-                        onClick={() => setDetailTab('details')}
-                        className={`px-4 py-2 font-medium text-sm transition-colors ${
-                          detailTab === 'details'
-                            ? 'text-blue-600 border-b-2 border-blue-600'
-                            : 'text-gray-600 hover:text-gray-900'
-                        }`}
-                      >
-                        Details
-                      </button>
-                      <button
-                        onClick={() => setDetailTab('scorecard')}
-                        className={`px-4 py-2 font-medium text-sm transition-colors flex items-center gap-2 ${
-                          detailTab === 'scorecard'
-                            ? 'text-blue-600 border-b-2 border-blue-600'
-                            : 'text-gray-600 hover:text-gray-900'
-                        }`}
-                      >
-                        <TrophyIcon className="w-4 h-4" />
-                        Score Card 🏆
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Tab Content */}
-                  {((modal.type === 'Tenant' || modal.type === 'Employee') ? detailTab === 'details' : true) ? (
-                    <div className="space-y-4">
-                      {modal.type === 'Tenant' ? (
-                        <>
-                          {/* Profile Photo */}
-                          <div className="flex justify-center mb-6">
-                            {modal.data.profilePhoto ? (
-                              <img 
-                                src={`${API_BASE_URL.replace('/api', '')}${modal.data.profilePhoto}`} 
-                                alt={modal.data.name}
-                                className="w-24 h-24 rounded-full object-cover border-4 border-blue-200"
-                                onError={(e) => {
-                                  const target = e.target as HTMLImageElement;
-                                  target.style.display = 'none';
-                                  const parent = target.parentElement;
-                                  if (parent) {
-                                    const fallback = document.createElement('div');
-                                    fallback.className = 'w-24 h-24 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 text-white flex items-center justify-center font-bold text-2xl';
-                                    fallback.textContent = `${modal.data.firstName?.charAt(0) || ''}${modal.data.lastName?.charAt(0) || ''}`.toUpperCase();
-                                    parent.appendChild(fallback);
-                                  }
-                                }}
-                              />
-                            ) : (
-                              <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 text-white flex items-center justify-center font-bold text-2xl">
-                                {`${modal.data.firstName?.charAt(0) || ''}${modal.data.lastName?.charAt(0) || ''}`.toUpperCase() || modal.data.name.charAt(0)}
-                              </div>
-                            )}
-                          </div>
-                          
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <Info label="First Name" value={modal.data.firstName || modal.data.name?.split(' ')[0]} />
-                            <Info label="Last Name" value={modal.data.lastName || modal.data.name?.split(' ')[1] || ''} />
-                            <Info label="Full Name" value={modal.data.name} />
-                            <Info label="Status" value={modal.data.status} />
-                            <Info label="Email" value={modal.data.email} />
-                            <Info label="Phone" value={modal.data.phone} />
-                            {modal.data.alternatePhone && <Info label="Alternate Phone" value={modal.data.alternatePhone} />}
-                            <Info label="Gender" value={modal.data.gender} />
-                            <Info label="Date of Birth" value={modal.data.dateOfBirth ? new Date(modal.data.dateOfBirth).toLocaleDateString() : 'N/A'} />
-                            <Info label="CNIC Number" value={modal.data.cnicNumber || 'N/A'} />
-                            <Info label="Hostel" value={modal.data.hostel} />
-                            <Info label="Floor" value={modal.data.floor} />
-                            <Info label="Room" value={modal.data.room} />
-                            <Info label="Bed" value={modal.data.bed} />
-                            <Info label="Lease Start Date" value={modal.data.leaseStartDate ? new Date(modal.data.leaseStartDate).toLocaleDateString() : 'N/A'} />
-                            <Info label="Lease End Date" value={modal.data.leaseEndDate ? new Date(modal.data.leaseEndDate).toLocaleDateString() : 'N/A'} />
-                            <Info label="Monthly Rent" value={modal.data.monthlyRent ? `$${modal.data.monthlyRent.toLocaleString()}` : 'N/A'} />
-                            <Info label="Security Deposit" value={modal.data.securityDeposit ? `$${modal.data.securityDeposit.toLocaleString()}` : 'N/A'} />
-                            {modal.data.checkInDate && <Info label="Check-In Date" value={new Date(modal.data.checkInDate).toLocaleDateString()} />}
-                            {modal.data.expectedCheckOutDate && <Info label="Expected Check-Out Date" value={new Date(modal.data.expectedCheckOutDate).toLocaleDateString()} />}
-                            {modal.data.rating !== undefined && <Info label="Rating" value={modal.data.rating.toString()} />}
-                            {modal.data.notes && <Info label="Notes" value={modal.data.notes} />}
-                          </div>
-                          
-                          {/* Documents */}
-                          {modal.data.documents && modal.data.documents.length > 0 && (() => {
-                            const imageDocs = modal.data.documents.filter((doc: any) => 
-                              doc.mimetype?.startsWith('image/') || 
-                              /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(doc.originalName || doc.filename || '')
-                            );
-                            const otherDocs = modal.data.documents.filter((doc: any) => 
-                              !doc.mimetype?.startsWith('image/') && 
-                              !/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(doc.originalName || doc.filename || '')
-                            );
-
-                            return (
-                              <div className="mt-6">
-                                <h4 className="font-semibold text-gray-900 mb-4">Documents</h4>
-                                
-                                {/* Images Grid */}
-                                {imageDocs.length > 0 && (
-                                  <div className="mb-6">
-                                    <h5 className="text-sm font-medium text-gray-700 mb-3">Images</h5>
-                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                                      {imageDocs.map((doc: any, idx: number) => {
-                                        const imageUrl = `${API_BASE_URL.replace('/api', '')}${doc.url}`;
-                                        const imageName = doc.originalName || doc.filename || 'Image';
-                                        
-                                        return (
-                                          <div
-                                            key={doc.id || doc.url || `doc-${idx}`}
-                                            className="group relative bg-gray-50 rounded-lg overflow-hidden border border-gray-200 hover:border-blue-300 transition-all hover:shadow-md"
-                                          >
-                                            <a
-                                              href={imageUrl}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="block"
-                                            >
-                                              <div className="relative w-full aspect-square bg-gray-100 overflow-hidden">
-                                                <img
-                                                  src={imageUrl}
-                                                  alt={imageName}
-                                                  className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                                                  onError={(e) => {
-                                                    const target = e.target as HTMLImageElement;
-                                                    target.style.display = 'none';
-                                                    const parent = target.parentElement;
-                                                    if (parent) {
-                                                      parent.innerHTML = `
-                                                        <div class="w-full h-full flex items-center justify-center bg-gray-200">
-                                                          <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                                                          </svg>
-                                                        </div>
-                                                      `;
-                                                    }
-                                                  }}
-                                                />
-                                              </div>
-                                              <div className="p-2 bg-white border-t border-gray-200">
-                                                <p className="text-xs text-gray-700 font-medium truncate" title={imageName}>
-                                                  {imageName}
-                                                </p>
-                                              </div>
-                                            </a>
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Other Documents */}
-                                {otherDocs.length > 0 && (
-                                  <div>
-                                    <h5 className="text-sm font-medium text-gray-700 mb-3">
-                                      {imageDocs.length > 0 ? 'Other Documents' : 'Documents'}
-                                    </h5>
-                                    <div className="space-y-2">
-                                      {otherDocs.map((doc: any, idx: number) => (
-                                        <a
-                                          key={doc.id || doc.url || `doc-${idx}`}
-                                          href={`${API_BASE_URL.replace('/api', '')}${doc.url}`}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200 hover:border-blue-300"
-                                        >
-                                          <DocumentTextIcon className="w-5 h-5 text-blue-500 flex-shrink-0" />
-                                          <span className="text-sm text-gray-700 flex-1 truncate" title={doc.originalName || doc.filename}>
-                                            {doc.originalName || doc.filename}
-                                          </span>
-                                        </a>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })()}
-                        </>
-                      ) : modal.type === 'Employee' ? (
-                        <>
-                          {/* Profile Photo */}
-                          <div className="flex justify-center mb-6">
-                            {modal.data.profilePhoto ? (
-                              <img 
-                                src={`${API_BASE_URL.replace('/api', '')}${modal.data.profilePhoto}`} 
-                                alt={modal.data.name}
-                                className="w-24 h-24 rounded-full object-cover border-4 border-green-200"
-                                onError={(e) => {
-                                  const target = e.target as HTMLImageElement;
-                                  target.style.display = 'none';
-                                  const parent = target.parentElement;
-                                  if (parent) {
-                                    const fallback = document.createElement('div');
-                                    fallback.className = 'w-24 h-24 rounded-full bg-gradient-to-br from-green-400 to-green-600 text-white flex items-center justify-center font-bold text-2xl';
-                                    const nameParts = modal.data.name?.split(' ') || [];
-                                    const firstName = nameParts[0] || '';
-                                    const lastName = nameParts[1] || '';
-                                    fallback.textContent = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || modal.data.name.charAt(0).toUpperCase();
-                                    parent.appendChild(fallback);
-                                  }
-                                }}
-                              />
-                            ) : (
-                              <div className="w-24 h-24 rounded-full bg-gradient-to-br from-green-400 to-green-600 text-white flex items-center justify-center font-bold text-2xl">
-                                {(() => {
-                                  const nameParts = modal.data.name?.split(' ') || [];
-                                  const firstName = nameParts[0] || '';
-                                  const lastName = nameParts[1] || '';
-                                  return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || modal.data.name.charAt(0).toUpperCase();
-                                })()}
-                              </div>
-                            )}
-                          </div>
-                          
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <Info label="Name" value={modal.data.name} />
-                            <Info label="Username" value={modal.data.username || 'N/A'} />
-                            <Info label="Status" value={modal.data.status} />
-                            <Info label="Email" value={modal.data.email} />
-                            <Info label="Phone" value={modal.data.phone || 'N/A'} />
-                            <Info label="Employee Code" value={modal.data.employeeCode || 'N/A'} />
-                            <Info label="Role" value={modal.data.role || 'N/A'} />
-                            {modal.data.department && <Info label="Department" value={modal.data.department} />}
-                            {modal.data.designation && <Info label="Designation" value={modal.data.designation} />}
-                            <Info label="Join Date" value={modal.data.joinDate ? new Date(modal.data.joinDate).toLocaleDateString() : 'N/A'} />
-                            {modal.data.salary && <Info label="Salary" value={`${modal.data.salary} (${modal.data.salaryType || 'monthly'})`} />}
-                            {modal.data.workingHours && <Info label="Working Hours" value={modal.data.workingHours} />}
-                            {modal.data.hostel && <Info label="Hostel" value={modal.data.hostel} />}
-                            {modal.data.address && (
-                              <>
-                                {modal.data.address.street && <Info label="Street" value={modal.data.address.street} />}
-                                {modal.data.address.city && <Info label="City" value={modal.data.address.city} />}
-                                {modal.data.address.country && <Info label="Country" value={modal.data.address.country} />}
-                              </>
-                            )}
-                            {modal.data.notes && <Info label="Notes" value={modal.data.notes} />}
-                            {modal.data.createdAt && <Info label="Created At" value={new Date(modal.data.createdAt).toLocaleDateString()} />}
-                            {modal.data.updatedAt && <Info label="Updated At" value={new Date(modal.data.updatedAt).toLocaleDateString()} />}
-                          </div>
-                          
-                          {/* Documents */}
-                          {modal.data.documents && modal.data.documents.length > 0 && (() => {
-                            const imageDocs = modal.data.documents.filter((doc: any) => 
-                              doc.mimetype?.startsWith('image/') || 
-                              /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(doc.originalName || doc.filename || '')
-                            );
-                            const otherDocs = modal.data.documents.filter((doc: any) => 
-                              !doc.mimetype?.startsWith('image/') && 
-                              !/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(doc.originalName || doc.filename || '')
-                            );
-
-                            return (
-                              <div className="mt-6">
-                                <h4 className="font-semibold text-gray-900 mb-4">Documents</h4>
-                                
-                                {/* Images Grid */}
-                                {imageDocs.length > 0 && (
-                                  <div className="mb-6">
-                                    <h5 className="text-sm font-medium text-gray-700 mb-3">Images</h5>
-                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                                      {imageDocs.map((doc: any, idx: number) => {
-                                        const imageUrl = `${API_BASE_URL.replace('/api', '')}${doc.url}`;
-                                        const imageName = doc.originalName || doc.filename || 'Image';
-                                        
-                                        return (
-                                          <div
-                                            key={doc.id || doc.url || `doc-${idx}`}
-                                            className="group relative bg-gray-50 rounded-lg overflow-hidden border border-gray-200 hover:border-green-300 transition-all hover:shadow-md"
-                                          >
-                                            <a
-                                              href={imageUrl}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="block"
-                                            >
-                                              <div className="relative w-full aspect-square bg-gray-100 overflow-hidden">
-                                                <img
-                                                  src={imageUrl}
-                                                  alt={imageName}
-                                                  className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                                                  onError={(e) => {
-                                                    const target = e.target as HTMLImageElement;
-                                                    target.style.display = 'none';
-                                                    const parent = target.parentElement;
-                                                    if (parent) {
-                                                      parent.innerHTML = `
-                                                        <div class="w-full h-full flex items-center justify-center bg-gray-200">
-                                                          <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                                                          </svg>
-                                                        </div>
-                                                      `;
-                                                    }
-                                                  }}
-                                                />
-                                              </div>
-                                              <div className="p-2 bg-white border-t border-gray-200">
-                                                <p className="text-xs text-gray-700 font-medium truncate" title={imageName}>
-                                                  {imageName}
-                                                </p>
-                                              </div>
-                                            </a>
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Other Documents */}
-                                {otherDocs.length > 0 && (
-                                  <div>
-                                    <h5 className="text-sm font-medium text-gray-700 mb-3">
-                                      {imageDocs.length > 0 ? 'Other Documents' : 'Documents'}
-                                    </h5>
-                                    <div className="space-y-2">
-                                      {otherDocs.map((doc: any, idx: number) => (
-                                        <a
-                                          key={doc.id || doc.url || `doc-${idx}`}
-                                          href={`${API_BASE_URL.replace('/api', '')}${doc.url}`}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200 hover:border-green-300"
-                                        >
-                                          <DocumentTextIcon className="w-5 h-5 text-green-500 flex-shrink-0" />
-                                          <span className="text-sm text-gray-700 flex-1 truncate" title={doc.originalName || doc.filename}>
-                                            {doc.originalName || doc.filename}
-                                          </span>
-                                        </a>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })()}
-                        </>
-                      ) : (
-                        <>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <Info label="Name" value={modal.data.name} />
-                            <Info label="Status" value={modal.data.status} />
-                            <Info label="Email" value={modal.data.email} />
-                            <Info label="Phone" value={modal.data.phone} />
-                            <Info label="Role" value={modal.data.role} />
-                            <Info label="Joined" value={modal.data.joinedAt} />
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  ) : (modal.type === 'Tenant' || modal.type === 'Employee') ? (
-                    <ScoreCardView
-                      type={modal.type as 'Tenant' | 'Employee'}
-                      id={modal.data.id}
-                      name={modal.data.name}
-                      onUpdateClick={() => {
-                        const type = modal.type as 'Tenant' | 'Employee';
-                        handleScoreClick(type, modal.data.id, modal.data.name);
-                      }}
-                      getScore={getScore}
-                      getScoreHistory={getScoreHistory}
-                    />
-                  ) : null}
-                </>
-              ) : (modal.type === 'Tenant' || modal.type === 'Employee') ? (
-                <EditForm modal={modal as { mode: 'view' | 'edit'; type: 'Tenant' | 'Employee'; data: any }} onClose={() => setModal(null)} />
-              ) : null}
-            </div>
-          </motion.div>
-        </div>
-      )}
 
       {/* Score Update Modal */}
       <ScoreModal
