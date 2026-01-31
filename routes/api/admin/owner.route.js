@@ -64,9 +64,25 @@ const upload = multer({
   }
 });
 
-// Admin operations
+// ===============================
+// PUBLIC ROUTE - Owner Self-Registration (No Authentication Required)
+// ===============================
+router.post(
+  '/owner/register',
+  upload.fields([
+    { name: 'profilePhoto', maxCount: 1 },
+    { name: 'documents', maxCount: 10 }
+  ]),
+  createOwner
+);
+
+// ===============================
+// ADMIN ROUTE - Create Owner (Requires Admin Authentication)
+// ===============================
 router.post(
   '/owner',
+  authenticate,
+  authorize('admin'),
   upload.fields([
     { name: 'profilePhoto', maxCount: 1 },
     { name: 'documents', maxCount: 10 }

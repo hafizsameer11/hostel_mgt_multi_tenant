@@ -197,13 +197,28 @@ const createOwner = async (req, res) => {
 
       // Hash password and create user
       const hashedPassword = await bcrypt.hash(String(password), 10);
+      
+      // Find or create the "owner" role
+      let ownerRole = await prisma.role.findFirst({
+        where: { roleName: 'owner', hostelId: null, userId: null }
+      });
+      
+      if (!ownerRole) {
+        ownerRole = await prisma.role.create({
+          data: {
+            roleName: 'owner',
+            description: 'Owner role with full hostel management permissions'
+          }
+        });
+      }
+      
       const newUser = await prisma.user.create({
         data: {
           username: username || name,
           email,
           phone: phone || null,
           password: hashedPassword,
-          role: 'owner',
+          userRoleId: ownerRole.id,
           status: 'active',
         },
       });
