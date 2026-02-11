@@ -1,6 +1,7 @@
 const { prisma } = require('../../config/db');
 const bcrypt = require('bcrypt');
 const { successResponse, errorResponse } = require('../../Helper/helper');
+const { getOwnerHostelIds, buildOwnerEmployeeFilter } = require('../../Helper/owner-filter.helper');
 
 const paged = (page = 1, limit = 12) => {
     const p = parseInt(page, 10) || 1;
@@ -250,6 +251,20 @@ const createEmployee = async (req, res) => {
             return errorResponse(res, 'Salary and join date are required', 400);
         }
 
+        // Verify owner can only create employees for their hostels
+        if (!req.isAdmin && req.userRole?.roleName?.toLowerCase() === 'owner') {
+            if (!hostelId) {
+                return errorResponse(res, 'Hostel ID is required for owner', 400);
+            }
+            
+            const ownerHostelIds = await getOwnerHostelIds(req.userId);
+            const requestedHostelId = parseInt(hostelId);
+            
+            if (!ownerHostelIds.includes(requestedHostelId)) {
+                return errorResponse(res, 'You can only create employees for your own hostels', 403);
+            }
+        }
+
         // Check if email already exists
         const existingUser = await prisma.user.findUnique({
             where: { email }
@@ -364,8 +379,13 @@ const getAllEmployees = async (req, res) => {
 
         const skip = (parseInt(page) - 1) * parseInt(limit);
 
+        // Build owner filter if user is owner
+        const ownerFilter = await buildOwnerEmployeeFilter(req);
+
         // Build filters
-        const filters = {};
+        const filters = {
+            ...ownerFilter, // Apply owner filter first
+        };
 
         if (status) filters.status = status;
         if (role) filters.role = role;

@@ -40,17 +40,17 @@ const upload = multer({
   }
 });
 
-// ----- PROFILE (self) -----
+// ----- PROFILE (self) - Accessible to all authenticated users -----
 router.get(
   "/settings/profile/personal-info",
   authenticate,
-  authorize("admin", "manager"),
+  authorize("admin", "manager", "owner", "employee", "staff"),
   ctrl.getPersonalInfo
 );
 router.put(
   "/settings/profile-info",
   authenticate,
-  authorize("admin", "manager"),
+  authorize("admin", "manager", "owner", "employee", "staff"),
   upload.single('profilePhoto'),
   ctrl.updateNameEmail
 );
@@ -58,7 +58,7 @@ router.put(
 router.get(
   "/settings/profile/password",
   authenticate,
-  authorize("admin", "manager"),
+  authorize("admin", "manager", "owner", "employee", "staff"),
   ctrl.getPasswordStatus
 );
 
@@ -66,29 +66,29 @@ router.get(
 router.put(
   "/settings/profile/password",
   authenticate,
-  authorize("admin", "manager"),
+  authorize("admin", "manager", "owner", "employee", "staff"),
   ctrl.changePassword
 );
 
-// ----- CONTACT INFO -----
+// ----- CONTACT INFO - Accessible to all authenticated users -----
 router.put(
   "/settings/profile/contact",
   authenticate,
-  authorize("admin", "manager"),
+  authorize("admin", "manager", "owner", "employee", "staff"),
   ctrl.updateContactInfo
 );
 
-// ----- ADDRESS -----
+// ----- ADDRESS - Accessible to all authenticated users -----
 router.get(
   "/settings/profile/address",
   authenticate,
-  authorize("admin", "manager"),
+  authorize("admin", "manager", "owner", "employee", "staff"),
   ctrl.getAddress
 );
 router.put(
   "/settings/profile/address",
   authenticate,
-  authorize("admin", "manager"),
+  authorize("admin", "manager", "owner", "employee", "staff"),
   ctrl.updateAddress
 );
 

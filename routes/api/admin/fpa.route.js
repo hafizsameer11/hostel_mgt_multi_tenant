@@ -8,14 +8,14 @@ const {
   getCashFlowAnalysis,
   getFinancialRatios,
 } = require('../../../controllers/api/fpa.controller');
-const { authenticate, authorize } = require('../../../middleware/auth.middleware');
+const { authenticate, authorize, authorizeAdminOrOwner } = require('../../../middleware/auth.middleware');
 
 // ✅ Generate Monthly Financial Summary (calculations only)
 // Query params: month, year, hostelId
 router.get(
   '/fpa/summary',
   authenticate,
-  authorize('admin', 'manager'),
+  authorizeAdminOrOwner(),
   generateFPASummary
 );
 
@@ -24,7 +24,7 @@ router.get(
 router.get(
   '/fpa/monthly-comparison',
   authenticate,
-  authorize('admin', 'manager'),
+  authorizeAdminOrOwner(),
   getMonthlyComparison
 );
 
@@ -33,7 +33,7 @@ router.get(
 router.get(
   '/fpa/categories',
   authenticate,
-  authorize('admin', 'manager'),
+  authorizeAdminOrOwner(),
   getCategoryBreakdown
 );
 
@@ -42,7 +42,7 @@ router.get(
 router.get(
   '/fpa/cash-flow',
   authenticate,
-  authorize('admin', 'manager'),
+  authorizeAdminOrOwner(),
   getCashFlowAnalysis
 );
 
@@ -51,7 +51,7 @@ router.get(
 router.get(
   '/fpa/ratios',
   authenticate,
-  authorize('admin', 'manager'),
+  authorizeAdminOrOwner(),
   getFinancialRatios
 );
 
@@ -60,7 +60,7 @@ router.get(
 router.get(
   '/fpa/print',
   authenticate,
-  authorize('admin', 'manager'),
+  authorizeAdminOrOwner(),
   printFPAReport
 );
 

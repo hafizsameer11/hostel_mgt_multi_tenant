@@ -12,27 +12,28 @@ const {
     updateFloor,
     deleteFloor
 } = require('../../../controllers/api/floor.controller');
-const { authenticate, authorize } = require('../../../middleware/auth.middleware');
+const { authenticate, authorize, authorizeAdminOrOwner } = require('../../../middleware/auth.middleware');
 
-// All routes require authentication and admin/manager role
+// All routes require authentication - Admin routes (owner should use /api/owner/floor routes)
+// Admin sees everything, employees need permissions
 
-// Create floor (Admin & Manager only)
-router.post('/floor', authenticate, authorize('admin', 'manager', 'owner'), createFloor);
+// Create floor
+router.post('/floor', authenticate, authorize('admin', 'manager', 'staff'), createFloor);
 
-// Get all floors (Admin & Manager only)
-router.get('/floors', authenticate, authorize('admin', 'manager', 'owner'), getAllFloors);
+// Get all floors
+router.get('/floors', authenticate, authorize('admin', 'manager', 'staff'), getAllFloors);
 
-// Get floors by hostel (Admin & Manager only)
-router.get('/floors/hostel/:hostelId', authenticate, authorize('admin', 'manager', 'owner'), getFloorsByHostel);
+// Get floors by hostel - Allow owner access (will be filtered by their hostels in controller)
+router.get('/floors/hostel/:hostelId', authenticate, authorizeAdminOrOwner(), getFloorsByHostel);
 
-// Get floor by ID (Admin & Manager only)
-router.get('/floor/:id', authenticate, authorize('admin', 'manager', 'owner'), getFloorById);
+// Get floor by ID
+router.get('/floor/:id', authenticate, authorize('admin', 'manager', 'staff'), getFloorById);
 
-// Update floor (Admin & Manager only)
-router.put('/floor/:id', authenticate, authorize('admin', 'manager', 'owner'), updateFloor);
+// Update floor
+router.put('/floor/:id', authenticate, authorize('admin', 'manager', 'staff'), updateFloor);
 
-// Delete floor (Admin only)
-router.delete('/floor/:id', authenticate, authorize('admin', 'owner'), deleteFloor);
+// Delete floor - Admin only
+router.delete('/floor/:id', authenticate, authorize('admin'), deleteFloor);
 
 module.exports = router;
 

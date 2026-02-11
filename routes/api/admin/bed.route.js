@@ -15,34 +15,34 @@ const {
     deleteBed,
     getAvailableBeds
 } = require('../../../controllers/api/bed.controller');
-const { authenticate, authorize } = require('../../../middleware/auth.middleware');
+const { authenticate, authorize, authorizeAdminOrOwner } = require('../../../middleware/auth.middleware');
 
-// All routes require authentication and admin/manager role
+// All routes require authentication - Admin routes (owner should use /api/owner/bed routes)
+// Admin sees everything, employees need permissions
 
-// Create bed (Admin & Manager only)
-router.post('/bed', authenticate, authorize('admin', 'owner'), createBed);
+// Create bed
+router.post('/bed', authenticate, authorize('admin', 'manager', 'staff'), createBed);
 
-// Create multiple beds at once (Admin & Manager only)
-router.post('/beds/bulk', authenticate, authorize('admin',  'owner'), createMultipleBeds);
+// Create multiple beds at once
+router.post('/beds/bulk', authenticate, authorize('admin', 'manager', 'staff'), createMultipleBeds);
 
-// Get all beds (Admin & Manager only)
-router.get('/beds', authenticate, authorize('admin',  'owner'), getAllBeds);
+// Get all beds
+router.get('/beds', authenticate, authorize('admin', 'manager', 'staff'), getAllBeds);
 
-// Get beds by room (Admin & Manager only)
-router.get('/beds/room/:roomId', authenticate, authorize('admin',  'owner'), getBedsByRoom);
+// Get beds by room - Allow owner access (will be filtered by their hostels in controller)
+router.get('/beds/room/:roomId', authenticate, authorizeAdminOrOwner(), getBedsByRoom);
 
+// Get bed by ID
+router.get('/bed/:id', authenticate, authorize('admin', 'manager', 'staff'), getBedById);
 
-// Get bed by ID (Admin & Manager only)
-router.get('/bed/:id', authenticate, authorize('admin',  'owner'), getBedById);
+// Update bed
+router.put('/bed/:id', authenticate, authorize('admin', 'manager', 'staff'), updateBed);
 
-// Update bed (Admin & Manager only)
-router.put('/bed/:id', authenticate, authorize('admin',  'owner'), updateBed);
+// Update bed status
+router.patch('/bed/:id/status', authenticate, authorize('admin', 'manager', 'staff'), updateBedStatus);
 
-// Update bed status (Admin & Manager only)
-router.patch('/bed/:id/status', authenticate, authorize('admin',  'owner'), updateBedStatus);
-
-// Delete bed (Admin only)
-router.delete('/bed/:id', authenticate, authorize('admin', 'owner'), deleteBed);
+// Delete bed - Admin only
+router.delete('/bed/:id', authenticate, authorize('admin'), deleteBed);
 
 module.exports = router;
 

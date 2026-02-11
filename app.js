@@ -21,6 +21,10 @@ const bookingRoute = require("./routes/api/admin/booking.route");
 const stripeRoute = require("./routes/api/stripe.route");
 const userBedRoute = require("./routes/api/user/bed.route");
 const userTransactionRoute = require("./routes/api/user/transaction.route");
+const userAlertRoute = require("./routes/api/user/alert.route");
+const userAccountRoute = require("./routes/api/user/account.route");
+const userFpaRoute = require("./routes/api/user/fpa.route");
+const userVendorManagementRoute = require("./routes/api/user/vendor-management.route");
 const overviewRoute = require("./routes/api/dashboard/overview.route");
 const tableRoute = require("./routes/api/admin/table.route");
 const fpaRoute = require("./routes/api/admin/fpa.route");
@@ -37,6 +41,12 @@ const accountsRoute = require("./routes/api/admin/accounts.route");
 const expenseRoute = require("./routes/api/admin/expense.route");
 const messRoute = require("./routes/api/admin/mess.route");
 const currencyRoute = require("./routes/api/admin/currency.route");
+const ownerDashboardRoute = require("./routes/api/owner/dashboard.route");
+const ownerFloorRoute = require("./routes/api/owner/floor.route");
+const ownerRoomRoute = require("./routes/api/owner/room.route");
+const ownerBedRoute = require("./routes/api/owner/bed.route");
+const ownerAllocationRoute = require("./routes/api/owner/allocation.route");
+const ownerMessRoute = require("./routes/api/owner/mess.route");
 
 // Load environment variables
 dotenv.config();
@@ -73,13 +83,21 @@ dbConnection();
 app.use("/uploads", express.static("uploads"));
 
 // Routes
-// website routes
+// Public routes (no authentication required)
+const publicOwnerRoute = require("./routes/api/public/owner.route");
+app.use("/api/public/owner", publicOwnerRoute);
+
+// website routes (user routes)
 app.use("/api", userRoute);
 app.use("/api", userHostelRoute);
 app.use("/api", userFloorRoute);
 app.use("/api", userRoomRoute);
 app.use("/api", userBedRoute);
 app.use("/api", userTransactionRoute);
+app.use("/api", userAlertRoute);
+app.use("/api", userAccountRoute);
+app.use("/api", userFpaRoute);
+app.use("/api", userVendorManagementRoute);
 // Stripe payment gateway routes
 app.use("/api/stripe", stripeRoute);
 
@@ -111,6 +129,14 @@ app.use("/api/admin", accountsRoute);
 app.use("/api/admin", expenseRoute);
 app.use("/api/admin", messRoute);
 app.use("/api/admin", currencyRoute);
+
+// owner routes
+app.use("/api/owner", ownerDashboardRoute);
+app.use("/api/owner", ownerFloorRoute);
+app.use("/api/owner", ownerRoomRoute);
+app.use("/api/owner", ownerBedRoute);
+app.use("/api/owner", ownerAllocationRoute);
+app.use("/api/owner", ownerMessRoute);
 
 // Start server
 const PORT = process.env.PORT || 4000;

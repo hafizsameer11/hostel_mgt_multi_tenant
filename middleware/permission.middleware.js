@@ -46,6 +46,7 @@ const checkPermission = (resource, action) => {
             }
 
             // If user is admin, grant all permissions
+            // Admin can see everything
             if (user.isAdmin) {
                 req.userRole = null; // Admin doesn't need a role
                 req.userPermissions = []; // Admin has all permissions
@@ -53,13 +54,14 @@ const checkPermission = (resource, action) => {
                 return next();
             }
 
-            // If user has owner role, grant access for role management
+            // Owner can access all admin routes (data will be filtered by their hostels in controllers)
+            // Owner has full feature access like admin, but sees only their own data
             if (user.userRole && user.userRole.roleName && 
-                user.userRole.roleName.toLowerCase() === 'owner' && resource === 'user_roles') {
-                req.userRole = user.userRole;
-                req.userPermissions = []; // Owner has all permissions for role management
-                req.isAdmin = false;
-                return next();
+                user.userRole.roleName.toLowerCase() === 'owner') {
+                    req.userRole = user.userRole;
+                req.userPermissions = []; // Owner has all permissions (like admin)
+                req.isAdmin = false; // But not marked as admin (for data filtering)
+                    return next();
             }
 
             // If user has no role, deny access

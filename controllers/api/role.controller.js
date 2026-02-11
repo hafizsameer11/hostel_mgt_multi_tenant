@@ -14,25 +14,32 @@ const getAllRoles = async (req, res) => {
         const skip = (parseInt(page) - 1) * parseInt(limit);
         const take = parseInt(limit);
 
-        // Get current user to check if admin
+        // Get current user to check if admin or owner
         const currentUser = await prisma.user.findUnique({
             where: { id: req.userId },
-            select: { isAdmin: true }
+            include: {
+                userRole: {
+                    select: {
+                        roleName: true
+                    }
+                }
+            }
         });
 
         if (!currentUser) {
             return errorResponse(res, "User not found", 404);
         }
 
+        // Check if user is admin or owner
+        const isAdminOrOwner = currentUser.isAdmin || 
+            (currentUser.userRole && currentUser.userRole.roleName?.toLowerCase() === 'owner');
+
         // Build where clause
         const where = {};
 
-        // If not admin, only show roles where userId matches current user OR userId is null (global)
-        if (!currentUser.isAdmin) {
-            where.OR = [
-                { userId: req.userId },
-                { userId: null }
-            ];
+        // If not admin or owner, only show roles where userId matches current user (exclude global roles)
+        if (!isAdminOrOwner) {
+            where.userId = req.userId; // Only show roles created by this user
         }
 
         // Add search filter if provided
@@ -103,15 +110,25 @@ const getRoleById = async (req, res) => {
             return errorResponse(res, "Invalid role ID", 400);
         }
 
-        // Get current user to check if admin
+        // Get current user to check if admin or owner
         const currentUser = await prisma.user.findUnique({
             where: { id: req.userId },
-            select: { isAdmin: true }
+            include: {
+                userRole: {
+                    select: {
+                        roleName: true
+                    }
+                }
+            }
         });
 
         if (!currentUser) {
             return errorResponse(res, "User not found", 404);
         }
+
+        // Check if user is admin or owner
+        const isAdminOrOwner = currentUser.isAdmin || 
+            (currentUser.userRole && currentUser.userRole.roleName?.toLowerCase() === 'owner');
 
         const role = await prisma.role.findUnique({
             where: { id: roleId },
@@ -140,8 +157,8 @@ const getRoleById = async (req, res) => {
             return errorResponse(res, "Role not found", 404);
         }
 
-        // Check if user has access to this role (admin can see all, others only their own or global)
-        if (!currentUser.isAdmin && role.userId !== null && role.userId !== req.userId) {
+        // Check if user has access to this role (admin/owner can see all, others only their own or global)
+        if (!isAdminOrOwner && role.userId !== null && role.userId !== req.userId) {
             return errorResponse(res, "Access denied. You don't have permission to view this role.", 403);
         }
 
@@ -175,10 +192,16 @@ const createRole = async (req, res) => {
             return errorResponse(res, "Role name is required", 400);
         }
 
-        // Get current user to check if admin
+        // Get current user to check if admin or owner
         const currentUser = await prisma.user.findUnique({
             where: { id: req.userId },
-            select: { isAdmin: true }
+            include: {
+                userRole: {
+                    select: {
+                        roleName: true
+                    }
+                }
+            }
         });
 
         if (!currentUser) {
@@ -321,15 +344,25 @@ const updateRole = async (req, res) => {
             return errorResponse(res, "Invalid role ID", 400);
         }
 
-        // Get current user to check if admin
+        // Get current user to check if admin or owner
         const currentUser = await prisma.user.findUnique({
             where: { id: req.userId },
-            select: { isAdmin: true }
+            include: {
+                userRole: {
+                    select: {
+                        roleName: true
+                    }
+                }
+            }
         });
 
         if (!currentUser) {
             return errorResponse(res, "User not found", 404);
         }
+
+        // Check if user is admin or owner
+        const isAdminOrOwner = currentUser.isAdmin || 
+            (currentUser.userRole && currentUser.userRole.roleName?.toLowerCase() === 'owner');
 
         // Check if role exists
         const existingRole = await prisma.role.findUnique({
@@ -341,7 +374,7 @@ const updateRole = async (req, res) => {
         }
 
         // Check if user has access to update this role
-        if (!currentUser.isAdmin && existingRole.userId !== null && existingRole.userId !== req.userId) {
+        if (!isAdminOrOwner && existingRole.userId !== null && existingRole.userId !== req.userId) {
             return errorResponse(res, "Access denied. You don't have permission to update this role.", 403);
         }
 
@@ -484,15 +517,25 @@ const deleteRole = async (req, res) => {
             return errorResponse(res, "Invalid role ID", 400);
         }
 
-        // Get current user to check if admin
+        // Get current user to check if admin or owner
         const currentUser = await prisma.user.findUnique({
             where: { id: req.userId },
-            select: { isAdmin: true }
+            include: {
+                userRole: {
+                    select: {
+                        roleName: true
+                    }
+                }
+            }
         });
 
         if (!currentUser) {
             return errorResponse(res, "User not found", 404);
         }
+
+        // Check if user is admin or owner
+        const isAdminOrOwner = currentUser.isAdmin || 
+            (currentUser.userRole && currentUser.userRole.roleName?.toLowerCase() === 'owner');
 
         // Check if role exists
         const existingRole = await prisma.role.findUnique({
@@ -511,7 +554,7 @@ const deleteRole = async (req, res) => {
         }
 
         // Check if user has access to delete this role
-        if (!currentUser.isAdmin && existingRole.userId !== null && existingRole.userId !== req.userId) {
+        if (!isAdminOrOwner && existingRole.userId !== null && existingRole.userId !== req.userId) {
             return errorResponse(res, "Access denied. You don't have permission to delete this role.", 403);
         }
 

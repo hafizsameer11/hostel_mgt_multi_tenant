@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate, authorize } = require('../../../middleware/auth.middleware');
+const { authenticate, authorize, authorizeAdminOrOwner } = require('../../../middleware/auth.middleware');
 const {
   sendEmailCampaign,
   tenantContacts,
@@ -11,9 +11,10 @@ const {
   vendorContactDetails,
 } = require('../../../controllers/api/communication.controller');
 
-// All routes require authentication and admin/manager/staff role
+// All routes require authentication
+// Admin sees all, owner sees only their hostels, employees see based on role
 router.use(authenticate);
-router.use(authorize('admin', 'manager', 'staff'));
+router.use(authorizeAdminOrOwner());
 
 /**
  * =====================================================

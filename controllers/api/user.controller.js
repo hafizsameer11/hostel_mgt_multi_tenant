@@ -108,7 +108,7 @@ const loginUser = async (req, res) => {
             return errorResponse(res, "Invalid email or password", 401);
         }
 
-        // Get user with role information
+        // Get user with role information, permissions, and profiles
         const userWithRole = await prisma.user.findUnique({
             where: { id: user.id },
             include: {
@@ -116,11 +116,47 @@ const loginUser = async (req, res) => {
                     select: {
                         id: true,
                         roleName: true,
-                        description: true
+                        description: true,
+                        permissions: {
+                            select: {
+                                permission: {
+                                    select: {
+                                        id: true,
+                                        resource: true,
+                                        action: true
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                ownerProfile: {
+                    select: {
+                        id: true,
+                        ownerCode: true,
+                        name: true
+                    }
+                },
+                employeeProfile: {
+                    select: {
+                        id: true,
+                        employeeCode: true,
+                        designation: true,
+                        hostelId: true
                     }
                 }
             }
         });
+
+        // Determine role type
+        let roleType = 'user';
+        if (user.isAdmin) {
+            roleType = 'admin';
+        } else if (userWithRole.userRole) {
+            const roleName = userWithRole.userRole.roleName.toLowerCase();
+            if (roleName === 'owner') roleType = 'owner';
+            else if (roleName === 'employee' || roleName === 'staff' || roleName === 'manager') roleType = 'employee';
+        }
 
         // Generate JWT token
         const tokenPayload = {
@@ -133,13 +169,27 @@ const loginUser = async (req, res) => {
         // Set token in HTTP-only cookie
         setTokenCookie(res, token);
 
+        // Extract permissions for frontend
+        const userPermissions = userWithRole.userRole
+            ? userWithRole.userRole.permissions.map(rp => ({
+                  resource: rp.permission.resource,
+                  action: rp.permission.action,
+                  permission: `${rp.permission.resource}.${rp.permission.action}`
+              }))
+            : [];
+
         // Return user data without password
         const userData = {
             id: user.id,
             username: user.username,
             email: user.email,
             phone: user.phone,
+            isAdmin: user.isAdmin,
             role: userWithRole.userRole,
+            roleType: roleType, // 'admin', 'owner', 'employee', or 'user'
+            permissions: userPermissions, // Include permissions for frontend
+            ownerProfile: userWithRole.ownerProfile,
+            employeeProfile: userWithRole.employeeProfile,
             status: user.status,
             createdAt: user.createdAt,
             token: token // Also return token in response for mobile apps

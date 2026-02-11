@@ -352,8 +352,29 @@ const getAllAlerts = async (req, res) => {
             }
         }
 
+        // Filter by owner's hostels if user is owner
+        if (req.userRoleName === 'owner' && !req.isAdmin) {
+            // Get owner profile and their hostel IDs
+            const ownerProfile = await prisma.owner.findUnique({
+                where: { userId: req.userId },
+                include: {
+                    hostels: {
+                        select: { id: true }
+                    }
+                }
+            });
+            
+            if (ownerProfile && ownerProfile.hostels.length > 0) {
+                const ownerHostelIds = ownerProfile.hostels.map(h => h.id);
+                where.hostelId = { in: ownerHostelIds };
+            } else {
+                // Owner has no hostels, return empty result
+                where.hostelId = { in: [-1] };
+            }
+        }
+
         // Other filters
-        if (hostelId) where.hostelId = parseInt(hostelId);
+        if (hostelId && !where.hostelId) where.hostelId = parseInt(hostelId);
         if (roomId) where.roomId = parseInt(roomId);
         if (tenantId) where.tenantId = parseInt(tenantId);
         if (assignedTo) where.assignedTo = parseInt(assignedTo);

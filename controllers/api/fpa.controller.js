@@ -1,5 +1,6 @@
 const { prisma } = require('../../config/db');
 const { successResponse, errorResponse } = require('../../Helper/helper');
+const { buildOwnerHostelFilter } = require('../../Helper/owner-filter.helper');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
@@ -62,16 +63,21 @@ const generateFPASummary = async (req, res) => {
 
     const { start, end } = buildDateRange(yearNum, monthNum);
 
+    // Build owner filter for hostel access
+    const ownerFilter = await buildOwnerHostelFilter(req);
+    
     // Build filters (matching accounts controller pattern)
     const paymentFilter = {
       status: 'paid',
       paymentDate: { gte: start, lt: end },
       ...(parsedHostelId ? { hostelId: parsedHostelId } : {}),
+      ...(Object.keys(ownerFilter).length > 0 && !parsedHostelId ? ownerFilter : {}),
     };
 
     const expenseFilter = {
       date: { gte: start, lt: end },
       ...(parsedHostelId ? { hostelId: parsedHostelId } : {}),
+      ...(Object.keys(ownerFilter).length > 0 && !parsedHostelId ? ownerFilter : {}),
     };
 
     // ===== 1️⃣ Income & Expense Totals =====
@@ -766,15 +772,20 @@ const getMonthlyComparison = async (req, res) => {
     const start = new Date(yearNum, 0, 1, 0, 0, 0, 0);
     const end = new Date(yearNum + 1, 0, 1, 0, 0, 0, 0);
 
+    // Build owner filter for hostel access
+    const ownerFilter = await buildOwnerHostelFilter(req);
+
     const paymentFilter = {
       status: 'paid',
       paymentDate: { gte: start, lt: end },
       ...(parsedHostelId ? { hostelId: parsedHostelId } : {}),
+      ...(Object.keys(ownerFilter).length > 0 && !parsedHostelId ? ownerFilter : {}),
     };
 
     const expenseFilter = {
       date: { gte: start, lt: end },
       ...(parsedHostelId ? { hostelId: parsedHostelId } : {}),
+      ...(Object.keys(ownerFilter).length > 0 && !parsedHostelId ? ownerFilter : {}),
     };
 
     // Get all payments and expenses for the year
@@ -845,15 +856,20 @@ const getCategoryBreakdown = async (req, res) => {
       end = new Date(yearNum + 1, 0, 1, 0, 0, 0, 0);
     }
 
+    // Build owner filter for hostel access
+    const ownerFilter = await buildOwnerHostelFilter(req);
+
     const paymentFilter = {
       status: 'paid',
       paymentDate: { gte: start, lt: end },
       ...(parsedHostelId ? { hostelId: parsedHostelId } : {}),
+      ...(Object.keys(ownerFilter).length > 0 && !parsedHostelId ? ownerFilter : {}),
     };
 
     const expenseFilter = {
       date: { gte: start, lt: end },
       ...(parsedHostelId ? { hostelId: parsedHostelId } : {}),
+      ...(Object.keys(ownerFilter).length > 0 && !parsedHostelId ? ownerFilter : {}),
     };
 
     const [payments, expenses] = await Promise.all([
@@ -922,6 +938,9 @@ const getCashFlowAnalysis = async (req, res) => {
     const yearNum = year ? parseInt(year) : new Date().getFullYear();
     const parsedHostelId = hostelId ? parseInt(hostelId) : null;
 
+    // Build owner filter for hostel access
+    const ownerFilter = await buildOwnerHostelFilter(req);
+
     const monthlyCashFlow = [];
 
     for (let month = 1; month <= 12; month++) {
@@ -934,6 +953,7 @@ const getCashFlowAnalysis = async (req, res) => {
             status: 'paid',
             paymentDate: { gte: start, lt: end },
             ...(parsedHostelId ? { hostelId: parsedHostelId } : {}),
+            ...(Object.keys(ownerFilter).length > 0 && !parsedHostelId ? ownerFilter : {}),
           },
         }),
         prisma.expense.aggregate({
@@ -941,6 +961,7 @@ const getCashFlowAnalysis = async (req, res) => {
           where: {
             date: { gte: start, lt: end },
             ...(parsedHostelId ? { hostelId: parsedHostelId } : {}),
+            ...(Object.keys(ownerFilter).length > 0 && !parsedHostelId ? ownerFilter : {}),
           },
         }),
       ]);
@@ -1160,15 +1181,20 @@ const getFinancialRatios = async (req, res) => {
       end = new Date(yearNum + 1, 0, 1, 0, 0, 0, 0);
     }
 
+    // Build owner filter for hostel access
+    const ownerFilter = await buildOwnerHostelFilter(req);
+
     const paymentFilter = {
       status: 'paid',
       paymentDate: { gte: start, lt: end },
       ...(parsedHostelId ? { hostelId: parsedHostelId } : {}),
+      ...(Object.keys(ownerFilter).length > 0 && !parsedHostelId ? ownerFilter : {}),
     };
 
     const expenseFilter = {
       date: { gte: start, lt: end },
       ...(parsedHostelId ? { hostelId: parsedHostelId } : {}),
+      ...(Object.keys(ownerFilter).length > 0 && !parsedHostelId ? ownerFilter : {}),
     };
 
     const [payments, expenses] = await Promise.all([

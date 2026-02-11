@@ -153,6 +153,9 @@ const buildOwnerSnapshot = async (ownerId) => {
 
 const createOwner = async (req, res) => {
   try {
+    // This endpoint can be called publicly (for owner registration) or by admin
+    // If called publicly, req.userId will be undefined, which is fine
+    
     const {
       // Owner fields
       name,
@@ -173,6 +176,7 @@ const createOwner = async (req, res) => {
       username,
       phone,
       password,
+      hostelData,
     } = req.body || {};
 
     // Validate required fields
@@ -286,14 +290,72 @@ const createOwner = async (req, res) => {
       select: OWNER_SELECT_FIELDS,
     });
 
+    let parsedHostelData = null;
+    if (hostelData) {
+      try {
+        parsedHostelData = typeof hostelData === 'string' ? JSON.parse(hostelData) : hostelData;
+      } catch (parseError) {
+        console.error('Failed to parse hostelData:', parseError);
+        parsedHostelData = null;
+      }
+    }
+
+    let createdHostel = null;
+    if (parsedHostelData && parsedHostelData.name) {
+      try {
+        createdHostel = await prisma.hostel.create({
+          data: {
+            name: parsedHostelData.name,
+            address: parsedHostelData.address || null,
+            description: parsedHostelData.description || null,
+            type: parsedHostelData.type || null,
+            category: parsedHostelData.category || null,
+            categoryMeta: parsedHostelData.categoryMeta || null,
+            totalFloors: parsedHostelData.totalFloors || null,
+            totalRooms: parsedHostelData.totalRooms || null,
+            totalBeds: parsedHostelData.totalBeds || null,
+            amenities: parsedHostelData.amenities || null,
+            contactInfo: parsedHostelData.contactInfo || null,
+            operatingHours: parsedHostelData.operatingHours || null,
+            images: parsedHostelData.images || null,
+            status: parsedHostelData.status || 'active',
+            ownerId: owner.id,
+          },
+          select: {
+            id: true,
+            name: true,
+            status: true,
+            ownerId: true,
+            address: true,
+            createdAt: true,
+          },
+        });
+      } catch (hostelError) {
+        console.error('Create hostel during owner registration failed:', hostelError);
+        if (owner?.id) {
+          await prisma.owner.delete({ where: { id: owner.id } });
+        }
+        if (userId) {
+          await prisma.user.delete({ where: { id: userId } });
+        }
+        return errorResponse(res, 'Owner created but hostel creation failed', 400);
+      }
+    }
+
+    // Log the action (userId may be null for public registration)
     await writeLog({
-      userId: req.userId,
+      userId: req.userId || null,
       action: 'create',
       module: 'owner',
-      description: `Owner ${name} created${email ? ` with email ${email}` : ''}`,
+      description: `Owner ${name} created${email ? ` with email ${email}` : ''}${req.userId ? '' : ' (public registration)'}`,
     });
 
-    return successResponse(res, owner, 'Owner created successfully', 201);
+    return successResponse(
+      res,
+      { owner, hostel: createdHostel },
+      'Owner created successfully',
+      201,
+    );
   } catch (error) {
     console.error('Create owner error:', error);
     return errorResponse(res, error.message);

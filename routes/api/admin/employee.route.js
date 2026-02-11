@@ -21,7 +21,7 @@ const {
     getEmployeesByHostelId,
 } = require('../../../controllers/api/employee.controller');
 
-const { authenticate, authorize } = require('../../../middleware/auth.middleware');
+const { authenticate, authorize, authorizeAdminOrOwner } = require('../../../middleware/auth.middleware');
 
 // ===============================
 // ✅ MULTER CONFIG (profile + multiple documents)
@@ -79,28 +79,30 @@ const uploadAny = multer({
 
 // Create new employee (allow profilePhoto + multiple documents)
 // Using uploadAny to accept any file fields dynamically
+// Allow owner to create employees for their hostels
 router.post(
   '/employee',
   authenticate,
-  authorize('admin'),
+  authorizeAdminOrOwner(),
   uploadAny.any(),
   createEmployee
 );
 
 // Get all employees (paginated + filter)
-router.get('/employees', authenticate, authorize('admin', 'manager'), getAllEmployees);
+// Admin sees all, owner sees only their hostels, employees see based on role
+router.get('/employees', authenticate, authorizeAdminOrOwner(), getAllEmployees);
 
 // Get employee statistics
-router.get('/employees/statistics', authenticate, authorize('admin', 'manager'), getEmployeeStatistics);
+router.get('/employees/statistics', authenticate, authorizeAdminOrOwner(), getEmployeeStatistics);
 
 // Get employee by User ID
-router.get('/employees/user/:userId', authenticate, authorize('admin', 'manager'), getEmployeeByUserId);
+router.get('/employees/user/:userId', authenticate, authorizeAdminOrOwner(), getEmployeeByUserId);
 
 // Get employees by Hostel ID (with filtering and pagination)
-router.get('/employees/hostel/:hostelId', authenticate, authorize('admin', 'manager'), getEmployeesByHostelId);
+router.get('/employees/hostel/:hostelId', authenticate, authorizeAdminOrOwner(), getEmployeesByHostelId);
 
 // Get employee by ID
-router.get('/employee/:id', authenticate, authorize('admin', 'manager'), getEmployeeById);
+router.get('/employee/:id', authenticate, authorizeAdminOrOwner(), getEmployeeById);
 
 // Update employee (profile + documents)
 // Using uploadAny to accept any file fields dynamically

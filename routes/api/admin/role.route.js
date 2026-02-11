@@ -72,7 +72,6 @@ const checkPermissionOrAdminOrOwner = (resource, action) => {
 // Get all roles
 router.get(
     '/roles',
-    authorize('admin'),
     checkPermissionOrAdminOrOwner('user_roles', 'view_list'),
     getAllRoles
 );
@@ -86,7 +85,7 @@ router.get(
 
 // Create role
 router.post(
-    '/role', authorize('owner', 'admin'),
+    '/role',
     checkPermissionOrAdminOrOwner('user_roles', 'create'),
     createRole
 );

@@ -15,36 +15,37 @@ const {
     scheduleMaintenance,
     deleteRoom
 } = require('../../../controllers/api/room.controller');
-const { authenticate, authorize } = require('../../../middleware/auth.middleware');
+const { authenticate, authorize, authorizeAdminOrOwner } = require('../../../middleware/auth.middleware');
 
-// All routes require authentication and admin/manager role
+// All routes require authentication - Admin routes (owner should use /api/owner/room routes)
+// Admin sees everything, employees need permissions
 
-// Create room (Admin & Manager only)
-router.post('/room', authenticate, authorize('admin', 'manager', 'owner'), createRoom);
+// Create room
+router.post('/room', authenticate, authorize('admin', 'manager', 'staff'), createRoom);
 
-// Get all rooms (Admin & Manager only)
-router.get('/rooms', authenticate, authorize('admin', 'manager', 'owner'), getAllRooms);
+// Get all rooms
+router.get('/rooms', authenticate, authorize('admin', 'manager', 'staff'), getAllRooms);
 
-// Get rooms by hostel (Admin & Manager only)
-router.get('/room/hostel/:hostelId', authenticate, authorize('admin', 'manager', 'owner'), getRoomsByHostel);
+// Get rooms by hostel
+router.get('/room/hostel/:hostelId', authenticate, authorizeAdminOrOwner(), getRoomsByHostel);
 
-// Get rooms by floor (Admin & Manager only)
-router.get('/room/floor/:floorId', authenticate, authorize('admin', 'manager', 'owner'), getRoomsByFloor);
+// Get rooms by floor
+router.get('/room/floor/:floorId', authenticate, authorize('admin', 'manager', 'staff'), getRoomsByFloor);
 
-// Get room by ID (Admin & Manager only)
-router.get('/room/:id', authenticate, authorize('admin', 'manager', 'owner'), getRoomById);
+// Get room by ID
+router.get('/room/:id', authenticate, authorize('admin', 'manager', 'staff'), getRoomById);
 
-// Update room (Admin & Manager only)
-router.put('/room/:id', authenticate, authorize('admin', 'manager', 'owner'), updateRoom);
+// Update room
+router.put('/room/:id', authenticate, authorize('admin', 'manager', 'staff'), updateRoom);
 
-// Update room status (Admin & Manager only)
-router.put('/room/:id/status', authenticate, authorize('admin', 'manager', 'owner'), updateRoomStatus);
+// Update room status
+router.put('/room/:id/status', authenticate, authorize('admin', 'manager', 'staff'), updateRoomStatus);
 
-// Schedule maintenance (Admin & Manager only)
-router.post('/rooms/:id/maintenance', authenticate, authorize('admin', 'manager', 'owner'), scheduleMaintenance);
+// Schedule maintenance
+router.post('/rooms/:id/maintenance', authenticate, authorize('admin', 'manager', 'staff'), scheduleMaintenance);
 
-// Delete room (Admin only)
-router.delete('/room/:id', authenticate, authorize('admin', 'owner'), deleteRoom);
+// Delete room - Admin only
+router.delete('/room/:id', authenticate, authorize('admin'), deleteRoom);
 
 module.exports = router;
 

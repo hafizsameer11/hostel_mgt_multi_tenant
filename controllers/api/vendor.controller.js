@@ -349,6 +349,8 @@ const createVendor = async (req, res) => {
   }
 };
 
+const { buildOwnerVendorFilter } = require('../../Helper/owner-filter.helper');
+
 const listVendors = async (req, res) => {
   try {
     const {
@@ -363,7 +365,12 @@ const listVendors = async (req, res) => {
       sortOrder = 'desc',
     } = req.query;
 
-    const where = {};
+    // Build owner filter if user is owner
+    const ownerFilter = await buildOwnerVendorFilter(req);
+
+    const where = {
+      ...ownerFilter, // Apply owner filter first
+    };
 
     if (status && normalizeStatus(status)) where.status = normalizeStatus(status);
     if (category) where.category = category;

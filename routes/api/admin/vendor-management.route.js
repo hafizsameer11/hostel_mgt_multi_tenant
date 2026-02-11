@@ -3,7 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { authenticate, authorize } = require('../../../middleware/auth.middleware');
+const { authenticate, authorizeAdminOrOwner } = require('../../../middleware/auth.middleware');
 const {
   getServiceManagement,
   assignVendorToService,
@@ -44,8 +44,9 @@ const upload = multer({
   },
 });
 
-// All routes require authentication and admin/manager role
-router.use(authenticate, authorize('admin', 'manager'));
+// All routes require authentication - allow admin and owner
+router.use(authenticate);
+router.use(authorizeAdminOrOwner());
 
 /**
  * =====================================================

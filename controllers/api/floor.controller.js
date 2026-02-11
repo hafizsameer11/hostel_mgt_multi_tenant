@@ -5,17 +5,35 @@
 const { successResponse, errorResponse } = require('../../Helper/helper');
 const { prisma } = require('../../config/db');
 
-const getHostelAccessFilter = (req) => {
-    if (req.userRole === 'owner') {
-        return { ownerId: req.userId };
+const getOwnerIdForRequest = async (req) => {
+    // Check role name properly
+    const userRoleName = req.userRole?.roleName?.toLowerCase();
+    if (userRoleName !== 'owner') return null;
+    if (req.ownerId) return req.ownerId;
+
+    const ownerProfile = await prisma.owner.findFirst({
+        where: { userId: req.userId },
+        select: { id: true }
+    });
+    req.ownerId = ownerProfile?.id || null;
+    return req.ownerId;
+};
+
+const getHostelAccessFilter = (ownerId, req) => {
+    const userRoleName = req.userRole?.roleName?.toLowerCase();
+    if (userRoleName === 'owner' && ownerId) {
+        return { ownerId };
     }
-    if (req.userRole === 'manager') {
+    if (userRoleName === 'manager' || userRoleName === 'employee') {
         return { managedBy: req.userId };
     }
     return {};
 };
 
 const assertHostelAccess = async (req, hostelId) => {
+    const ownerId = await getOwnerIdForRequest(req);
+    const userRoleName = req.userRole?.roleName?.toLowerCase();
+
     const hostel = await prisma.hostel.findUnique({
         where: { id: hostelId },
         select: { id: true, ownerId: true, managedBy: true }
@@ -25,11 +43,11 @@ const assertHostelAccess = async (req, hostelId) => {
         return { ok: false, status: 404, message: "Hostel not found" };
     }
 
-    if (req.userRole === 'owner' && hostel.ownerId !== req.userId) {
+    if (userRoleName === 'owner' && (!ownerId || hostel.ownerId !== ownerId)) {
         return { ok: false, status: 403, message: "You are not allowed to manage this hostel" };
     }
 
-    if (req.userRole === 'manager' && hostel.managedBy !== req.userId) {
+    if ((userRoleName === 'manager' || userRoleName === 'employee') && hostel.managedBy !== req.userId) {
         return { ok: false, status: 403, message: "You are not allowed to manage this hostel" };
     }
 
@@ -37,6 +55,9 @@ const assertHostelAccess = async (req, hostelId) => {
 };
 
 const assertFloorAccess = async (req, floorId) => {
+    const ownerId = await getOwnerIdForRequest(req);
+    const userRoleName = req.userRole?.roleName?.toLowerCase();
+
     const floor = await prisma.floor.findUnique({
         where: { id: floorId },
         include: {
@@ -50,11 +71,11 @@ const assertFloorAccess = async (req, floorId) => {
         return { ok: false, status: 404, message: "Floor not found" };
     }
 
-    if (req.userRole === 'owner' && floor.hostel.ownerId !== req.userId) {
+    if (userRoleName === 'owner' && (!ownerId || floor.hostel.ownerId !== ownerId)) {
         return { ok: false, status: 403, message: "You are not allowed to manage this floor" };
     }
 
-    if (req.userRole === 'manager' && floor.hostel.managedBy !== req.userId) {
+    if ((userRoleName === 'manager' || userRoleName === 'employee') && floor.hostel.managedBy !== req.userId) {
         return { ok: false, status: 403, message: "You are not allowed to manage this floor" };
     }
 
@@ -68,6 +89,7 @@ const createFloor = async (req, res) => {
     try {
         const {
             hostel,
+            hostelId,
             floorNumber,
             floorName,
             description,
@@ -76,15 +98,16 @@ const createFloor = async (req, res) => {
         } = req.body;
 
         // Validation
-        const hostelId = parseInt(hostel, 10);
+        const parsedHostelId = parseInt(hostel ?? hostelId, 10);
+        const parsedFloorNumber = parseInt(floorNumber, 10);
 
-        if (!Number.isFinite(hostelId) || floorNumber === undefined) {
+        if (!Number.isFinite(parsedHostelId) || !Number.isFinite(parsedFloorNumber)) {
             return errorResponse(res, "Hostel ID and floor number are required", 400);
         }
 
         // Check if hostel exists
         const hostelExists = await prisma.hostel.findUnique({
-            where: { id: hostelId },
+            where: { id: parsedHostelId },
             select: {
                 id: true,
                 ownerId: true,
@@ -98,7 +121,7 @@ const createFloor = async (req, res) => {
             return errorResponse(res, "Hostel not found", 404);
         }
 
-        const access = await assertHostelAccess(req, hostelId);
+        const access = await assertHostelAccess(req, parsedHostelId);
         if (!access.ok) {
             return errorResponse(res, access.message, access.status);
         }
@@ -107,8 +130,8 @@ const createFloor = async (req, res) => {
         const existingFloor = await prisma.floor.findUnique({
             where: {
                 hostelId_floorNumber: {
-                    hostelId: hostelId,
-                    floorNumber: floorNumber
+                    hostelId: parsedHostelId,
+                    floorNumber: parsedFloorNumber
                 }
             }
         });
@@ -120,9 +143,9 @@ const createFloor = async (req, res) => {
         // Create floor
         const floor = await prisma.floor.create({
             data: {
-                hostelId: hostelId,
-                floorNumber,
-                floorName: floorName || `Floor ${floorNumber}`,
+                hostelId: parsedHostelId,
+                floorNumber: parsedFloorNumber,
+                floorName: floorName || `Floor ${parsedFloorNumber}`,
                 description: description || null,
                 amenities: amenities || [],
                 floorPlan: floorPlan || null
@@ -139,7 +162,7 @@ const createFloor = async (req, res) => {
 
         // Update hostel's total floors count
         await prisma.hostel.update({
-            where: { id: hostelId },
+            where: { id: parsedHostelId },
             data: {
                 totalFloors: { increment: 1 }
             }
@@ -158,6 +181,12 @@ const createFloor = async (req, res) => {
 const getAllFloors = async (req, res) => {
     try {
         const { hostel, status } = req.query;
+        const ownerId = await getOwnerIdForRequest(req);
+        const userRoleName = req.userRole?.roleName?.toLowerCase();
+
+        if (userRoleName === 'owner' && !ownerId) {
+            return errorResponse(res, 'Owner profile not found for this user', 404);
+        }
 
         // Build filter
         const where = {};
@@ -170,7 +199,7 @@ const getAllFloors = async (req, res) => {
         }
         if (status) where.status = status;
 
-        const hostelAccessFilter = getHostelAccessFilter(req);
+        const hostelAccessFilter = getHostelAccessFilter(ownerId, req);
         if (Object.keys(hostelAccessFilter).length > 0) {
             where.hostel = hostelAccessFilter;
         }

@@ -12,26 +12,27 @@ const {
     deleteMessEntry,
     getMessStats
 } = require('../../../controllers/api/mess.controller');
-const { authenticate, authorize } = require('../../../middleware/auth.middleware');
+const { authenticate, authorize, authorizeAdminOrOwner } = require('../../../middleware/auth.middleware');
 
-// All routes require authentication and admin/manager/owner role
+// All routes require authentication - Admin routes (owner should use /api/owner/mess routes)
+// Admin sees everything, employees need permissions
 
 // Get all mess entries for a hostel
-router.get('/mess/hostel/:hostelId', authenticate, authorize('admin', 'manager', 'owner'), getMessEntriesByHostel);
+router.get('/mess/hostel/:hostelId', authenticate, authorizeAdminOrOwner(), getMessEntriesByHostel);
 
 // Get mess stats for a hostel
-router.get('/mess/hostel/:hostelId/stats', authenticate, authorize('admin', 'manager', 'owner'), getMessStats);
+router.get('/mess/hostel/:hostelId/stats', authenticate, authorizeAdminOrOwner(), getMessStats);
 
 // Get mess entry by ID
-router.get('/mess/:id', authenticate, authorize('admin', 'manager', 'owner'), getMessEntryById);
+router.get('/mess/:id', authenticate, authorizeAdminOrOwner(), getMessEntryById);
 
 // Create mess entry
-router.post('/mess', authenticate, authorize('admin', 'manager', 'owner'), createMessEntry);
+router.post('/mess', authenticate, authorizeAdminOrOwner(), createMessEntry);
 
 // Update mess entry
-router.put('/mess/:id', authenticate, authorize('admin', 'manager', 'owner'), updateMessEntry);
+router.put('/mess/:id', authenticate, authorizeAdminOrOwner(), updateMessEntry);
 
 // Delete mess entry
-router.delete('/mess/:id', authenticate, authorize('admin', 'manager', 'owner'), deleteMessEntry);
+router.delete('/mess/:id', authenticate, authorizeAdminOrOwner(), deleteMessEntry);
 
 module.exports = router;

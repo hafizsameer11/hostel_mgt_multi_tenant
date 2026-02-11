@@ -16,8 +16,9 @@ const {
 } = require('../../../controllers/api/hostel.controller');
 const { authenticate, authorize } = require('../../../middleware/auth.middleware');
 
-// Apply authentication and authorization middleware to all routes
-router.use(authenticate, authorize('admin', 'manager'));
+// Apply authentication middleware to all routes
+// Admin, owner, and employees can access (owner data will be filtered by controllers)
+router.use(authenticate);
 
 // ===============================
 // Category Routes (must come before /:id routes)
@@ -25,24 +26,24 @@ router.use(authenticate, authorize('admin', 'manager'));
 router.get('/hostels/categories', getHostelCategories);
 
 // ===============================
-// Hostel CRUD Routes
+// Core Hostel Routes
 // ===============================
-router.post('/hostels', createHostel); // Create new hostel
-router.get('/hostels', getAllHostels); // Get all hostels (with filters)
+router.get('/hostels', getAllHostels);
+router.post('/hostels', createHostel);
+router.get('/hostels/stats', getHostelStats);
 
 // ===============================
-// Hostel Detail Routes (must come after /categories)
+// Owner-specific Routes
 // ===============================
-router.get('/hostels/:id', getHostelById); // Get hostel by ID
-router.put('/hostels/:id', updateHostel); // Update hostel
-router.delete('/hostels/:id', authorize('admin'), deleteHostel); // Delete hostel (admin only)
-
-// ===============================
-// Hostel Sub-resource Routes
-// ===============================
-router.get('/hostels/:id/stats', getHostelStats); // Get hostel statistics
-router.get('/hostels/:id/architecture', getHostelArchitecture); // Get hostel architecture
+router.get('/hostel/owner/:ownerId', getAllHostels); // Get hostels by owner (will filter by buildHostelAccessFilter)
 router.get('/hostels/:id/arrangement', getHostelArchitecture); // Alias for arrangement view
+
+// ===============================
+// Hostel Detail Routes (must be after /hostels/* specific routes)
+// ===============================
+router.get('/hostels/:id', getHostelById);
+router.put('/hostels/:id', updateHostel);
+router.delete('/hostels/:id', deleteHostel);
 
 module.exports = router;
 

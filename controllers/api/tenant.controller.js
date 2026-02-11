@@ -2,17 +2,28 @@ const { successResponse, errorResponse } = require('../../Helper/helper');
 const { prisma } = require('../../config/db');
 const path = require('path');
 
+const { buildOwnerTenantFilter, getOwnerHostelIds } = require('../../Helper/owner-filter.helper');
+
 const buildHostelScopeFilter = (req) => {
-  if (req.userRole === 'owner') {
+  // Check role name properly
+  const userRoleName = req.userRole?.roleName?.toLowerCase();
+  if (userRoleName === 'owner') {
     return { ownerId: req.userId };
   }
-  if (req.userRole === 'manager') {
+  if (userRoleName === 'manager' || userRoleName === 'employee') {
     return { managedBy: req.userId };
   }
   return {};
 };
 
-const buildTenantAccessFilter = (req) => {
+const buildTenantAccessFilter = async (req) => {
+  // Use the owner filter helper for proper filtering
+  const ownerFilter = await buildOwnerTenantFilter(req);
+  if (Object.keys(ownerFilter).length > 0) {
+    return ownerFilter;
+  }
+  
+  // For non-owner roles, use the original logic
   const hostelFilter = buildHostelScopeFilter(req);
   if (!Object.keys(hostelFilter).length) return {};
   return {
@@ -25,7 +36,8 @@ const buildTenantAccessFilter = (req) => {
 };
 
 const ensureTenantAccess = async (req, tenantId) => {
-  if (req.userRole === 'admin' || req.userRole === 'staff') {
+  const userRoleName = req.userRole?.roleName?.toLowerCase();
+  if (req.isAdmin || userRoleName === 'staff') {
     return prisma.tenant.findUnique({
       where: { id: tenantId },
       select: { id: true },
@@ -35,7 +47,7 @@ const ensureTenantAccess = async (req, tenantId) => {
   return prisma.tenant.findFirst({
     where: {
       id: tenantId,
-      ...buildTenantAccessFilter(req),
+      ...(await buildTenantAccessFilter(req)),
     },
     select: { id: true },
   });
@@ -823,6 +835,19 @@ const createTenant = async (req, res) => {
       }
     );
 
+    // Verify owner can only create tenants for their hostels
+    if (!req.isAdmin && req.userRole?.roleName?.toLowerCase() === 'owner') {
+      if (allocationPayload && allocationPayload.hostelId) {
+        const ownerHostelIds = await getOwnerHostelIds(req.userId);
+        const requestedHostelId = parseInt(allocationPayload.hostelId);
+        
+        if (!ownerHostelIds.includes(requestedHostelId)) {
+          return errorResponse(res, 'You can only create tenants for your own hostels', 403);
+        }
+      }
+    }
+
+    // Increase transaction timeout to 15 seconds to handle complex operations
     const result = await prisma.$transaction(async (tx) => {
       const createdTenant = await tx.tenant.create({
         data: tenantData
@@ -870,21 +895,26 @@ const createTenant = async (req, res) => {
         });
       }
 
-      const tenantWithRelations = await tx.tenant.findUnique({
-        where: { id: createdTenant.id },
-        include: tenantCardInclude,
-      });
-
+      // Return minimal data from transaction to avoid timeout
       return {
-        tenant: tenantWithRelations,
+        tenantId: createdTenant.id,
         allocation: createdAllocation,
       };
+    }, {
+      maxWait: 10000, // Maximum time to wait for a transaction slot (10 seconds)
+      timeout: 15000, // Maximum time the transaction can run (15 seconds)
+    });
+
+    // Fetch tenant with relations outside transaction to avoid timeout
+    const tenantWithRelations = await prisma.tenant.findUnique({
+      where: { id: result.tenantId },
+      include: tenantCardInclude,
     });
 
     return successResponse(
       res,
       {
-        tenant: formatTenantForResponse(result.tenant),
+        tenant: formatTenantForResponse(tenantWithRelations),
         allocation: formatAllocationForResponse(result.allocation),
       },
       "Tenant created successfully",
@@ -1338,7 +1368,7 @@ const getAllTenants = async (req, res) => {
     const skip = (pageNum - 1) * limitNum;
 
     const where = {
-      ...buildTenantAccessFilter(req),
+      ...(await buildTenantAccessFilter(req)),
     };
 
     if (status) where.status = String(status);
@@ -1435,7 +1465,7 @@ const getTenantById = async (req, res) => {
     const tenant = await prisma.tenant.findFirst({
       where: {
         id: tenantId,
-        ...buildTenantAccessFilter(req),
+        ...(await buildTenantAccessFilter(req)),
       },
       include: tenantProfileInclude
     });
@@ -1563,7 +1593,7 @@ const getTenantFinancialSummary = async (req, res) => {
     const tenant = await prisma.tenant.findFirst({
       where: {
         id: tenantId,
-        ...buildTenantAccessFilter(req),
+        ...(await buildTenantAccessFilter(req)),
       },
       select: {
         id: true,
@@ -1638,7 +1668,7 @@ const getActiveTenants = async (req, res) => {
 
     const where = {
       status: 'active',
-      ...buildTenantAccessFilter(req),
+      ...(await buildTenantAccessFilter(req)),
     };
 
     if (search) {
@@ -1672,7 +1702,11 @@ const listTenants = async (req, res) => {
     const { hostelId, status, search, page, limit } = req.query;
     const { skip, take } = paged(page, limit);
 
+    // Build owner filter if user is owner
+    const ownerFilter = await buildOwnerTenantFilter(req);
+
     const where = {
+      ...ownerFilter, // Apply owner filter first
       ...(status ? { status } : {}),
       ...(search
         ? {
@@ -2026,7 +2060,7 @@ const getTenantsByHostelId = async (req, res) => {
     }
 
     // Build access filter based on user role
-    const accessFilter = buildTenantAccessFilter(req);
+    const accessFilter = await buildTenantAccessFilter(req);
 
     // Build where clause to find tenants with allocations in this hostel
     const where = {
@@ -2080,6 +2114,126 @@ const getTenantsByHostelId = async (req, res) => {
   }
 };
 
+// ===================================
+// GET PROSPECTS (tenants without allocations)
+// ===================================
+const getProspects = async (req, res) => {
+  try {
+    const { page = 1, limit = 20, search } = req.query;
+    const pageNum = Math.max(parseInt(page, 10) || 1, 1);
+    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
+    const skip = (pageNum - 1) * limitNum;
+
+    const where = {
+      ...(await buildTenantAccessFilter(req)),
+      allocations: {
+        none: {} // Tenants with no allocations are prospects
+      }
+    };
+
+    if (search) {
+      where.OR = [
+        { firstName: { contains: search, mode: 'insensitive' } },
+        { lastName: { contains: search, mode: 'insensitive' } },
+        { name: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+        { phone: { contains: search, mode: 'insensitive' } },
+        { cnicNumber: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    const [prospects, total] = await Promise.all([
+      prisma.tenant.findMany({
+        where,
+        include: tenantCardInclude,
+        orderBy: { createdAt: 'desc' },
+        take: limitNum,
+        skip,
+      }),
+      prisma.tenant.count({ where }),
+    ]);
+
+    const formattedProspects = prospects.map(formatTenantForResponse);
+
+    return successResponse(
+      res,
+      {
+        prospects: formattedProspects,
+        pagination: {
+          total,
+          page: pageNum,
+          limit: limitNum,
+          pages: Math.ceil(total / limitNum),
+        },
+      },
+      "Prospects retrieved successfully"
+    );
+  } catch (err) {
+    console.error("Get Prospects Error:", err);
+    return errorResponse(res, err.message);
+  }
+};
+
+// ===================================
+// GET PROSPECTS BY HOSTEL ID
+// ===================================
+const getProspectsByHostel = async (req, res) => {
+  try {
+    const { hostelId } = req.params;
+    const convertHostelId = parseInt(hostelId, 10);
+
+    if (Number.isNaN(convertHostelId)) {
+      return errorResponse(res, "Invalid hostel id", 400);
+    }
+
+    // Verify hostel exists
+    const hostel = await prisma.hostel.findUnique({
+      where: { id: convertHostelId },
+      select: { id: true, name: true },
+    });
+
+    if (!hostel) {
+      return errorResponse(res, "Hostel not found", 404);
+    }
+
+    // Build access filter based on user role
+    const accessFilter = await buildTenantAccessFilter(req);
+
+    // Prospects are tenants with no allocations
+    const where = {
+      ...accessFilter,
+      allocations: {
+        none: {}
+      }
+    };
+
+    const prospects = await prisma.tenant.findMany({
+      where,
+      include: tenantCardInclude,
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const formattedProspects = prospects.map(formatTenantForResponse);
+
+    return successResponse(
+      res,
+      {
+        hostel: {
+          id: hostel.id,
+          name: hostel.name,
+        },
+        prospects: formattedProspects,
+        count: formattedProspects.length,
+      },
+      "Prospects retrieved successfully",
+      200
+    );
+  } catch (err) {
+    console.error("Get Prospects By Hostel Error:", err);
+    return errorResponse(res, err.message || "Error retrieving prospects", 500);
+  }
+};
+
 module.exports = {
   createTenant,
   updateTenant,
@@ -2095,4 +2249,6 @@ module.exports = {
   getTenantScoreHistory,
   upsertTenantScore,
   getTenantsByHostelId,
+  getProspects,
+  getProspectsByHostel,
 };

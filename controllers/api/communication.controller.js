@@ -167,10 +167,18 @@ const sendEmailCampaign = async (req, res) => {
 };
 
 
+const { buildOwnerTenantFilter, buildOwnerEmployeeFilter, buildOwnerVendorFilter } = require('../../Helper/owner-filter.helper');
+
 const tenantContacts = async (req, res) => {
   try {
     const { status, hostelId, search, page = 1, limit = 12 } = req.query;
-    const filters = {};
+    
+    // Build owner filter if user is owner
+    const ownerFilter = await buildOwnerTenantFilter(req);
+    
+    const filters = {
+      ...ownerFilter, // Apply owner filter first
+    };
 
     if (status) filters.status = status;
 
@@ -385,7 +393,13 @@ const tenantContactDetails = async (req, res) => {
 const employeeContacts = async (req, res) => {
   try {
     const { status, department, search, page = 1, limit = 12 } = req.query;
-    const filters = {};
+    
+    // Build owner filter if user is owner
+    const ownerFilter = await buildOwnerEmployeeFilter(req);
+    
+    const filters = {
+      ...ownerFilter, // Apply owner filter first
+    };
 
     if (status) filters.status = status;
     if (department) filters.department = department;
@@ -560,7 +574,13 @@ const employeeContactDetails = async (req, res) => {
 const vendorContacts = async (req, res) => {
   try {
     const { status, search, page = 1, limit = 12 } = req.query;
-    const filters = {};
+    
+    // Build owner filter if user is owner
+    const ownerFilter = await buildOwnerVendorFilter(req);
+    
+    const filters = {
+      ...ownerFilter, // Apply owner filter first
+    };
     if (status) filters.status = status.toLowerCase();
 
     const searchFilter = buildSearchFilter(['name', 'companyName', 'email', 'phone', 'category'], search);

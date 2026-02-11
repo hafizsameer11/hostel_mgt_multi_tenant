@@ -5,17 +5,35 @@
 const { successResponse, errorResponse } = require('../../Helper/helper');
 const { prisma } = require('../../config/db');
 
-const getHostelAccessFilter = (req) => {
-    if (req.userRole === 'owner') {
-        return { ownerId: req.userId };
+const getOwnerIdForRequest = async (req) => {
+    // Check role name properly
+    const userRoleName = req.userRole?.roleName?.toLowerCase();
+    if (userRoleName !== 'owner') return null;
+    if (req.ownerId) return req.ownerId;
+
+    const ownerProfile = await prisma.owner.findFirst({
+        where: { userId: req.userId },
+        select: { id: true }
+    });
+    req.ownerId = ownerProfile?.id || null;
+    return req.ownerId;
+};
+
+const getHostelAccessFilter = (ownerId, req) => {
+    const userRoleName = req.userRole?.roleName?.toLowerCase();
+    if (userRoleName === 'owner' && ownerId) {
+        return { ownerId };
     }
-    if (req.userRole === 'manager') {
+    if (userRoleName === 'manager' || userRoleName === 'employee') {
         return { managedBy: req.userId };
     }
     return {};
 };
 
 const assertHostelAccess = async (req, hostelId) => {
+    const ownerId = await getOwnerIdForRequest(req);
+    const userRoleName = req.userRole?.roleName?.toLowerCase();
+
     const hostel = await prisma.hostel.findUnique({
         where: { id: hostelId },
         select: { id: true, ownerId: true, managedBy: true }
@@ -25,11 +43,11 @@ const assertHostelAccess = async (req, hostelId) => {
         return { ok: false, status: 404, message: "Hostel not found" };
     }
 
-    if (req.userRole === 'owner' && hostel.ownerId !== req.userId) {
+    if (userRoleName === 'owner' && (!ownerId || hostel.ownerId !== ownerId)) {
         return { ok: false, status: 403, message: "You are not allowed to manage this hostel" };
     }
 
-    if (req.userRole === 'manager' && hostel.managedBy !== req.userId) {
+    if ((userRoleName === 'manager' || userRoleName === 'employee') && hostel.managedBy !== req.userId) {
         return { ok: false, status: 403, message: "You are not allowed to manage this hostel" };
     }
 
@@ -37,6 +55,9 @@ const assertHostelAccess = async (req, hostelId) => {
 };
 
 const assertFloorAccess = async (req, floorId) => {
+    const ownerId = await getOwnerIdForRequest(req);
+    const userRoleName = req.userRole?.roleName?.toLowerCase();
+
     const floor = await prisma.floor.findUnique({
         where: { id: floorId },
         include: {
@@ -50,11 +71,11 @@ const assertFloorAccess = async (req, floorId) => {
         return { ok: false, status: 404, message: "Floor not found" };
     }
 
-    if (req.userRole === 'owner' && floor.hostel.ownerId !== req.userId) {
+    if (userRoleName === 'owner' && (!ownerId || floor.hostel.ownerId !== ownerId)) {
         return { ok: false, status: 403, message: "You are not allowed to manage this floor" };
     }
 
-    if (req.userRole === 'manager' && floor.hostel.managedBy !== req.userId) {
+    if ((userRoleName === 'manager' || userRoleName === 'employee') && floor.hostel.managedBy !== req.userId) {
         return { ok: false, status: 403, message: "You are not allowed to manage this floor" };
     }
 
@@ -62,6 +83,9 @@ const assertFloorAccess = async (req, floorId) => {
 };
 
 const assertRoomAccess = async (req, roomId) => {
+    const ownerId = await getOwnerIdForRequest(req);
+    const userRoleName = req.userRole?.roleName?.toLowerCase();
+
     const room = await prisma.room.findUnique({
         where: { id: roomId },
         include: {
@@ -74,18 +98,105 @@ const assertRoomAccess = async (req, roomId) => {
         return { ok: false, status: 404, message: "Room not found" };
     }
 
-    if (req.userRole === 'owner' && room.hostel.ownerId !== req.userId) {
+    if (userRoleName === 'owner' && (!ownerId || room.hostel.ownerId !== ownerId)) {
         return { ok: false, status: 403, message: "You are not allowed to manage this room" };
     }
 
-    if (req.userRole === 'manager' && room.hostel.managedBy !== req.userId) {
+    if ((userRoleName === 'manager' || userRoleName === 'employee') && room.hostel.managedBy !== req.userId) {
         return { ok: false, status: 403, message: "You are not allowed to manage this room" };
     }
 
     return { ok: true, room };
 };
 
+// Helper function to enrich bed with tenant details and lease information
+const enrichBedWithTenantDetails = async (bed) => {
+    let tenantDetails = null;
+    let leaseInfo = null;
+
+    if (bed.currentTenantId) {
+        // Find tenant by userId
+        const tenant = await prisma.tenant.findFirst({
+            where: { userId: bed.currentTenantId },
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                phone: true,
+                leaseStartDate: true,
+                leaseEndDate: true,
+                monthlyRent: true,
+                securityDeposit: true,
+            }
+        });
+
+        if (tenant) {
+            tenantDetails = {
+                id: tenant.id,
+                name: tenant.name,
+                email: tenant.email,
+                phone: tenant.phone,
+            };
+
+            // Get lease information from tenant
+            leaseInfo = {
+                startDate: tenant.leaseStartDate,
+                endDate: tenant.leaseEndDate,
+                monthlyRent: tenant.monthlyRent,
+                securityDeposit: tenant.securityDeposit,
+            };
+
+            // Also check active allocation for additional lease info
+            const activeAllocation = await prisma.allocation.findFirst({
+                where: {
+                    tenantId: tenant.id,
+                    bedId: bed.id,
+                    status: 'active'
+                },
+                select: {
+                    checkInDate: true,
+                    expectedCheckOutDate: true,
+                    checkOutDate: true,
+                    rentAmount: true,
+                    depositAmount: true,
+                },
+                orderBy: { createdAt: 'desc' }
+            });
+
+            // Use allocation dates if tenant dates are not available
+            if (activeAllocation) {
+                if (!leaseInfo.startDate && activeAllocation.checkInDate) {
+                    leaseInfo.startDate = activeAllocation.checkInDate;
+                }
+                if (!leaseInfo.endDate && activeAllocation.expectedCheckOutDate) {
+                    leaseInfo.endDate = activeAllocation.expectedCheckOutDate;
+                }
+                if (!leaseInfo.monthlyRent && activeAllocation.rentAmount) {
+                    leaseInfo.monthlyRent = activeAllocation.rentAmount;
+                }
+                if (!leaseInfo.securityDeposit && activeAllocation.depositAmount) {
+                    leaseInfo.securityDeposit = activeAllocation.depositAmount;
+                }
+            }
+        }
+    }
+
+    return {
+        ...bed,
+        tenantDetails,
+        leaseInfo,
+        // For backward compatibility, also add these fields at the top level
+        tenantName: tenantDetails?.name || bed.currentTenant?.username || bed.currentTenant?.email || null,
+        leaseStartDate: leaseInfo?.startDate || null,
+        leaseEndDate: leaseInfo?.endDate || null,
+        rent: leaseInfo?.monthlyRent || null,
+    };
+};
+
 const assertBedAccess = async (req, bedId) => {
+    const ownerId = await getOwnerIdForRequest(req);
+    const userRoleName = req.userRole?.roleName?.toLowerCase();
+
     const bed = await prisma.bed.findUnique({
         where: { id: bedId },
         include: {
@@ -116,11 +227,11 @@ const assertBedAccess = async (req, bedId) => {
         return { ok: false, status: 404, message: "Bed not found" };
     }
 
-    if (req.userRole === 'owner' && bed.room.hostel.ownerId !== req.userId) {
+    if (userRoleName === 'owner' && (!ownerId || bed.room.hostel.ownerId !== ownerId)) {
         return { ok: false, status: 403, message: "You are not allowed to manage this bed" };
     }
 
-    if (req.userRole === 'manager' && bed.room.hostel.managedBy !== req.userId) {
+    if ((userRoleName === 'manager' || userRoleName === 'employee') && bed.room.hostel.managedBy !== req.userId) {
         return { ok: false, status: 403, message: "You are not allowed to manage this bed" };
     }
 
@@ -304,7 +415,8 @@ const getAllBeds = async (req, res) => {
         }
         if (status) where.status = status;
 
-        const hostelAccessFilter = getHostelAccessFilter(req);
+        const ownerId = await getOwnerIdForRequest(req);
+        const hostelAccessFilter = getHostelAccessFilter(ownerId, req);
         if (Object.keys(hostelAccessFilter).length > 0) {
             if (!where.room) {
                 where.room = {};
@@ -330,7 +442,7 @@ const getAllBeds = async (req, res) => {
                     }
                 },
                 currentTenant: {
-                    select: { username: true, email: true, phone: true }
+                    select: { username: true, email: true, phone: true, id: true }
                 }
             },
             orderBy: [
@@ -339,7 +451,10 @@ const getAllBeds = async (req, res) => {
             ]
         });
 
-        return successResponse(res, beds, "Beds retrieved successfully", 200);
+        // Enhance beds with tenant details and lease information
+        const bedsWithTenantDetails = await Promise.all(beds.map(bed => enrichBedWithTenantDetails(bed)));
+
+        return successResponse(res, bedsWithTenantDetails, "Beds retrieved successfully", 200);
     } catch (err) {
         console.error("Get All Beds Error:", err);
         return errorResponse(res, err.message, 400);
@@ -373,13 +488,16 @@ const getBedsByRoom = async (req, res) => {
             where: { roomId: convertRoomId },
             include: {
                 currentTenant: {
-                    select: { username: true, email: true, phone: true }
+                    select: { username: true, email: true, phone: true, id: true }
                 }
             },
             orderBy: { bedNumber: 'asc' }
         });
 
-        return successResponse(res, beds, "Beds retrieved successfully", 200);
+        // Enhance beds with tenant details and lease information
+        const bedsWithTenantDetails = await Promise.all(beds.map(bed => enrichBedWithTenantDetails(bed)));
+
+        return successResponse(res, bedsWithTenantDetails, "Beds retrieved successfully", 200);
     } catch (err) {
         console.error("Get Beds By Room Error:", err);
         return errorResponse(res, err.message, 400);

@@ -15,14 +15,14 @@ router.use(authenticate);
  * @body    { tenantId?, hostelId, roomId?, bedId?, checkInDate, checkOutDate, bookingType?, numberOfGuests?, totalAmount?, advancePaid?, paymentMethod?, customerName?, customerEmail?, customerPhone?, customerCnic?, remarks? }
  */
 router.post('/bookings', 
-    authorize('admin', 'manager', 'staff', 'user'), authenticate,
+    authorize('admin', 'manager', 'staff'),
     bookingController.createBooking
 );
 
 /**
  * @route   GET /api/admin/bookings
  * @desc    Get all bookings with filters and pagination
- * @access  Admin, Manager, Staff
+ * @access  Admin, Manager, Staff (employees need permissions)
  * @query   status, hostelId, tenantId, bookingType, paymentStatus, startDate, endDate, search, page, limit
  */
 router.get('/bookings',
@@ -113,7 +113,7 @@ router.patch('/bookings/:id/cancel',
 /**
  * @route   DELETE /api/admin/bookings/:id
  * @desc    Delete booking (only cancelled or expired)
- * @access  Admin
+ * @access  Admin only
  * @params  id - Booking ID
  */
 router.delete('/bookings/:id',

@@ -813,11 +813,10 @@ exports.getPersonalInfo = async (req, res) => {
     const tenant = await prisma.tenant.findUnique({ 
       where: { userId: req.userId },
       select: { 
-        firstName: true, 
-        lastName: true, 
-        companyName: true, 
-        designation: true,
-        name: true
+        name: true,
+        fullName: true,
+        professionType: true,
+        professionDetail: true
       }
     });
     
@@ -837,16 +836,27 @@ exports.getPersonalInfo = async (req, res) => {
     };
     
     if (tenant) {
-      personalInfo.firstName = tenant.firstName || null;
-      personalInfo.lastName = tenant.lastName || null;
-      personalInfo.company = tenant.companyName || null;
-      personalInfo.jobTitle = tenant.designation || null;
-      // If firstName/lastName are null, try to split name
-      if (!personalInfo.firstName && !personalInfo.lastName && tenant.name) {
-        const nameParts = tenant.name.split(' ');
+      const fullName = tenant.fullName || tenant.name || '';
+      if (fullName) {
+        const nameParts = fullName.split(' ');
         personalInfo.firstName = nameParts[0] || null;
         personalInfo.lastName = nameParts.slice(1).join(' ') || null;
       }
+
+      const professionDetail = tenant.professionDetail && typeof tenant.professionDetail === 'object'
+        ? tenant.professionDetail
+        : {};
+
+      personalInfo.company =
+        professionDetail.companyName ||
+        professionDetail.company ||
+        professionDetail.organization ||
+        null;
+      personalInfo.jobTitle =
+        professionDetail.jobTitle ||
+        professionDetail.designation ||
+        professionDetail.position ||
+        null;
     } else if (employee) {
       personalInfo.jobTitle = employee.designation || null;
     }

@@ -227,18 +227,48 @@ const composeCategoryPayload = (categoryKey, categoryMeta) => {
   };
 };
 
-const buildHostelAccessFilter = (req) => {
-  if (req.userRole === 'owner') {
-    return { ownerId: req.userId };
+const buildHostelAccessFilter = async (req) => {
+  // Admin can see all hostels
+  if (req.isAdmin) {
+    return {};
   }
-  if (req.userRole === 'manager') {
+  
+  // Owner can only see their own hostels
+  if (req.userRoleName === 'owner') {
+    // Get owner profile ID (not user ID)
+    // Check if already cached in request
+    if (req.ownerProfileId) {
+      return { ownerId: req.ownerProfileId };
+    }
+    
+    // Fetch owner profile
+    const ownerProfile = await prisma.owner.findUnique({
+      where: { userId: req.userId },
+      select: { id: true }
+    });
+    
+    if (!ownerProfile) {
+      // Owner has no profile, return filter that matches nothing
+      return { id: { equals: -1 } };
+    }
+    
+    // Cache for future use in the same request
+    req.ownerProfileId = ownerProfile.id;
+    return { ownerId: ownerProfile.id };
+  }
+  
+  // Manager/employee can see only their assigned hostel
+  if (req.userRoleName === 'manager' || req.userRoleName === 'employee') {
     return { managedBy: req.userId };
   }
-  return {};
+  
+  // Default: no access
+  return { id: { equals: -1 } }; // This returns no results since no hostel has id = -1
 };
 
 const ensureHostelAccess = async (req, hostelId) => {
-  const where = { id: hostelId, ...buildHostelAccessFilter(req) };
+  const filter = await buildHostelAccessFilter(req);
+  const where = { id: hostelId, ...filter };
   return prisma.hostel.findFirst({
     where,
     select: { id: true },
@@ -515,8 +545,9 @@ const getHostelArchitecture = async (req, res) => {
       return errorResponse(res, 'Invalid hostel id', 400);
     }
 
+    const filter = await buildHostelAccessFilter(req);
     const hostel = await prisma.hostel.findFirst({
-      where: { id: hostelId, ...buildHostelAccessFilter(req) },
+      where: { id: hostelId, ...filter },
       select: {
         id: true,
         name: true,
@@ -783,8 +814,9 @@ const getAllHostels = async (req, res) => {
     const { status, city, search, page = 1, limit = 10 } = req.query;
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
 
+    const filter = await buildHostelAccessFilter(req);
     const where = {
-      ...buildHostelAccessFilter(req),
+      ...filter,
     };
     if (status) {
       where.status = status;
@@ -859,8 +891,9 @@ const getHostelById = async (req, res) => {
       return errorResponse(res, 'Invalid hostel id', 400);
     }
 
+    const filter = await buildHostelAccessFilter(req);
     const hostel = await prisma.hostel.findFirst({
-      where: { id: hostelId, ...buildHostelAccessFilter(req) },
+      where: { id: hostelId, ...filter },
       include: {
         manager: { select: { id: true, username: true, email: true, phone: true } },
       },
@@ -1109,8 +1142,9 @@ const getHostelStats = async (req, res) => {
       return errorResponse(res, 'Invalid hostel id', 400);
     }
 
+    const filter = await buildHostelAccessFilter(req);
     const hostel = await prisma.hostel.findFirst({
-      where: { id: hostelId, ...buildHostelAccessFilter(req) },
+      where: { id: hostelId, ...filter },
       include: {
         manager: { select: { id: true, name: true, email: true, phone: true } },
         floors: {

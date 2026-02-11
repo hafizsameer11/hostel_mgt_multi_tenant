@@ -92,6 +92,7 @@ const authenticate = async (req, res, next) => {
         req.userId = user.id;
         req.isAdmin = user.isAdmin;
         req.userRole = user.userRole;
+        req.userRoleName = user.userRole?.roleName?.toLowerCase() || null; // Set role name for access filters
         req.userPermissions = userPermissions;
 
         next();
@@ -115,6 +116,7 @@ const authorize = (...roleNames) => {
         }
 
         // If user is admin (isAdmin flag), allow access regardless of role
+        // Admin can see everything
         if (req.isAdmin) {
             return next();
         }
@@ -124,16 +126,30 @@ const authorize = (...roleNames) => {
             return errorResponse(res, "User role not found", 403);
         }
 
-        // Allow owner role to access role management endpoints (for backward compatibility)
-        // If checking for admin/manager/staff, also allow owner
-        if (req.userRole.roleName === 'owner' && 
-            (roleNames.includes('admin') || roleNames.includes('manager') || roleNames.includes('staff'))) {
-            // Special case: owner role can access role management
-            return next();
+        const userRoleName = req.userRole.roleName?.toLowerCase();
+
+        // Owner role should only access owner-specific routes
+        // Don't allow owner to access admin routes unless explicitly allowed
+        if (userRoleName === 'owner') {
+            // Only allow if 'owner' is explicitly in the allowed roles
+            if (roleNames.includes('owner')) {
+                return next();
+            }
+            // Deny access to admin routes for owner
+            return errorResponse(
+                res,
+                "Access denied. Owner role cannot access this resource.",
+                403
+            );
         }
 
-        // Check if user's role name matches one of the required roles
-        if (!roleNames.includes(req.userRole.roleName)) {
+        // For employees (manager, staff, employee), check if their role name matches
+        // Note: For permission-based access, use authorizeWithPermission instead
+        // Convert both to lowercase for case-insensitive comparison
+        const userRoleNameLower = req.userRole.roleName?.toLowerCase();
+        const allowedRoleNamesLower = roleNames.map(r => r.toLowerCase());
+        
+        if (!allowedRoleNamesLower.includes(userRoleNameLower)) {
             return errorResponse(
                 res,
                 `Access denied. This action requires ${roleNames.join(' or ')} role. Your role: ${req.userRole.roleName}`,
@@ -142,6 +158,120 @@ const authorize = (...roleNames) => {
         }
 
         next();
+    };
+};
+
+/**
+ * Enhanced authorization for admin routes
+ * - Admin (isAdmin) can access everything
+ * - Owner cannot access admin routes
+ * - Employees are checked by permissions
+ * @param {string} resource - Resource name for permission check
+ * @param {string} action - Action name for permission check
+ * @example
+ * router.get('/route', authenticate, authorizeAdminRoute('tenants', 'view_list'), handler);
+ */
+const authorizeAdminRoute = (resource, action) => {
+    return async (req, res, next) => {
+        if (!req.user) {
+            return errorResponse(res, "Authentication required", 401);
+        }
+
+        // Admin can see everything - no restrictions
+        if (req.isAdmin) {
+            return next();
+        }
+
+        // Owner can access admin routes (data will be filtered by their hostels in controllers)
+        if (req.userRole && req.userRole.roleName?.toLowerCase() === 'owner') {
+            // Owner has full feature access, but data will be filtered
+            return next();
+        }
+
+        // For employees, check permissions
+        if (!req.userRole) {
+            return errorResponse(res, "User role not found", 403);
+        }
+
+        // Check if user has the required permission
+        const hasPermission = req.userPermissions.some(
+            perm => perm.resource === resource && perm.action === action
+        );
+
+        if (!hasPermission) {
+            return errorResponse(
+                res,
+                `Access denied. You don't have permission to ${action} ${resource}.`,
+                403
+            );
+        }
+
+        next();
+    };
+};
+
+/**
+ * Authorization for owner routes only
+ * - Only allows owner role
+ * - Admin can also access (for management purposes)
+ * @example
+ * router.get('/route', authenticate, authorizeOwnerRoute(), handler);
+ */
+const authorizeOwnerRoute = () => {
+    return (req, res, next) => {
+        if (!req.user) {
+            return errorResponse(res, "Authentication required", 401);
+        }
+
+        // Admin can access owner routes for management
+        if (req.isAdmin) {
+            return next();
+        }
+
+        // Check if user has owner role
+        if (!req.userRole) {
+            return errorResponse(res, "User role not found", 403);
+        }
+
+        const userRoleName = req.userRole.roleName?.toLowerCase();
+        if (userRoleName !== 'owner') {
+            return errorResponse(
+                res,
+                `Access denied. This route requires owner role. Your role: ${req.userRole.roleName}`,
+                403
+            );
+        }
+
+        next();
+    };
+};
+
+/**
+ * Authorization for admin routes that owner can also access (read-only, filtered by their hostels)
+ * - Admin: Full access
+ * - Owner: Read access (will be filtered by their hostels in controllers)
+ * - Employee: Based on role
+ * @example
+ * router.get('/route', authenticate, authorizeAdminOrOwner(), handler);
+ */
+const authorizeAdminOrOwner = () => {
+    return (req, res, next) => {
+        if (!req.user) {
+            return errorResponse(res, "Authentication required", 401);
+        }
+
+        // Admin can access everything
+        if (req.isAdmin) {
+            return next();
+        }
+
+        // Owner can access (will be filtered by their hostels)
+        if (req.userRole && req.userRole.roleName?.toLowerCase() === 'owner') {
+            return next();
+        }
+
+        // Employees can access based on role
+        return authorize('admin', 'manager', 'staff')(req, res, next);
     };
 };
 
@@ -217,5 +347,8 @@ const optionalAuth = async (req, res, next) => {
 module.exports = {
     authenticate,
     authorize,
+    authorizeAdminRoute,
+    authorizeOwnerRoute,
+    authorizeAdminOrOwner,
     optionalAuth
 };

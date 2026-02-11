@@ -6,10 +6,11 @@ const { successResponse, errorResponse } = require('../../Helper/helper');
 const { prisma } = require('../../config/db');
 
 const getHostelAccessFilter = (req) => {
-    if (req.userRole === 'owner') {
+    const userRoleName = req.userRole?.roleName?.toLowerCase() || req.userRole;
+    if (userRoleName === 'owner') {
         return { ownerId: req.userId };
     }
-    if (req.userRole === 'manager') {
+    if (userRoleName === 'manager') {
         return { managedBy: req.userId };
     }
     return {};
@@ -25,11 +26,38 @@ const assertHostelAccess = async (req, hostelId) => {
         return { ok: false, status: 404, message: "Hostel not found" };
     }
 
-    if (req.userRole === 'owner' && hostel.ownerId !== req.userId) {
-        return { ok: false, status: 403, message: "You are not allowed to manage this hostel" };
+    const userRoleName = req.userRole?.roleName?.toLowerCase() || req.userRole;
+    
+    // Admin can access all hostels
+    if (req.isAdmin) {
+        return { ok: true, hostel };
     }
 
-    if (req.userRole === 'manager' && hostel.managedBy !== req.userId) {
+    // Owner can access their own hostels
+    if (userRoleName === 'owner') {
+        // Get owner profile to check hostel ownership
+        const ownerProfile = await prisma.owner.findUnique({
+            where: { userId: req.userId },
+            include: {
+                hostels: {
+                    select: { id: true }
+                }
+            }
+        });
+        
+        if (!ownerProfile) {
+            return { ok: false, status: 403, message: "Owner profile not found" };
+        }
+        
+        const ownerHostelIds = ownerProfile.hostels.map(h => h.id);
+        if (!ownerHostelIds.includes(hostelId)) {
+            return { ok: false, status: 403, message: "You are not allowed to manage this hostel" };
+        }
+        
+        return { ok: true, hostel };
+    }
+
+    if (userRoleName === 'manager' && hostel.managedBy !== req.userId) {
         return { ok: false, status: 403, message: "You are not allowed to manage this hostel" };
     }
 

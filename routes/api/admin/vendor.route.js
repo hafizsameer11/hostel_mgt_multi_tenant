@@ -10,46 +10,46 @@ const {
   recordVendorScore,
   getVendorScores,
 } = require('../../../controllers/api/vendor.controller');
-const { authenticate, authorize } = require('../../../middleware/auth.middleware');
+const { authenticate, authorize, authorizeAdminOrOwner } = require('../../../middleware/auth.middleware');
 
 // 🔒 All vendor routes are protected
 router.use(authenticate);
-router.use(authorize('admin', 'manager'));
+// Allow owner access for GET routes (read-only, filtered by their hostels)
 
 // ==================== VENDOR CRUD OPERATIONS ====================
 
 /**
  * @route   POST /api/admin/vendors
  * @desc    Create new vendor
- * @access  Admin, Manager
+ * @access  Admin, Owner, Manager
  * @body    { name, specialty?, category?, phone, email, hostelId, status?, rating?, services?, ... }
  */
-router.post('/vendors', createVendor);
+router.post('/vendors', authorizeAdminOrOwner(), createVendor);
 
 /**
  * @route   GET /api/admin/vendors
  * @desc    Get all vendors with filters, pagination, and sorting
- * @access  Admin, Manager
+ * @access  Admin (all), Owner (their hostels), Manager, Staff
  * @query   search?, status?, category?, paymentTerms?, hostelId?, page?, limit?, sortBy?, sortOrder?
  */
-router.get('/vendors', listVendors);
+router.get('/vendors', authorizeAdminOrOwner(), listVendors);
 
 /**
  * @route   GET /api/admin/vendors/:id
  * @desc    Get vendor by ID with recent scores and full details
- * @access  Admin, Manager
+ * @access  Admin (all), Owner (their hostels), Manager, Staff
  * @params  id - Vendor ID
  */
-router.get('/vendors/:id', getVendorById);
+router.get('/vendors/:id', authorizeAdminOrOwner(), getVendorById);
 
 /**
  * @route   PUT /api/admin/vendors/:id
  * @desc    Update vendor details
- * @access  Admin, Manager
+ * @access  Admin, Owner, Manager
  * @params  id - Vendor ID
  * @body    { name?, specialty?, category?, phone?, email?, status?, ... }
  */
-router.put('/vendors/:id', updateVendor);
+router.put('/vendors/:id', authorizeAdminOrOwner(), updateVendor);
 
 /**
  * @route   DELETE /api/admin/vendors/:id
